@@ -24,6 +24,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.12" # uv itself must not drift under `uv lock --check`
       - run: uv lock --check
       - run: uv run --frozen ruff check --output-format=github
       - run: uv run --frozen ruff format --check
@@ -37,6 +39,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.12" # uv itself must not drift under `uv lock --check`
       - run: uv run --frozen mypy
 
   test:
@@ -48,6 +52,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.12" # uv itself must not drift under `uv lock --check`
       - run: uv run --frozen pytest
 
   public-guard:
@@ -59,15 +65,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # The secret exists as an Actions secret and as a Dependabot secret; only pull
+      # requests from forks run without it (paths only) and are re-checked on main.
       - name: Private paths, private terms and commit messages
         env:
           PUBLIC_DENYLIST: ${{ secrets.PUBLIC_DENYLIST }}
-          EVENT_NAME: ${{ github.event_name }}
+          FROM_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
           if [ -n "$PUBLIC_DENYLIST" ]; then
             python3 scripts/check_public_tree.py --require-denylist --commit-messages HEAD
-          elif [ "$EVENT_NAME" = "pull_request" ]; then
-            echo "::warning::PUBLIC_DENYLIST is not available (fork pull request): checking paths only"
+          elif [ "$FROM_FORK" = "true" ]; then
+            echo "::warning::PUBLIC_DENYLIST is not available to fork pull requests: checking paths only"
             python3 scripts/check_public_tree.py
           else
             echo "::error::Actions secret PUBLIC_DENYLIST is not configured"
@@ -93,6 +101,10 @@ jobs:
       contents: read
       security-events: write
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+    with:
+      # Fork pull requests cannot write code-scanning results; the job still fails on
+      # a vulnerability.
+      upload-sarif: ${{ github.event_name != 'pull_request' }}
 
   dependency-review:
     if: github.event_name == 'pull_request'
