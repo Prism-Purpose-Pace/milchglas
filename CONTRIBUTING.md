@@ -46,7 +46,7 @@ pre-commit install --install-hooks
 | Format | `uv run ruff format` |
 | Type-check (strict, blocking) | `uv run mypy` |
 | Type-check (advisory) | `uv run ty check` |
-| All local gates | `pre-commit run --all-files` |
+| All local gates (commit stage, then push stage) | `pre-commit run --all-files` · `pre-commit run --hook-stage pre-push --all-files` |
 
 Always call the Python tools through `uv run`: the lock file pins the exact versions
 that the hooks and CI use. Gate details: [TOOLING.md](TOOLING.md).

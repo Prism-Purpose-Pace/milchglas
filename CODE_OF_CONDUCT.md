@@ -11,10 +11,11 @@ tolerated.
 ## Reporting
 
 Report unacceptable behaviour privately to the maintainer, [@philippsied](https://github.com/philippsied),
-using the contact address on that GitHub profile. If you cannot reach the maintainer, or
-the report concerns the maintainer, use GitHub's
+through this repository's [private reporting form](https://github.com/philippsied/milchglas/security/advisories/new)
+— start the title with "Code of conduct:". Only the maintainer can read these reports.
+If the report concerns the maintainer, use GitHub's
 [report content](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam)
-function. Reports are handled confidentially.
+function instead. Reports are handled confidentially.
 
 ## Enforcement
 

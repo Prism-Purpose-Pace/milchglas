@@ -23,7 +23,7 @@ intervals and publishes a busy-only ICS feed. Spec: [docs/spec.md](docs/spec.md)
 | Lint / format | `uv run ruff check` · `uv run ruff format` |
 | Type-check | `uv run mypy` (strict, blocking) · advisory: `uv run ty check` |
 | Run (planned) | `uv run python -m milchglas refresh` (one idempotent run) · `--loop --interval 900` (refresher) |
-| Gates | `pre-commit run --all-files` |
+| Gates | commit stage `pre-commit run --all-files` · push stage `pre-commit run --hook-stage pre-push --all-files` — green means both |
 
 ## Spec markers (binding)
 

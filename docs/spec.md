@@ -265,14 +265,14 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - **Maintenance:** SSH + edit `config.json`; `systemctl start milchglas-refresh` to force a run; token rotation = rename file + update consumers.
 - **Security posture:** strongest of all options (systemd sandbox, kernel-level egress allow-list, no container daemon).
 - **Effort:** 1 evening if a VPS with free ports exists; +1 hour for Caddy/TLS.
-- **Pros:** minimal moving parts; best hardening; no Docker.  **Cons:** awkward when the PaaS host already owns ports 80/443; a second VPS is another contract; no Git-push deploys.
+- **Pros:** minimal moving parts; best hardening; no Docker.  **Cons:** awkward when the PaaS host already owns ports 80/443; a second VPS adds cost and upkeep; no Git-push deploys.
 
 ### Option B — Docker container(s) on a self-hosted PaaS (recommended for now)
 - **Shape:** one image (`python:3.12-slim`, non-root UID, `read_only` FS, `tmpfs /tmp`, volume for state). Compose services: `web` (gunicorn serving `/f/<token>.ics` and `/healthz`) and `refresher` (`python -m milchglas refresh --loop --interval 900`). Traefik (or the PaaS's built-in proxy) provides TLS on an operator-chosen subdomain, e.g. `feed.example.org`.
 - **Prerequisites:** DNS record for the chosen subdomain; the PaaS app created from the Git repo.
 - **Scheduling:** in-container loop (or `supercronic`); lazy refresh in `web` as a safety net.
 - **Secrets:** the PaaS's environment variables (encrypted at rest); never in the image.
-- **Maintenance:** Git push → redeploy; `config.json` on the volume edited via the PaaS's terminal or a mounted file; `/healthz` wired to an uptime monitor (e.g. Uptime Kuma, if present).
+- **Maintenance:** Git push → redeploy; `config.json` on the volume edited via the PaaS's terminal or a mounted file; `/healthz` wired to any HTTP uptime monitor.
 - **Security posture:** good; egress restriction needs extra Docker network rules (optional); the PaaS and its edge proxy are already exposed anyway.
 - **Effort:** 1 evening for MVP; matches a common self-hosting platform and mental model.
 - **Pros:** fits a Docker/Git-based workflow already in place; Git-based deploys; logs and health in one place; stateless image makes migration a volume copy.  **Cons:** long-term availability of the current host is not guaranteed; Docker layer; per-app egress control is manual.
@@ -285,7 +285,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - **Maintenance:** the in-app admin UI (auth per NFR-S6) is the primary maintenance channel; code updates via SFTP/Git; remember the *disable → enable* quirk after settings changes [REPORT].
 - **Security posture:** shared hosting; no egress control, limited logs; mitigated by D-2 (read-only service user, revocable app password).
 - **Effort:** 2–3 evenings (vendoring, Passenger quirks, admin UI becomes MVP-mandatory here).
-- **Pros:** lives where the website lives; survives a VPS cancellation; no Docker.  **Cons:** tariff dependency; hand vendoring; Passenger sandbox; admin UI is forced into MVP scope; shared filesystem for the secret.
+- **Pros:** runs on web hosting many operators already have; needs no VPS; no Docker.  **Cons:** tariff dependency; hand vendoring; Passenger sandbox; admin UI is forced into MVP scope; shared filesystem for the secret.
 
 ### Option D — PHP application on shared web hosting
 - **Shape:** PHP 8.x CLI script run by the hosting control panel's cron every 15 min (`php -f /…/milchglas/refresh.php`), writing `<token>.ics` into a subdomain docroot; served as a static file by Apache/nginx; optional admin page protected by directory protection (`.htaccess`) — Passenger is not involved, so directory protection works normally.
@@ -311,8 +311,8 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | Portability of state | copy dir ★ | copy volume ★ | copy app root | copy dir |
 
 ### 9.2 Recommendation (for D-9)
-1. **Now: Option B.** It matches the platform the operator already runs, needs no new contract, and keeps the Python core host-independent. Build the MVP there this week.
-2. **Keep the core deployable as Option A** (a `deploy/vps-systemd/` folder with unit files) — zero extra code, and it is the cleanest landing spot if the PaaS contract ends, whether on a new VPS or the same one without the PaaS.
+1. **Now: Option B.** A single container host is the most common self-hosting setup, deploys by Git push, and keeps the Python core host-independent. Build the MVP there first.
+2. **Keep the core deployable as Option A** (a `deploy/vps-systemd/` folder with unit files) — zero extra code, and it is the cleanest landing spot if the PaaS is ever dropped, whether on a new VPS or the same one without the PaaS.
 3. **If shared hosting is a hard requirement, choose D over C.** Cron and static serving are first-class on shared hosting; Passenger-Python is not. Accept the PHP port and reuse the golden fixtures so both implementations must produce byte-identical feeds.
 4. **Option C only** if Python on shared hosting is itself a goal (learning, consistency) — then the admin UI moves into MVP scope and a sufficient hosting tier is required.
 
@@ -377,13 +377,13 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | **Admin UI** (FR-17/18) | Maintenance without SSH | 1–2 evenings | Third manual `config.json` edit, or Option C |
 | **PROPFIND discovery + `missing` flag** | See withdrawn shares immediately | 1 hour | With admin UI |
 | **All-day / tentative modes** (FR-13/14) | Birthdays should not block bookings | 1 hour | First lost booking due to an all-day event [OPEN Q-1] |
-| **Per-source settings** | e.g. "Urlaub" calendar all-day = busy, "Familie" all-day = ignore | 1 hour | With modes |
+| **Per-source settings** | e.g. a vacation calendar's all-day events = busy, a family calendar's all-day events = ignore | 1 hour | With modes |
 | **Mobile token** (ICSx5 / iOS subscription) | Busy overlay on phone despite OX DAV limitation | 30 min | If wanted [OPEN Q-5] |
 | **Reverse WebCal** (Nextcloud subscribes mailbox.org `?ical=true`) | One private "everything" view — zero code | 5 min | Anytime |
 | **CalDAV push into mailbox.org** (FR-20) | Independence from OX feed cache; works if V-1 fails | 1 evening | V-1 fails or cache interval unacceptable |
 | **Baïkal contract tests in CI** | Protects recurrence handling on upgrades | 2 hours | Before first Nextcloud major upgrade |
 | **Uptime monitor + e-mail alert** | Know about staleness before a client does | 15 min | With MVP deploy |
-| **Option A unit files** | Post-migration landing spot | 30 min | Before the current host contract decision |
+| **Option A unit files** | Post-migration landing spot | 30 min | Before moving off a PaaS host |
 
 ---
 
@@ -391,7 +391,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 
 | ID | Question | Default until answered |
 |---|---|---|
-| Q-1 | All-day events: block bookings (`busy`) or ignore? Should a dedicated "Urlaub/Abwesend" calendar be the only all-day source? | `busy` |
+| Q-1 | All-day events: block bookings (`busy`) or ignore? Should a dedicated out-of-office calendar be the only all-day source? | `busy` |
 | Q-2 | meetergo booking horizon — is it ≤ 28 days? If not, what `window_days`? | 28 |
 | Q-3 | Feed summary text and whether tentative appointments appear as a distinct "Vorläufig" | `Blocker Privat`, tentative = busy |
 | Q-4 | Fail-closed threshold (when the feed is stale, how long until booking is blocked?) | 48 h (backlog) |

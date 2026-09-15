@@ -14,10 +14,11 @@ bumps `uv.lock` and the SHA-pinned GitHub Actions weekly.
 | Hygiene (eof, trailing-ws, large-file, merge-conflict, case, symlinks, yaml/json/toml) | pre-commit | pre-commit-hooks v6.0.0 |
 | Private-key detection (catches PuTTY, SSH2, OpenVPN and partial keys that gitleaks misses) | pre-commit | pre-commit-hooks v6.0.0 |
 | Lint (`select = ALL`; TID251 bans I/O imports in `src/milchglas/core/`, PTH123 flags builtin `open()`; a dynamic `__import__` is review-only) + format | pre-commit | ruff (`uv.lock`) |
-| Lock in sync with `pyproject.toml` | pre-commit | `uv lock --check` |
+| Lock in sync with `pyproject.toml` | pre-commit + pre-push | `uv lock --check` |
 | Workflow schema validation | pre-commit | check-jsonschema 0.37.4 |
 | Fast secret scan (staged diff) | pre-commit | gitleaks v8.30.1 |
-| Public-tree guard (private paths; private terms when a denylist is present) | pre-commit + pre-push | `scripts/check_public_tree.py` (stdlib) |
+| Public-tree guard (private paths; private terms in file names, content, commit messages and identities when a denylist is present) | pre-commit + pre-push | `scripts/check_public_tree.py` (stdlib) |
+| Pushed ref descends from the public root commit | pre-push | `scripts/check_push_ancestry.py` (stdlib) |
 | Commit size (warn 5/100, block 20/800) | pre-commit | `scripts/check_commit_size.py` (stdlib) |
 | PEP 723 script-deps CVE audit | pre-commit (warn) + pre-push (block) | `scripts/audit_script_deps.py` (stdlib) |
 | Commit message convention (title ≤72, body ≤80/line) | commit-msg | `scripts/check_commit_msg.py` (stdlib) |
@@ -51,9 +52,10 @@ permissions and grants per job only what it needs.
 | `release-please.yml` | push to `main` | release PR with changelog and version bump from conventional commits |
 
 `public-guard` reads the maintainer's private denylist from the `PUBLIC_DENYLIST`
-Actions secret and reports only file, line and pattern number — never the matched text.
-On pull requests from forks the secret is unavailable and the job checks paths only; the
-full check runs again on the push to `main`.
+secret (stored as Actions secret and as Dependabot secret) and reports only file, line
+and pattern number — never the matched text. Without the secret the job fails, except
+on pull requests from forks, which check paths only; the full check runs again on the
+push to `main`.
 
 Repository settings that files cannot express (security features, ruleset, labels,
 project board) are applied with `uv run --script scripts/github_bootstrap.py --owner
@@ -61,10 +63,14 @@ project board) are applied with `uv run --script scripts/github_bootstrap.py --o
 
 ## Residual risk (read once)
 
-- Local pre-push gates are `--no-verify`-skippable; the non-bypassable enforcer is CI
-  plus the `main` ruleset (required checks, no force-push).
-- The coverage floor can still be lowered in a review-visible way: `# pragma: no cover`
-  excludes a block or a whole module. An exported `PYTEST_ADDOPTS=--no-cov` does not
-  bypass it — the push hook unsets that variable.
+- Local gates are bypassable by design, not only via `--no-verify`: the environment can
+  re-configure the tools a hook runs (`COVERAGE_RCFILE` lowers the coverage floor,
+  `UV_ENV_FILE` injects pytest options), and `# pragma: no cover` excludes code in a
+  review-visible way. The push hook unsets `PYTEST_ADDOPTS` to stop the most common
+  accident, not as enforcement — CI plus the `main` ruleset (required checks, no
+  force-push) is the enforcer.
+- The public-tree guard matches line by line after Unicode normalisation; a term split
+  across lines or encoded (base64, UTF-16 without BOM) is not detected — review covers
+  that residual.
 - Release PRs opened with the default `GITHUB_TOKEN` do not trigger CI; set the
   `RELEASE_PLEASE_TOKEN` secret, or merge them through the admin bypass after review.
