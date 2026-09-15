@@ -1,0 +1,188 @@
+# Pre-commit hooks for Milchglas. Setup: CONTRIBUTING.md.
+# Install once:  uv tool install pre-commit --with pre-commit-uv
+#                brew install gitleaks trufflehog osv-scanner
+#                pre-commit install --install-hooks
+#
+# Single version source: the Python tools (ruff, mypy, pytest) run as local hooks
+# through `uv run --frozen`, so their versions come from uv.lock and match the
+# commands in CONTRIBUTING.md and CI exactly. Remote `rev:` pins remain only for
+# non-Python tools; bump those with `pre-commit autoupdate`.
+#
+# Stage policy:
+#   pre-commit -> fast (<2s ideal): formatters, linters, fast secret scan, lock sync
+#   pre-push   -> heavier: type-check, unit tests, full-history secret scan, CVE scan
+
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
+default_stages: [pre-commit]
+fail_fast: false
+
+repos:
+  # ---------------------------------------------------------------------------
+  # Base hygiene
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-toml
+      # Kept next to gitleaks on purpose: it caught 13/13 private-key probes where
+      # gitleaks' default rules caught 7/13 (PuTTY, SSH2, OpenVPN, partial keys).
+      - id: detect-private-key
+
+  # ---------------------------------------------------------------------------
+  # Python: ruff, lock sync, mypy --strict, pytest — local hooks, versions from
+  # uv.lock. mypy and pytest run at pre-push: a full type-check and test run exceed
+  # the <2s commit budget; CI repeats them as required checks.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen ruff check --fix --exit-non-zero-on-fix --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: uv-lock-check
+        name: uv.lock in sync with pyproject.toml
+        entry: uv lock --check
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+      # Push gates run on every push (always_run): a file filter can only open holes —
+      # a lock-only mypy bump would otherwise skip the type-check.
+      - id: mypy-strict
+        name: mypy --strict
+        entry: uv run --frozen mypy
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
+      # PYTEST_ADDOPTS is unset so an exported `--no-cov` cannot silently drop the
+      # coverage floor at push.
+      - id: pytest-unit
+        name: pytest (unit, contract tests excluded)
+        entry: env -u PYTEST_ADDOPTS uv run --frozen pytest -m "not contract"
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
+
+  # ---------------------------------------------------------------------------
+  # Manifest schema validation (plugin.json, marketplace.json, workflow YAML)
+  # Point --schemafile at the schema for each manifest glob this repo ships.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.4
+    hooks:
+      - id: check-jsonschema
+        name: Validate GitHub workflows
+        files: ^\.github/workflows/[^/]+\.ya?ml$
+        args: [--builtin-schema, github-workflows]
+
+  # ---------------------------------------------------------------------------
+  # Secrets — fast local staged-diff scan (gitleaks)
+  #   Catches secrets before the commit lands. Full-history pass is trufflehog.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # ---------------------------------------------------------------------------
+  # Secrets — deep full-history scan with live-credential verification (trufflehog)
+  #   pre-push: the backstop a `--no-verify` commit cannot skip. language: system,
+  #   so the rev below is informational — the installed binary is what runs.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.95.7
+    hooks:
+      - id: trufflehog
+        name: TruffleHog (full history)
+        stages: [pre-push]
+        entry: trufflehog git file://. --results=verified,unknown --fail --no-update
+        language: system
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
+  # Public-tree guard — private paths (.claude/, .local/, docs/plans/, …) and, with
+  #   the maintainer's private denylist, private terms never reach this public
+  #   repository. CI repeats it with the PUBLIC_DENYLIST secret.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: check-public-tree
+        name: public-tree guard (staged files)
+        language: system
+        entry: uv run --script scripts/check_public_tree.py
+      - id: check-public-tree-history
+        name: public-tree guard (all files + commit messages)
+        language: system
+        entry: uv run --script scripts/check_public_tree.py --commit-messages HEAD
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
+
+  # ---------------------------------------------------------------------------
+  # Dependency CVE scan — cross-ecosystem, blocking (osv-scanner)
+  #   pre-push: gate the push on any known vulnerable dependency.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/google/osv-scanner
+    rev: v2.3.8
+    hooks:
+      - id: osv-scanner
+        stages: [pre-push]
+
+  # ---------------------------------------------------------------------------
+  # Commit-message convention (conventional commits: title <=72, body <=80/line)
+  #   Local stdlib linter — zero install, no env to build.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: commit-msg-convention
+        name: commit message convention
+        language: system
+        entry: uv run --script scripts/check_commit_msg.py
+        stages: [commit-msg]
+      # Commit-size gate: WARN on soft caps (5/100), BLOCK on hard caps (20/800).
+      #   Guards the shared-index sweep hazard when parallel agents share a checkout.
+      #   Override a deliberate large commit with COMMIT_SIZE_OK=1.
+      - id: commit-size-gate
+        name: commit size gate (warn/block — CONTRIBUTING.md § Commits)
+        language: system
+        entry: uv run --script scripts/check_commit_size.py
+        always_run: true
+        pass_filenames: false
+        verbose: true
+      # PEP 723 script-deps CVE audit (uv audit / OSV): WARN at commit, BLOCK at
+      #   push. Transient infra failures (offline, uv missing) degrade to a
+      #   notice; a parse-error fails closed in block mode. The positional paths
+      #   point the gate at THIS repo's automation trees.
+      - id: script-deps-audit-warn
+        name: PEP 723 deps CVE audit (warn)
+        language: system
+        entry: uv run --script scripts/audit_script_deps.py --mode warn scripts
+        always_run: true
+        pass_filenames: false
+      - id: script-deps-audit-block
+        name: PEP 723 deps CVE audit (block)
+        language: system
+        entry: uv run --script scripts/audit_script_deps.py --mode block scripts
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false

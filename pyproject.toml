@@ -1,0 +1,172 @@
+# Milchglas — project metadata, dev tooling and tool configuration.
+#
+# Single version source: every dev tool (ruff, mypy, ty, pytest, …) is declared in
+# [dependency-groups] and pinned by uv.lock. The pre-commit hooks and CI call them
+# through `uv run --frozen`, so hook, terminal and CI run the identical version.
+# Bump a tool with `uv lock --upgrade-package <tool>`, never by editing a hook rev.
+#
+# Runtime dependencies are added with the first feature that imports them; they must
+# stay pure Python (docs/spec.md §7). mypy --strict is the type gate (spec AC-12);
+# ty runs advisory only.
+
+[project]
+name = "milchglas"
+version = "0.1.0"
+description = "Busy-only ICS feed from private CalDAV calendars: presence visible, content opaque"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Philipp Sieder" }]
+keywords = ["caldav", "icalendar", "ics", "free-busy", "privacy", "nextcloud"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Scheduling",
+]
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/philippsied/milchglas"
+Issues = "https://github.com/philippsied/milchglas/issues"
+Security = "https://github.com/philippsied/milchglas/security/policy"
+Changelog = "https://github.com/philippsied/milchglas/blob/main/CHANGELOG.md"
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+# ---------------------------------------------------------------------------
+# ruff — lint + format
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+# scripts/ holds stdlib gate scripts that tests import as first-party modules.
+src = ["src", "scripts"]
+
+[tool.ruff.lint]
+# Everything on: new ruff rules arrive with a deliberate `uv lock --upgrade-package
+# ruff`, never silently. Rules that matter most here: DTZ (naive datetimes break the
+# Europe/Berlin DST rounding), T20 + LOG/G (no private calendar content via print or
+# eager log formatting), BLE (a blind except would hide the keep-last-good-feed path,
+# spec D-7d), PGH (no blanket type-ignores), S (security).
+select = ["ALL"]
+# Each exemption is global and argued; path-specific ones go to per-file-ignores.
+ignore = [
+    "E501",   # line length is owned by the formatter
+    "COM812", # conflicts with the formatter's trailing-comma handling
+    "D",      # docstrings are not gated; types + tests carry the contract
+    "CPY001", # no per-file copyright headers; the licence lives in LICENSE
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# src/milchglas/core is the pure pipeline (spec §8: filter → reduce → clip → round →
+# merge → emit): no I/O, so it stays byte-deterministic and trivially testable. The
+# ban applies to core only (negated per-file-ignore below) and is import-level:
+# builtin open() is caught separately by PTH123 (its fix, pathlib, is banned here);
+# a dynamic __import__("…") is invisible to ruff and stays a review-only residual.
+"os".msg = "core/ is pure: no I/O or environment access"
+"pathlib".msg = "core/ is pure: no filesystem access"
+"shutil".msg = "core/ is pure: no filesystem access"
+"tempfile".msg = "core/ is pure: no filesystem access"
+"socket".msg = "core/ is pure: no network access"
+"http".msg = "core/ is pure: no network access"
+"urllib".msg = "core/ is pure: no network access"
+"subprocess".msg = "core/ is pure: no process spawning"
+"io".msg = "core/ is pure: no stream I/O — return strings/bytes, let the caller write"
+"sys".msg = "core/ is pure: no stdin/stdout/argv access"
+"importlib".msg = "core/ is pure: no dynamic imports"
+
+[tool.ruff.lint.per-file-ignores]
+"!src/milchglas/core/**" = ["TID251"]
+# pytest idioms: assertion rewriting, literal expectations. INP001 stays ON: every
+# test directory is a package, otherwise equal test basenames in tests/unit and
+# tests/contract collide in both mypy and pytest.
+"tests/**/*.py" = ["S101", "PLR2004"]
+# Stdlib gate scripts: print is their CLI output; subprocess runs literal git/gh argv.
+"scripts/*.py" = ["T201", "C901", "FURB167", "PERF401", "INP001"]
+"scripts/check_commit_msg.py" = ["PLR0912", "PLR2004"]
+"scripts/check_commit_size.py" = ["S603", "S607", "PLR2004"]
+"scripts/audit_script_deps.py" = ["S603", "S607", "PLW1510"]
+"scripts/check_public_tree.py" = ["S603", "S607"]
+"scripts/github_bootstrap.py" = ["S603"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ---------------------------------------------------------------------------
+# mypy — strict type-check (spec AC-12)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+# Package code and tests. Tests import the gate scripts they cover, so mypy follows
+# those scripts through mypy_path; the remaining scripts/ are not typed surface.
+files = ["src", "tests"]
+mypy_path = "scripts"
+warn_unreachable = true
+# Beyond --strict: codes that catch real bugs in interval/rounding logic (truthy tests
+# on possibly-empty values, redundant or unreachable branches, unmatched cases) and
+# keep suppressions narrow (ignore-without-code forbids a bare `# type: ignore`).
+enable_error_code = [
+    "ignore-without-code",
+    "redundant-expr",
+    "truthy-bool",
+    "truthy-iterable",
+    "possibly-undefined",
+    "redundant-self",
+    "explicit-override",
+    "mutable-override",
+    "exhaustive-match",
+    "deprecated",
+    "unused-awaitable",
+]
+
+# ---------------------------------------------------------------------------
+# pytest + coverage — native [tool.pytest] table (pytest >= 9)
+# ---------------------------------------------------------------------------
+[tool.pytest]
+testpaths = ["tests"]
+pythonpath = ["scripts"]
+# Contract tests need a live sabre/dav server (Baïkal); excluded by default, run them
+# with `uv run pytest -m contract` (a later -m overrides this one).
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "-m",
+    "not contract",
+    "--cov=milchglas",
+    "--cov-branch",
+    "--cov-report=term-missing",
+]
+markers = [
+    "contract: needs a live sabre/dav server (Baïkal container); run with -m contract",
+]
+filterwarnings = ["error"]
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+source = ["milchglas"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.168.0",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.7",
+    "ty>=0.0.80",
+]

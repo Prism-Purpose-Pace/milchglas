@@ -1,0 +1,29 @@
+# Private maintainer workspace — never published. The AI-agent harness, business
+# context, plans and evidence live in a separate private repository under .claude/.
+.claude/
+.local/
+.worktrees/
+CLAUDE.local.md
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+# Build artifacts / caches
+__pycache__/
+*.pyc
+.venv/
+dist/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+# Coverage output (pytest-cov)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+# Secrets
+.env
+.env.local
+.env.*.local
