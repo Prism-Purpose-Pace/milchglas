@@ -51,8 +51,27 @@ def test_workflow_token_is_read_only_but_may_open_release_prs() -> None:
     }
 
 
+def _ruleset(name: str) -> dict[str, Any]:
+    bodies = [s.body for s in PLAN if s.kind == "ruleset" and s.body and s.body["name"] == name]
+    assert len(bodies) == 1, name
+    body = bodies[0]
+    assert body is not None
+    return body
+
+
+def test_tag_ruleset_lets_only_github_actions_touch_tags() -> None:
+    # Nobody but the release workflow creates tags, so no tag can carry old history.
+    ruleset = _ruleset("tags")
+    assert ruleset["target"] == "tag"
+    assert ruleset["conditions"]["ref_name"]["include"] == ["~ALL"]
+    assert {"creation", "update", "deletion"} <= {rule["type"] for rule in ruleset["rules"]}
+    assert ruleset["bypass_actors"] == [
+        {"actor_id": gb.GITHUB_ACTIONS_APP_ID, "actor_type": "Integration", "bypass_mode": "always"}
+    ]
+
+
 def test_main_ruleset_protects_the_default_branch() -> None:
-    ruleset = _body("repos/octo/milchglas/rulesets")
+    ruleset = _ruleset("main")
     rule_types = {rule["type"] for rule in ruleset["rules"]}
     assert {
         "deletion",

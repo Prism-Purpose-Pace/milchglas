@@ -7,6 +7,7 @@ a tagging parser that wraps every scalar as {start, end, value}: the filter must
 """
 
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -35,3 +36,12 @@ def test_versions_agree_across_manifest_pyproject_lock_and_package() -> None:
         milchglas.__version__,
     }
     assert len(versions) == 1
+
+
+def test_changelog_has_a_header_for_the_current_version() -> None:
+    # Without any version header release-please demotes the whole seed below the first
+    # new entry; with one it inserts new entries above it and keeps the intro on top.
+    manifest = json.loads((REPO / ".release-please-manifest.json").read_text(encoding="utf-8"))
+    changelog = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
+    header = rf"^## \[?{re.escape(manifest['.'])}\]?"
+    assert re.search(header, changelog, re.MULTILINE)

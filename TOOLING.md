@@ -69,8 +69,14 @@ project board) are applied with `uv run --script scripts/github_bootstrap.py --o
   review-visible way. The push hook unsets `PYTEST_ADDOPTS` to stop the most common
   accident, not as enforcement — CI plus the `main` ruleset (required checks, no
   force-push) is the enforcer.
-- The public-tree guard matches line by line after Unicode normalisation; a term split
-  across lines or encoded (base64, UTF-16 without BOM) is not detected — review covers
-  that residual.
-- Release PRs opened with the default `GITHUB_TOKEN` do not trigger CI; set the
-  `RELEASE_PLEASE_TOKEN` secret, or merge them through the admin bypass after review.
+- The public-tree guard matches line by line after Unicode normalisation (NFKD, control,
+  format, separator and combining characters removed); a term split across lines,
+  encoded (base64, UTF-16 without BOM) or written with homoglyphs from another script is
+  not detected — review covers that residual.
+- The pre-push ancestry hook sees one ref per push: pre-commit evaluates only the first
+  ref of a multi-ref push (`--all`, `--mirror`, `--tags`). The protection against
+  publishing pre-public history is that maintainer clones hold none, plus the `tags`
+  ruleset that lets only the release workflow create tags.
+- Release PRs are opened with `GITHUB_TOKEN` and trigger no CI; the maintainer merges
+  them through the admin bypass after review. A personal token is not an option: the
+  `tags` ruleset would block the release tag it creates.
