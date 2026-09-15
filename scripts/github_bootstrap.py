@@ -51,7 +51,8 @@ LABELS = (
 MANUAL_FOLLOW_UP = """\
 Done. Manual follow-up (no API for these):
 - Project board: enable the 'Auto-add to project' workflow for this repository.
-- Actions secret PUBLIC_DENYLIST: newline-separated private regexes for the term guard.
+- Secret PUBLIC_DENYLIST (newline-separated private regexes for the term guard), as
+  Actions secret AND as Dependabot secret (`gh secret set ... --app dependabot`).
 - Optional Actions secret RELEASE_PLEASE_TOKEN (fine-grained PAT, contents + pull requests
   write) so release PRs trigger CI; without it an admin merges them via the ruleset bypass."""
 
@@ -127,12 +128,9 @@ def plan(owner: str, repo: str) -> list[Step]:
         "--delete-branch-on-merge",
         "--allow-update-branch",
     ]  # fmt: skip
-    security = {
-        "security_and_analysis": {
-            "secret_scanning": {"status": "enabled"},
-            "secret_scanning_push_protection": {"status": "enabled"},
-        }
-    }
+    # Secret scanning itself is always on for public repositories; only push
+    # protection is a setting (sending both risks a 422 that aborts the run).
+    security = {"security_and_analysis": {"secret_scanning_push_protection": {"status": "enabled"}}}
     workflow = {"default_workflow_permissions": "read", "can_approve_pull_request_reviews": True}
     return [
         Step(edit),

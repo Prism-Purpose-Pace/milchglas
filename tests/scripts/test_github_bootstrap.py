@@ -37,10 +37,11 @@ def test_security_feature_is_enabled_with_put(endpoint: str) -> None:
     assert _step(endpoint).argv[:4] == ["gh", "api", "-X", "PUT"]
 
 
-def test_secret_scanning_and_push_protection_are_enabled() -> None:
-    analysis = _body("repos/octo/milchglas")["security_and_analysis"]
-    assert analysis["secret_scanning"] == {"status": "enabled"}
-    assert analysis["secret_scanning_push_protection"] == {"status": "enabled"}
+def test_push_protection_is_the_only_security_setting_patched() -> None:
+    # Secret scanning is always on for public repositories; patching it can fail.
+    assert _body("repos/octo/milchglas")["security_and_analysis"] == {
+        "secret_scanning_push_protection": {"status": "enabled"}
+    }
 
 
 def test_workflow_token_is_read_only_but_may_open_release_prs() -> None:
