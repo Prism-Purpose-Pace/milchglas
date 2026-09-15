@@ -93,6 +93,7 @@ ignore = [
 "scripts/check_commit_size.py" = ["S603", "S607", "PLR2004"]
 "scripts/audit_script_deps.py" = ["S603", "S607", "PLW1510"]
 "scripts/check_public_tree.py" = ["S603", "S607"]
+"scripts/check_push_ancestry.py" = ["S603", "S607"]
 "scripts/github_bootstrap.py" = ["S603"]
 
 [tool.ruff.format]

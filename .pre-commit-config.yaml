@@ -64,6 +64,16 @@ repos:
         language: system
         files: ^(pyproject\.toml|uv\.lock)$
         pass_filenames: false
+      # Push-stage twin: everything at push runs with --frozen, which never validates
+      # the lock, so a --no-verify commit of a dependency change would otherwise reach
+      # the remote with a stale lock.
+      - id: uv-lock-check-push
+        name: uv.lock in sync with pyproject.toml (push)
+        entry: uv lock --check
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
       # Push gates run on every push (always_run): a file filter can only open holes —
       # a lock-only mypy bump would otherwise skip the type-check.
       - id: mypy-strict
@@ -134,6 +144,15 @@ repos:
         name: public-tree guard (all files + commit messages)
         language: system
         entry: uv run --script scripts/check_public_tree.py --commit-messages HEAD
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
+      # Old private history may still exist as local branches: a pushed ref must
+      # descend from the public root commit, whatever branch or flag is pushed.
+      - id: check-push-ancestry
+        name: pushed ref descends from the public root
+        language: system
+        entry: uv run --script scripts/check_push_ancestry.py
         always_run: true
         pass_filenames: false
         stages: [pre-push]
