@@ -73,8 +73,10 @@ project board) are applied with `uv run --script scripts/github_bootstrap.py --o
   format, separator and combining characters removed); a term split across lines,
   encoded (base64, UTF-16 without BOM) or written with homoglyphs from another script is
   not detected — review covers that residual.
-- The pre-push ancestry hook sees one ref per push: pre-commit evaluates only the first
-  ref of a multi-ref push (`--all`, `--mirror`, `--tags`). The protection against
+- The pre-push ancestry hook requires the public root to be the ONLY root of a pushed
+  ref, so a merge that pulls in older history is refused. It sees one ref per push:
+  pre-commit evaluates only the first ref of a multi-ref push (`--all`, `--mirror`,
+  `--tags`). The protection against
   publishing pre-public history is that maintainer clones hold none, plus the `tags`
   ruleset that lets only the release workflow create tags.
 - Release PRs are opened with `GITHUB_TOKEN` and trigger no CI; the maintainer merges

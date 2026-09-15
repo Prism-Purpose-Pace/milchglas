@@ -4,7 +4,9 @@
 # ///
 """Refuse to push history that does not descend from the public root commit.
 
-The public history starts from a fresh root. A pushed ref must contain PUBLIC_ROOT.
+The public history starts from a fresh root. A pushed ref's history must have
+PUBLIC_ROOT as its ONLY root commit: containing it is not enough, because a merge of old
+history into public history descends from both roots and would publish all of it.
 pre-commit exports the pushed commit as PRE_COMMIT_TO_REF, but not when the pushed
 history is entirely new to the remote (a new branch or tag); then the local ref in
 PRE_COMMIT_LOCAL_BRANCH is resolved instead. During a push without any usable ref the
@@ -30,16 +32,21 @@ PUBLIC_ROOT = "7cb315336bec341c61dfd6ec70099bc988400db1"
 NULL_SHA = "0" * 40
 
 
-def refusal(to_ref: str | None, is_ancestor: Callable[[str, str], bool]) -> str | None:
+def refusal(to_ref: str | None, from_root: Callable[[str, str], bool]) -> str | None:
     """Return why `to_ref` must not be pushed, or None when it may."""
     if not to_ref or to_ref == NULL_SHA:
         return None  # nothing pushed (ref deletion)
-    if is_ancestor(PUBLIC_ROOT, to_ref):
+    if from_root(PUBLIC_ROOT, to_ref):
         return None
     return (
-        f"refusing to push {to_ref[:12]}: it does not descend from the public root "
-        f"{PUBLIC_ROOT[:12]} (private or pre-release history)"
+        f"refusing to push {to_ref[:12]}: its history does not start only at the public "
+        f"root {PUBLIC_ROOT[:12]} (private or pre-release history)"
     )
+
+
+def only_root(roots_output: str, root: str) -> bool:
+    """True when `git rev-list --max-parents=0` printed exactly `root`."""
+    return set(roots_output.split()) == {root}
 
 
 def pushed_commit(env: Mapping[str, str], resolve: Callable[[str], str | None]) -> str | None:
@@ -50,11 +57,11 @@ def pushed_commit(env: Mapping[str, str], resolve: Callable[[str], str | None]) 
     return None
 
 
-def git_is_ancestor(root: str, ref: str) -> bool:
+def git_from_root(root: str, ref: str) -> bool:
     result = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", root, ref], capture_output=True, check=False
+        ["git", "rev-list", "--max-parents=0", ref], capture_output=True, text=True, check=False
     )
-    return result.returncode == 0
+    return result.returncode == 0 and only_root(result.stdout, root)
 
 
 def git_resolve(ref: str) -> str | None:
@@ -69,7 +76,7 @@ def git_resolve(ref: str) -> str | None:
 
 
 def main(
-    is_ancestor: Callable[[str, str], bool] = git_is_ancestor,
+    from_root: Callable[[str, str], bool] = git_from_root,
     resolve: Callable[[str], str | None] = git_resolve,
 ) -> int:
     env = os.environ
@@ -80,7 +87,7 @@ def main(
             return 0  # manual `pre-commit run --hook-stage pre-push`
         print("check-push-ancestry: cannot determine the pushed ref, refusing", file=sys.stderr)
         return 1
-    message = refusal(commit, is_ancestor)
+    message = refusal(commit, from_root)
     if message is None:
         return 0
     print(f"check-push-ancestry: {message}", file=sys.stderr)
