@@ -86,7 +86,7 @@ def test_invisible_or_compatibility_characters_do_not_hide_a_term(text: str) -> 
 
 
 def test_parse_log_scans_author_and_committer_identity() -> None:
-    out = "abc1234\x00Jane <jane@acme.example>\x00Jane <jane@acme.example>\x00feat: x\n\x1e"
+    out = "abc1234\nJane <jane@acme.example>\nJane <jane@acme.example>\nfeat: x\n\x00"
     hits = cpt.message_violations(cpt.parse_log(out), PATTERNS)
     assert [cpt.format_hit(h) for h in hits] == [
         "commit abc1234:1: matches denylist pattern #1",
@@ -96,10 +96,49 @@ def test_parse_log_scans_author_and_committer_identity() -> None:
 
 def test_parse_log_with_clean_identity_passes() -> None:
     identity = "Jane <1+jane@users.noreply.github.com>"
-    out = f"abc1234\x00{identity}\x00{identity}\x00feat: x\n\x1e\ndef5678\x00{identity}\x00{identity}\x00fix: y\n\x1e"
+    out = f"abc1234\n{identity}\n{identity}\nfeat: x\n\x00\ndef5678\n{identity}\n{identity}\nfix: y\n\x00"
     messages = cpt.parse_log(out)
     assert [sha for sha, _ in messages] == ["abc1234", "def5678"]
     assert cpt.message_violations(messages, PATTERNS) == []
+
+
+def test_record_separator_in_a_commit_body_does_not_hide_a_term() -> None:
+    identity = "Jane <1+jane@users.noreply.github.com>"
+    body = f"chore: x\n\n{chr(0x1E)}at acme.example\n"
+    out = f"abc1234\n{identity}\n{identity}\n{body}\x00"
+    hits = cpt.message_violations(cpt.parse_log(out), PATTERNS)
+    assert [cpt.format_hit(h) for h in hits] == ["commit abc1234:5: matches denylist pattern #1"]
+
+
+@pytest.mark.parametrize(
+    "separator",
+    [chr(0x1C), chr(0x0B), chr(0x85), chr(0x2028), chr(0), "\r"],
+    ids=["file-separator", "vertical-tab", "next-line", "line-separator", "nul", "carriage-return"],
+)
+def test_control_or_line_separator_inside_a_term_does_not_hide_it(separator: str) -> None:
+    text = f"at acme{separator}.example\n"
+    assert cpt.term_violations("a.md", text, PATTERNS) == [cpt.Hit("a.md", 1, 0)]
+
+
+@pytest.mark.parametrize(
+    "mark",
+    [chr(0x301), chr(0xFE0F), chr(0x3164)],
+    ids=["combining-acute", "variation-selector", "hangul-filler"],
+)
+def test_combining_mark_or_filler_inside_a_term_does_not_hide_it(mark: str) -> None:
+    text = f"at acm{mark}e.example\n"
+    assert cpt.term_violations("a.md", text, PATTERNS) == [cpt.Hit("a.md", 1, 0)]
+
+
+def test_symlink_target_text_is_scanned(tmp_path: Path) -> None:
+    (tmp_path / "link").symlink_to("/srv/acme.example/notes.md")
+    assert cpt.run(["link"], PATTERNS, tmp_path) == ["link:1: matches denylist pattern #1"]
+
+
+def test_symlink_target_content_is_not_followed(tmp_path: Path) -> None:
+    (tmp_path / "target.md").write_text("at acme.example\n", encoding="utf-8")
+    (tmp_path / "link").symlink_to("target.md")
+    assert cpt.run(["link"], PATTERNS, tmp_path) == []
 
 
 def test_denylisted_term_is_reported_with_line_and_pattern_index() -> None:

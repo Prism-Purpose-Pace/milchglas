@@ -9,16 +9,17 @@ Checks over the tracked (or given) files:
 - path guard: no path inside a private directory (.claude/, .local/, .worktrees/ at any
   depth) or under docs/plans/ or docs/evidence/; case-insensitive and normalised, so
   `./.claude/x` or `Docs/Plans/x` do not slip through;
-- term guard: no file name, file line or commit (message, author, committer) matches a
-  denylist regex. Content is decoded leniently (UTF-16 by BOM, otherwise UTF-8 with
-  replacement), NFKC-normalised and stripped of invisible format characters before
-  matching. The denylist itself is private: it comes from the PUBLIC_DENYLIST
-  environment variable (a CI secret) or a local file (default
-  .claude/context/public-denylist.txt). Reports name file, line and pattern index only -
-  never the matched text - so public CI logs cannot leak what is guarded.
+- term guard: no file name, symlink target, file line or commit (message, author,
+  committer) matches a denylist regex. Content is decoded leniently (UTF-16 by BOM,
+  otherwise UTF-8 with replacement), NFKD-normalised, and stripped of control, format,
+  line-separator and combining characters (and Hangul fillers) before it is split into
+  lines. The denylist itself is private: it comes from the PUBLIC_DENYLIST environment
+  variable (a CI secret) or a local file (default .claude/context/public-denylist.txt).
+  Reports name file, line and pattern index only - never the matched text - so public CI
+  logs cannot leak what is guarded. Denylist patterns must therefore be plain ASCII.
 
-Residual: matching is per line, so a term split across lines or encoded (base64, UTF-16
-without BOM) is not detected.
+Residual: matching is per line, so a term split across lines, encoded (base64, UTF-16
+without BOM) or spelled with homoglyphs from another script is not detected.
 
 Exit codes: 0 clean, 1 findings, 2 denylist missing (with --require-denylist) or invalid.
 """
@@ -45,8 +46,13 @@ PRIVATE_PREFIXES = ("docs/plans/", "docs/evidence/")
 PRIVATE_NAMES = frozenset({"claude.local.md"})
 DEFAULT_DENYLIST = Path(".claude/context/public-denylist.txt")
 ENV_VAR = "PUBLIC_DENYLIST"
-# %x00 separates sha, author, committer and body; %x1e ends a record.
-LOG_FORMAT = "%h%x00%an <%ae>%x00%cn <%ce>%x00%B%x1e"
+# One record per commit, NUL-terminated (git refuses NUL in messages, so no body can
+# forge a record boundary): sha, author and committer each on one line, then the body.
+LOG_FORMAT = "%h%n%an <%ae>%n%cn <%ce>%n%B%x00"
+# Characters that render as nothing (or as a line break) and could hide a term.
+HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp", "Mn", "Mc", "Me"})
+HANGUL_FILLERS = frozenset(map(chr, (0x115F, 0x1160, 0x3164, 0xFFA0)))
+KEPT_CONTROLS = frozenset("\n\t")
 
 
 class DenylistError(ValueError):
@@ -105,17 +111,22 @@ def decode(data: bytes) -> str:
 
 
 def visible(text: str) -> str:
-    """NFKC-normalise and drop format characters (zero-width space, joiners, ...)."""
-    normalised = unicodedata.normalize("NFKC", text)
-    return "".join(ch for ch in normalised if unicodedata.category(ch) != "Cf")
+    """NFKD-normalise and drop every character that renders as nothing (keeps \\n, \\t)."""
+    return "".join(
+        ch
+        for ch in unicodedata.normalize("NFKD", text)
+        if ch in KEPT_CONTROLS
+        or (unicodedata.category(ch) not in HIDDEN_CATEGORIES and ch not in HANGUL_FILLERS)
+    )
 
 
 def term_violations(where: str, text: str, patterns: Sequence[re.Pattern[str]]) -> list[Hit]:
+    # Normalise BEFORE splitting: separators like \x1c or U+2028 must not cut a term.
     return [
         Hit(where, number, index)
-        for number, line in enumerate(text.splitlines(), start=1)
+        for number, line in enumerate(visible(text).split("\n"), start=1)
         for index, pattern in enumerate(patterns)
-        if pattern.search(visible(line))
+        if pattern.search(line)
     ]
 
 
@@ -147,10 +158,14 @@ def run(paths: Sequence[str], patterns: Sequence[re.Pattern[str]] | None, root: 
         if path in private:
             continue
         report.extend(format_hit(hit) for hit in name_violations(path, patterns))
-        try:
-            text = decode((root / path).read_bytes())
-        except (FileNotFoundError, IsADirectoryError):
-            continue  # deleted in the staged set, or a directory
+        file = root / path
+        if file.is_symlink():
+            text = str(file.readlink())  # git publishes the link text, not the target
+        else:
+            try:
+                text = decode(file.read_bytes())
+            except (FileNotFoundError, IsADirectoryError):
+                continue  # deleted in the staged set, or a directory
         report.extend(format_hit(hit) for hit in term_violations(path, text, patterns))
     return report
 
@@ -165,11 +180,10 @@ def tracked_files() -> list[str]:
 def parse_log(out: str) -> list[tuple[str, str]]:
     """Split `git log --format=LOG_FORMAT` output into (sha, identities + message)."""
     messages = []
-    for record in out.split("\x1e"):
-        fields = record.lstrip("\n").split("\0", 3)
-        if len(fields) == 4:  # noqa: PLR2004 - sha, author, committer, body
-            sha, author, committer, body = fields
-            messages.append((sha, f"{author}\n{committer}\n{body}"))
+    for record in out.split("\0"):
+        sha, _, identities_and_body = record.lstrip("\n").partition("\n")
+        if sha:
+            messages.append((sha, identities_and_body))
     return messages
 
 
