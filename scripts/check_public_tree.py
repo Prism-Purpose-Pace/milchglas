@@ -16,7 +16,7 @@ Checks over the tracked (or given) files:
   lines. The denylist itself is private: it comes from the PUBLIC_DENYLIST environment
   variable (a CI secret) or a local file (default .claude/context/public-denylist.txt).
   Reports name file, line and pattern index only - never the matched text - so public CI
-  logs cannot leak what is guarded. Denylist patterns must therefore be plain ASCII.
+  logs cannot leak what is guarded. Denylist patterns must be ASCII (enforced: exit 2).
 
 Residual: matching is per line, so a term split across lines, encoded (base64, UTF-16
 without BOM) or spelled with homoglyphs from another script is not detected.
@@ -50,7 +50,7 @@ ENV_VAR = "PUBLIC_DENYLIST"
 # forge a record boundary): sha, author and committer each on one line, then the body.
 LOG_FORMAT = "%h%n%an <%ae>%n%cn <%ce>%n%B%x00"
 # Characters that render as nothing (or as a line break) and could hide a term.
-HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp", "Mn", "Mc", "Me"})
+HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Co", "Cn", "Cs", "Zl", "Zp", "Mn", "Mc", "Me"})
 HANGUL_FILLERS = frozenset(map(chr, (0x115F, 0x1160, 0x3164, 0xFFA0)))
 KEPT_CONTROLS = frozenset("\n\t")
 
@@ -82,6 +82,10 @@ def path_violations(paths: Iterable[str]) -> list[str]:
 def compile_patterns(sources: Iterable[str]) -> list[re.Pattern[str]]:
     patterns = []
     for number, source in enumerate(sources, start=1):
+        if not source.isascii():
+            # Matched text is NFKD-folded, so a non-ASCII pattern would silently never match.
+            msg = f"denylist pattern #{number} must be ASCII"
+            raise DenylistError(msg)
         try:
             patterns.append(re.compile(source, re.IGNORECASE))
         except re.error as exc:
@@ -91,7 +95,8 @@ def compile_patterns(sources: Iterable[str]) -> list[re.Pattern[str]]:
 
 
 def parse_denylist(text: str) -> list[re.Pattern[str]]:
-    lines = (line.strip() for line in text.splitlines())
+    # A byte-order mark (editor or UI paste) would otherwise glue onto pattern #1.
+    lines = (line.strip() for line in text.removeprefix(codecs.BOM_UTF8.decode()).splitlines())
     return compile_patterns(line for line in lines if line and not line.startswith("#"))
 
 
@@ -166,6 +171,9 @@ def run(paths: Sequence[str], patterns: Sequence[re.Pattern[str]] | None, root: 
                 text = decode(file.read_bytes())
             except (FileNotFoundError, IsADirectoryError):
                 continue  # deleted in the staged set, or a directory
+            except OSError:
+                report.append(f"{path}: unreadable, cannot be checked")  # fail closed
+                continue
         report.extend(format_hit(hit) for hit in term_violations(path, text, patterns))
     return report
 

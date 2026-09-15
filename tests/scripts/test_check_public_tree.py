@@ -179,6 +179,35 @@ def test_invalid_pattern_fails_closed() -> None:
         cpt.compile_patterns(["("])
 
 
+def test_non_ascii_pattern_is_rejected() -> None:
+    # Text is NFKD-folded before matching, so a non-ASCII pattern could never match.
+    with pytest.raises(cpt.DenylistError):
+        cpt.compile_patterns(["m" + chr(0xFC) + "ller"])
+
+
+def test_byte_order_mark_does_not_disable_the_first_pattern() -> None:
+    patterns = cpt.parse_denylist(chr(0xFEFF) + "acme\\.example\n")
+    assert [p.pattern for p in patterns] == [r"acme\.example"]
+
+
+@pytest.mark.parametrize("code_point", [0xE000, 0xE0080], ids=["private-use", "unassigned"])
+def test_private_use_or_unassigned_code_point_does_not_hide_a_term(code_point: int) -> None:
+    text = f"at acme{chr(code_point)}.example\n"
+    assert cpt.term_violations("a.md", text, PATTERNS) == [cpt.Hit("a.md", 1, 0)]
+
+
+def test_unreadable_file_is_reported_not_crashed(tmp_path: Path) -> None:
+    locked = tmp_path / "locked.md"
+    locked.write_text("fine\n", encoding="utf-8")
+    locked.chmod(0)
+    try:
+        assert cpt.run(["locked.md"], PATTERNS, tmp_path) == [
+            "locked.md: unreadable, cannot be checked"
+        ]
+    finally:
+        locked.chmod(0o600)
+
+
 def test_denylist_from_env_takes_precedence_over_file(tmp_path: Path) -> None:
     denylist = tmp_path / "deny.txt"
     denylist.write_text("fromfile\n", encoding="utf-8")
