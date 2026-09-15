@@ -4,13 +4,21 @@
 # ///
 """Keep private material out of the public tree.
 
-Two checks over the tracked (or given) files:
+Checks over the tracked (or given) files:
 
-- path guard: nothing under a private prefix (.claude/, .local/, docs/plans/, ...);
-- term guard: no line matches a denylist regex. The denylist itself is private: it
-  comes from the PUBLIC_DENYLIST environment variable (a CI secret) or a local file
-  (default .claude/context/public-denylist.txt). Reports name file, line and pattern
-  index only - never the matched text - so public CI logs cannot leak what is guarded.
+- path guard: no path inside a private directory (.claude/, .local/, .worktrees/ at any
+  depth) or under docs/plans/ or docs/evidence/; case-insensitive and normalised, so
+  `./.claude/x` or `Docs/Plans/x` do not slip through;
+- term guard: no file name, file line or commit (message, author, committer) matches a
+  denylist regex. Content is decoded leniently (UTF-16 by BOM, otherwise UTF-8 with
+  replacement), NFKC-normalised and stripped of invisible format characters before
+  matching. The denylist itself is private: it comes from the PUBLIC_DENYLIST
+  environment variable (a CI secret) or a local file (default
+  .claude/context/public-denylist.txt). Reports name file, line and pattern index only -
+  never the matched text - so public CI logs cannot leak what is guarded.
+
+Residual: matching is per line, so a term split across lines or encoded (base64, UTF-16
+without BOM) is not detected.
 
 Exit codes: 0 clean, 1 findings, 2 denylist missing (with --require-denylist) or invalid.
 """
@@ -18,10 +26,13 @@ Exit codes: 0 clean, 1 findings, 2 denylist missing (with --require-denylist) or
 from __future__ import annotations
 
 import argparse
+import codecs
 import os
+import posixpath
 import re
 import subprocess
 import sys
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -29,10 +40,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
-PRIVATE_PREFIXES = (".claude/", ".local/", ".worktrees/", "docs/plans/", "docs/evidence/")
-PRIVATE_NAMES = frozenset({"CLAUDE.local.md"})
+PRIVATE_DIRS = frozenset({".claude", ".local", ".worktrees"})
+PRIVATE_PREFIXES = ("docs/plans/", "docs/evidence/")
+PRIVATE_NAMES = frozenset({"claude.local.md"})
 DEFAULT_DENYLIST = Path(".claude/context/public-denylist.txt")
 ENV_VAR = "PUBLIC_DENYLIST"
+# %x00 separates sha, author, committer and body; %x1e ends a record.
+LOG_FORMAT = "%h%x00%an <%ae>%x00%cn <%ce>%x00%B%x1e"
 
 
 class DenylistError(ValueError):
@@ -42,12 +56,21 @@ class DenylistError(ValueError):
 @dataclass(frozen=True)
 class Hit:
     where: str
-    line: int
+    line: int  # 0 = the file name itself
     pattern: int
 
 
+def is_private(path: str) -> bool:
+    parts = posixpath.normpath(path.replace("\\", "/")).casefold().split("/")
+    return (
+        any(part in PRIVATE_DIRS for part in parts[:-1])
+        or "/".join(parts).startswith(PRIVATE_PREFIXES)
+        or parts[-1] in PRIVATE_NAMES
+    )
+
+
 def path_violations(paths: Iterable[str]) -> list[str]:
-    return [p for p in paths if p.startswith(PRIVATE_PREFIXES) or Path(p).name in PRIVATE_NAMES]
+    return [p for p in paths if is_private(p)]
 
 
 def compile_patterns(sources: Iterable[str]) -> list[re.Pattern[str]]:
@@ -75,13 +98,29 @@ def load_denylist(file: Path, env: Mapping[str, str]) -> list[re.Pattern[str]] |
     return None
 
 
+def decode(data: bytes) -> str:
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return data.decode("utf-16", errors="replace")
+    return data.decode("utf-8", errors="replace")
+
+
+def visible(text: str) -> str:
+    """NFKC-normalise and drop format characters (zero-width space, joiners, ...)."""
+    normalised = unicodedata.normalize("NFKC", text)
+    return "".join(ch for ch in normalised if unicodedata.category(ch) != "Cf")
+
+
 def term_violations(where: str, text: str, patterns: Sequence[re.Pattern[str]]) -> list[Hit]:
     return [
         Hit(where, number, index)
         for number, line in enumerate(text.splitlines(), start=1)
         for index, pattern in enumerate(patterns)
-        if pattern.search(line)
+        if pattern.search(visible(line))
     ]
+
+
+def name_violations(path: str, patterns: Sequence[re.Pattern[str]]) -> list[Hit]:
+    return [Hit(path, 0, index) for index, p in enumerate(patterns) if p.search(visible(path))]
 
 
 def message_violations(
@@ -94,6 +133,8 @@ def message_violations(
 
 
 def format_hit(hit: Hit) -> str:
+    if hit.line == 0:
+        return f"{hit.where}: file name matches denylist pattern #{hit.pattern + 1}"
     return f"{hit.where}:{hit.line}: matches denylist pattern #{hit.pattern + 1}"
 
 
@@ -105,10 +146,11 @@ def run(paths: Sequence[str], patterns: Sequence[re.Pattern[str]] | None, root: 
     for path in paths:
         if path in private:
             continue
+        report.extend(format_hit(hit) for hit in name_violations(path, patterns))
         try:
-            text = (root / path).read_text(encoding="utf-8")
-        except (FileNotFoundError, IsADirectoryError, UnicodeDecodeError):
-            continue  # deleted in the staged set, a directory, or binary
+            text = decode((root / path).read_bytes())
+        except (FileNotFoundError, IsADirectoryError):
+            continue  # deleted in the staged set, or a directory
         report.extend(format_hit(hit) for hit in term_violations(path, text, patterns))
     return report
 
@@ -120,16 +162,22 @@ def tracked_files() -> list[str]:
     return [path for path in out.split("\0") if path]
 
 
-def commit_messages(rev: str) -> list[tuple[str, str]]:
-    out = subprocess.run(
-        ["git", "log", "--format=%h%x00%B%x1e", rev], check=True, capture_output=True, text=True
-    ).stdout
+def parse_log(out: str) -> list[tuple[str, str]]:
+    """Split `git log --format=LOG_FORMAT` output into (sha, identities + message)."""
     messages = []
     for record in out.split("\x1e"):
-        sha, _, body = record.lstrip("\n").partition("\0")
-        if sha:
-            messages.append((sha, body))
+        fields = record.lstrip("\n").split("\0", 3)
+        if len(fields) == 4:  # noqa: PLR2004 - sha, author, committer, body
+            sha, author, committer, body = fields
+            messages.append((sha, f"{author}\n{committer}\n{body}"))
     return messages
+
+
+def commit_messages(rev: str) -> list[tuple[str, str]]:
+    out = subprocess.run(
+        ["git", "log", f"--format={LOG_FORMAT}", rev], check=True, capture_output=True, text=True
+    ).stdout
+    return parse_log(out)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -140,7 +188,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--require-denylist", action="store_true", help="exit 2 when no denylist is available"
     )
     parser.add_argument(
-        "--commit-messages", metavar="REV", help="also scan commit messages reachable from REV"
+        "--commit-messages",
+        metavar="REV",
+        help="also scan commit messages and identities reachable from REV",
     )
     args = parser.parse_args(argv)
     try:

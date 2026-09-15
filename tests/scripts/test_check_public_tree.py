@@ -40,6 +40,68 @@ def test_public_path_passes(path: str) -> None:
     assert cpt.path_violations([path]) == []
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "./.claude/settings.json",
+        ".Claude/settings.json",
+        "Docs/Plans/spec.md",
+        "src/.claude/notes.md",
+        "src/.local/notes.md",
+        "docs/claude.local.md",
+    ],
+)
+def test_private_path_variant_is_rejected(path: str) -> None:
+    assert cpt.path_violations([path]) == [path]
+
+
+def test_public_path_named_like_a_private_dir_passes() -> None:
+    assert cpt.path_violations(["src/claude/x.py", "docs/local.md"]) == []
+
+
+def test_latin1_file_is_scanned(tmp_path: Path) -> None:
+    (tmp_path / "l.md").write_bytes(b"M\xfcller\nat acme.example\n")
+    assert cpt.run(["l.md"], PATTERNS, tmp_path) == ["l.md:2: matches denylist pattern #1"]
+
+
+def test_utf16_file_is_scanned(tmp_path: Path) -> None:
+    (tmp_path / "u.md").write_text("at acme.example\n", encoding="utf-16")
+    assert cpt.run(["u.md"], PATTERNS, tmp_path) == ["u.md:1: matches denylist pattern #1"]
+
+
+def test_file_name_with_denylisted_term_is_reported(tmp_path: Path) -> None:
+    (tmp_path / "acme.example-notes.md").write_text("clean\n", encoding="utf-8")
+    assert cpt.run(["acme.example-notes.md"], PATTERNS, tmp_path) == [
+        "acme.example-notes.md: file name matches denylist pattern #1"
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["acme\u200b.example\n", "acme\u2060.example\n", "\uff41\uff43\uff4d\uff45.example\n"],
+    ids=["zero-width-space", "word-joiner", "fullwidth"],
+)
+def test_invisible_or_compatibility_characters_do_not_hide_a_term(text: str) -> None:
+    assert cpt.term_violations("a.md", text, PATTERNS) == [cpt.Hit("a.md", 1, 0)]
+
+
+def test_parse_log_scans_author_and_committer_identity() -> None:
+    out = "abc1234\x00Jane <jane@acme.example>\x00Jane <jane@acme.example>\x00feat: x\n\x1e"
+    hits = cpt.message_violations(cpt.parse_log(out), PATTERNS)
+    assert [cpt.format_hit(h) for h in hits] == [
+        "commit abc1234:1: matches denylist pattern #1",
+        "commit abc1234:2: matches denylist pattern #1",
+    ]
+
+
+def test_parse_log_with_clean_identity_passes() -> None:
+    identity = "Jane <1+jane@users.noreply.github.com>"
+    out = f"abc1234\x00{identity}\x00{identity}\x00feat: x\n\x1e\ndef5678\x00{identity}\x00{identity}\x00fix: y\n\x1e"
+    messages = cpt.parse_log(out)
+    assert [sha for sha, _ in messages] == ["abc1234", "def5678"]
+    assert cpt.message_violations(messages, PATTERNS) == []
+
+
 def test_denylisted_term_is_reported_with_line_and_pattern_index() -> None:
     hits = cpt.term_violations("README.md", "ok\nhosted at Acme.Example now\n", PATTERNS)
     assert hits == [cpt.Hit("README.md", 2, 0)]
