@@ -1,0 +1,229 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+"""Apply the GitHub repository settings that files in .github/ cannot express.
+
+Security features, workflow-token permissions, the default-branch ruleset, labels
+and the Projects v2 board - idempotent, so re-running converges instead of
+duplicating. Needs `gh auth login` with the `repo` and `project` scopes
+(`gh auth refresh -s project`). Preview with --dry-run.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shlex
+import subprocess
+import sys
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
+    Runner = Callable[[list[str], str | None], str]
+
+DESCRIPTION = "Busy-only ICS feed from private CalDAV calendars: presence visible, content opaque"
+TOPICS = ("caldav", "icalendar", "ics", "free-busy", "nextcloud", "privacy", "calendar", "python")
+# Job ids in .github/workflows/ci.yml; a test keeps both lists in sync, otherwise the
+# ruleset would wait forever for a check that never reports.
+REQUIRED_CHECKS = ("lint", "typecheck", "test", "public-guard", "secret-scan")
+GITHUB_ACTIONS_APP_ID = 15368  # pins required checks to Actions, not to any status poster
+RULESET_NAME = "main"
+PROJECT_TITLE = "Milchglas"
+# GitHub's default labels (bug, enhancement, documentation, good first issue, ...) stay.
+LABELS = (
+    ("needs-triage", "fbca04", "New issue, not yet assessed"),
+    ("blocked", "b60205", "Waiting on something outside this issue"),
+    ("security", "d93f0b", "Hardening; report vulnerabilities privately (SECURITY.md)"),
+    ("dependencies", "0366d6", "Dependency updates"),
+    ("ci", "5319e7", "Workflows, gates and tooling"),
+    ("area: caldav", "c5def5", "Fetching and parsing source calendars"),
+    ("area: core", "c5def5", "Pure pipeline: filter, reduce, round, merge"),
+    ("area: feed", "c5def5", "ICS emission and determinism"),
+    ("area: web", "c5def5", "Feed endpoint, tokens, health check"),
+    ("area: deploy", "c5def5", "Deployment options and runbook"),
+    ("priority: high", "b60205", "Next up"),
+    ("priority: low", "e4e669", "Nice to have"),
+)
+MANUAL_FOLLOW_UP = """\
+Done. Manual follow-up (no API for these):
+- Project board: enable the 'Auto-add to project' workflow for this repository.
+- Actions secret PUBLIC_DENYLIST: newline-separated private regexes for the term guard.
+- Optional Actions secret RELEASE_PLEASE_TOKEN (fine-grained PAT, contents + pull requests
+  write) so release PRs trigger CI; without it an admin merges them via the ruleset bypass."""
+
+
+class GhError(RuntimeError):
+    """A gh invocation failed."""
+
+
+@dataclass(frozen=True)
+class Step:
+    argv: list[str]
+    body: dict[str, Any] | None = None
+    kind: str = "plain"  # "ruleset" and "project" need a lookup before they write
+
+
+def _ruleset() -> dict[str, Any]:
+    checks = [{"context": c, "integration_id": GITHUB_ACTIONS_APP_ID} for c in REQUIRED_CHECKS]
+    return {
+        "name": RULESET_NAME,
+        "target": "branch",
+        "enforcement": "active",
+        "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+        # Solo maintainer: admins may merge a PR whose checks cannot run (release PRs
+        # opened by GITHUB_TOKEN), never push around the PR requirement.
+        "bypass_actors": [
+            {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}
+        ],
+        "rules": [
+            {"type": "deletion"},
+            {"type": "non_fast_forward"},
+            {"type": "required_linear_history"},
+            {
+                "type": "pull_request",
+                "parameters": {
+                    "required_approving_review_count": 0,
+                    "dismiss_stale_reviews_on_push": True,
+                    "require_code_owner_review": False,
+                    "require_last_push_approval": False,
+                    "required_review_thread_resolution": True,
+                },
+            },
+            {
+                "type": "required_status_checks",
+                "parameters": {
+                    "strict_required_status_checks_policy": True,
+                    "required_status_checks": checks,
+                },
+            },
+        ],
+    }
+
+
+def _label(full: str, name: str, color: str, text: str) -> Step:
+    argv = ["gh", "label", "create", name, "--repo", full, "--color", color]
+    return Step([*argv, "--description", text, "--force"])
+
+
+def plan(owner: str, repo: str) -> list[Step]:
+    full = f"{owner}/{repo}"
+    api = f"repos/{full}"
+    put = ["gh", "api", "-X", "PUT"]
+    edit = [
+        "gh", "repo", "edit", full,
+        "--description", DESCRIPTION,
+        "--add-topic", ",".join(TOPICS),
+        "--enable-issues",
+        "--enable-projects",
+        "--enable-wiki=false",
+        "--enable-discussions=false",
+        "--enable-merge-commit=false",
+        "--enable-squash-merge",
+        "--enable-rebase-merge",
+        "--delete-branch-on-merge",
+        "--allow-update-branch",
+    ]  # fmt: skip
+    security = {
+        "security_and_analysis": {
+            "secret_scanning": {"status": "enabled"},
+            "secret_scanning_push_protection": {"status": "enabled"},
+        }
+    }
+    workflow = {"default_workflow_permissions": "read", "can_approve_pull_request_reviews": True}
+    return [
+        Step(edit),
+        Step([*put, f"{api}/vulnerability-alerts"]),
+        Step([*put, f"{api}/automated-security-fixes"]),
+        Step([*put, f"{api}/private-vulnerability-reporting"]),
+        Step(["gh", "api", "-X", "PATCH", api, "--input", "-"], security),
+        Step([*put, f"{api}/actions/permissions/workflow", "--input", "-"], workflow),
+        Step(["gh", "api", "-X", "POST", f"{api}/rulesets", "--input", "-"], _ruleset(), "ruleset"),
+        *(_label(full, name, color, text) for name, color, text in LABELS),
+        Step(
+            [
+                "gh",
+                "project",
+                "create",
+                "--owner",
+                owner,
+                "--title",
+                PROJECT_TITLE,
+                "--format",
+                "json",
+            ],
+            kind="project",
+        ),
+    ]
+
+
+def _stdin(step: Step) -> str | None:
+    return None if step.body is None else json.dumps(step.body)
+
+
+def _upsert_ruleset(step: Step, full: str, runner: Runner) -> None:
+    endpoint = f"repos/{full}/rulesets"
+    existing: list[dict[str, Any]] = json.loads(runner(["gh", "api", endpoint], None) or "[]")
+    match = next((r for r in existing if r.get("name") == RULESET_NAME), None)
+    argv = step.argv
+    if match is not None:
+        argv = ["gh", "api", "-X", "PUT", f"{endpoint}/{match['id']}", "--input", "-"]
+    runner(argv, _stdin(step))
+
+
+def _ensure_project(step: Step, owner: str, repo: str, runner: Runner) -> None:
+    listing = runner(["gh", "project", "list", "--owner", owner, "--format", "json"], None)
+    projects: list[dict[str, Any]] = json.loads(listing or "{}").get("projects", [])
+    number = next((p["number"] for p in projects if p.get("title") == PROJECT_TITLE), None)
+    if number is None:
+        number = json.loads(runner(step.argv, None))["number"]
+    # `gh project link --repo` takes the bare repository name; the owner comes from --owner.
+    runner(["gh", "project", "link", str(number), "--owner", owner, "--repo", repo], None)
+
+
+def apply(steps: Sequence[Step], owner: str, repo: str, runner: Runner) -> None:
+    full = f"{owner}/{repo}"
+    for step in steps:
+        if step.kind == "ruleset":
+            _upsert_ruleset(step, full, runner)
+        elif step.kind == "project":
+            _ensure_project(step, owner, repo, runner)
+        else:
+            runner(step.argv, _stdin(step))
+
+
+def gh(argv: list[str], stdin: str | None) -> str:
+    result = subprocess.run(argv, input=stdin, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        msg = f"{shlex.join(argv[:5])} failed: {result.stderr.strip()}"
+        raise GhError(msg)
+    return result.stdout
+
+
+def main(argv: Sequence[str] | None = None, runner: Runner = gh) -> int:
+    parser = argparse.ArgumentParser(description="Apply GitHub repository settings via gh.")
+    parser.add_argument("--owner", required=True)
+    parser.add_argument("--repo", required=True)
+    parser.add_argument("--dry-run", action="store_true", help="print the plan, change nothing")
+    args = parser.parse_args(argv)
+    steps = plan(args.owner, args.repo)
+    if args.dry_run:
+        for step in steps:
+            print(shlex.join(step.argv))
+            if step.body is not None:
+                print(json.dumps(step.body, indent=2))
+        return 0
+    try:
+        apply(steps, args.owner, args.repo, runner)
+    except GhError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(MANUAL_FOLLOW_UP)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
