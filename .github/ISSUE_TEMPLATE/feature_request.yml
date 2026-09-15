@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose a change in scope or behaviour
+labels: [enhancement, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Milchglas is deliberately small. Please check the [scope table and backlog](https://github.com/philippsied/milchglas/blob/main/docs/spec.md) first — your idea may already be listed with a reason.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can you not do today, and in which setup?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How should Milchglas behave? Mention affected spec items (FR-n, D-n, Q-n) if you know them.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: The proposal keeps event content (titles, descriptions, locations, attendees) out of the feed, logs and state.
+          required: true
