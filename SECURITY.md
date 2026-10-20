@@ -12,7 +12,7 @@ The project is pre-1.0. Only the latest release (and `main`) receives security f
 **Do not open a public issue, discussion or pull request for a vulnerability.**
 
 Report it privately through GitHub's
-[private vulnerability reporting](https://github.com/philippsied/milchglas/security/advisories/new).
+[private vulnerability reporting](https://github.com/Prism-Purpose-Pace/milchglas/security/advisories/new).
 Please include:
 
 - affected version or commit,

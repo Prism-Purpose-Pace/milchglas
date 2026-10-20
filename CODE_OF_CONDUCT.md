@@ -11,7 +11,7 @@ tolerated.
 ## Reporting
 
 Report unacceptable behaviour privately to the maintainer, [@philippsied](https://github.com/philippsied),
-through this repository's [private reporting form](https://github.com/philippsied/milchglas/security/advisories/new)
+through this repository's [private reporting form](https://github.com/Prism-Purpose-Pace/milchglas/security/advisories/new)
 — start the title with "Code of conduct:". Only the maintainer can read these reports.
 If the report concerns the maintainer, use GitHub's
 [report content](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam)
