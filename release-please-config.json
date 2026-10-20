@@ -3,6 +3,7 @@
   "release-type": "python",
   "include-component-in-tag": false,
   "bump-minor-pre-major": true,
+  "last-release-sha": "7e83ac6723cccbcb9beb2021503a4c84a256abd8",
   "packages": {
     ".": {
       "package-name": "milchglas",

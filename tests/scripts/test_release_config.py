@@ -23,6 +23,14 @@ def test_uv_lock_extra_file_uses_the_tagged_toml_jsonpath() -> None:
     assert {"type": "toml", "path": "uv.lock", "jsonpath": LOCK_JSONPATH} in extra_files
 
 
+def test_last_release_sha_anchors_the_first_run() -> None:
+    # The seed history is already inside 0.1.0. Without an anchor release-please would
+    # walk back to the root and re-release every commit; a truncated or placeholder sha
+    # is silently ignored, so the full 40 hex digits are the assertion.
+    config = json.loads((REPO / "release-please-config.json").read_text(encoding="utf-8"))
+    assert re.fullmatch(r"[0-9a-f]{40}", config["last-release-sha"])
+
+
 def test_versions_agree_across_manifest_pyproject_lock_and_package() -> None:
     manifest = json.loads((REPO / ".release-please-manifest.json").read_text(encoding="utf-8"))
     pyproject = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
