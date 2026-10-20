@@ -212,16 +212,34 @@ def test_dry_run_prints_plan_without_calling_gh(capsys: pytest.CaptureFixture[st
     assert "gh project create" in out
 
 
+ORG_POLICY = "orgs/octo/actions/permissions/workflow"
+
+
 class FakeGh:
-    def __init__(self, existing_rulesets: str = "[]", existing_projects: str = "[]") -> None:
+    def __init__(
+        self,
+        existing_rulesets: str = "[]",
+        existing_projects: str = "[]",
+        owner_type: str = "User",
+        org_policy: str | None = '{"can_approve_pull_request_reviews": true}',
+    ) -> None:
         self.calls: list[list[str]] = []
         self.stdins: list[str | None] = []
         self.rulesets = existing_rulesets
         self.projects = existing_projects
+        self.owner_type = owner_type
+        self.org_policy = org_policy  # None: the token may not read it
 
     def __call__(self, argv: list[str], stdin: str | None) -> str:
         self.calls.append(argv)
         self.stdins.append(stdin)
+        if argv == ["gh", "api", "repos/octo/milchglas", "--jq", ".owner.type"]:
+            return self.owner_type + "\n"
+        if argv == ["gh", "api", ORG_POLICY]:
+            if self.org_policy is None:
+                msg = "gh api failed: HTTP 403"
+                raise gb.GhError(msg)
+            return self.org_policy
         if argv[:3] == ["gh", "project", "list"]:
             return '{"projects": ' + self.projects + "}"
         if argv[:3] == ["gh", "project", "create"]:
@@ -271,6 +289,51 @@ def test_apply_updates_existing_ruleset_and_reuses_project() -> None:
     ] in gh.calls
     assert not any(call[:3] == ["gh", "project", "create"] for call in gh.calls)
     assert ["gh", "project", "link", "3", "--owner", "octo", "--repo", "milchglas"] in gh.calls
+
+
+def _writes(gh: FakeGh) -> list[list[str]]:
+    return [
+        c
+        for c in gh.calls
+        if "-X" in c or c[:3] in (["gh", "repo", "edit"], ["gh", "label", "create"])
+    ]
+
+
+def test_org_policy_is_checked_before_any_write() -> None:
+    assert PLAN[0].kind == "org-policy"
+    assert PLAN[0].argv == ["gh", "api", ORG_POLICY]
+
+
+def test_apply_stops_before_writing_when_the_org_blocks_release_prs(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Measured after the transfer (2026-10-20): the org policy overrides the repository
+    # setting, and release-please failed with "not permitted to create ... pull requests".
+    gh = FakeGh(owner_type="Organization", org_policy='{"can_approve_pull_request_reviews": false}')
+    assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 1
+    assert _writes(gh) == []
+    assert "release-please" in capsys.readouterr().err
+
+
+def test_apply_continues_when_the_org_allows_release_prs() -> None:
+    gh = FakeGh(owner_type="Organization")
+    assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
+    assert ["gh", "api", ORG_POLICY] in gh.calls
+    assert _posted_rulesets(gh) == ["main", "review", "tags"]
+
+
+def test_unreadable_org_policy_warns_and_continues(capsys: pytest.CaptureFixture[str]) -> None:
+    # Reading it needs admin:org, which the maintainer drops again after an org change.
+    gh = FakeGh(owner_type="Organization", org_policy=None)
+    assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
+    assert "warning" in capsys.readouterr().err
+    assert _posted_rulesets(gh) == ["main", "review", "tags"]
+
+
+def test_user_owned_repo_skips_the_org_policy() -> None:
+    gh = FakeGh(owner_type="User")
+    assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
+    assert ["gh", "api", ORG_POLICY] not in gh.calls
 
 
 def test_gh_failure_carries_the_response_body() -> None:
