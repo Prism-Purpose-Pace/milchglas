@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.1.2](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.1.1...v0.1.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **scripts:** Freeze tags without the bypass GitHub refuses ([4fbcb95](https://github.com/Prism-Purpose-Pace/milchglas/commit/4fbcb95594d5ede93ab2d1d2a0c12c4299933546))
+* **scripts:** Restore the tag ruleset under the organization owner ([8f0b523](https://github.com/Prism-Purpose-Pace/milchglas/commit/8f0b52355e2723940cf195d0c0297d69c2a408a7))
+* **scripts:** Show GitHub's error body when a gh call fails ([85fbc1c](https://github.com/Prism-Purpose-Pace/milchglas/commit/85fbc1cefa892dace719adf769de45824c74af5b))
+
+
+### Documentation
+
+* List the security scans as required checks and the PR triage ([2897c27](https://github.com/Prism-Purpose-Pace/milchglas/commit/2897c276bb41ff08cdeed5cd93916f27e70ff199))
+* Point repository links at the Prism-Purpose-Pace organization ([b43617b](https://github.com/Prism-Purpose-Pace/milchglas/commit/b43617beeb1a7eb7a9faf57c0c18d88fd78cfa94))
+
 ## [0.1.1](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.1.0...v0.1.1) (2026-10-20)
 
 
