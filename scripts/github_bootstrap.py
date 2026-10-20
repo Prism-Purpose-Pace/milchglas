@@ -32,7 +32,6 @@ TOPICS = ("caldav", "icalendar", "ics", "free-busy", "nextcloud", "privacy", "ca
 REQUIRED_CHECKS = ("lint", "typecheck", "test", "public-guard", "secret-scan")
 GITHUB_ACTIONS_APP_ID = 15368  # pins required checks to Actions, not to any status poster
 RULESET_NAME = "main"
-TAG_RULESET_NAME = "tags"
 PROJECT_TITLE = "Milchglas"
 # GitHub's default labels (bug, enhancement, documentation, good first issue, ...) stay.
 LABELS = (
@@ -55,8 +54,11 @@ Done. Manual follow-up (no API for these):
 - Secret PUBLIC_DENYLIST (newline-separated private regexes for the term guard), as
   Actions secret AND as Dependabot secret (`gh secret set ... --app dependabot`).
 - Release PRs are opened by GITHUB_TOKEN and trigger no CI; review and merge them through
-  the admin bypass of the main ruleset (a personal token would be blocked by the tag
-  ruleset when release-please tags the release)."""
+  the admin bypass of the main ruleset.
+- Tags are NOT protected by a ruleset: a bypass actor of type Integration is only valid
+  when the ruleset belongs to an organization, and this repository belongs to a user
+  account ("Actor GitHub Actions integration must be part of the ruleset source or owner
+  organization", HTTP 422). Anyone with write access can therefore create or move a tag."""
 
 
 class GhError(RuntimeError):
@@ -107,25 +109,6 @@ def _ruleset() -> dict[str, Any]:
     }
 
 
-def _tag_ruleset() -> dict[str, Any]:
-    return {
-        "name": TAG_RULESET_NAME,
-        "target": "tag",
-        "enforcement": "active",
-        "conditions": {"ref_name": {"include": ["~ALL"], "exclude": []}},
-        # Only the release workflow (GitHub Actions) creates, moves or deletes tags, so
-        # no tag can ever be pushed onto history outside the public branch.
-        "bypass_actors": [
-            {
-                "actor_id": GITHUB_ACTIONS_APP_ID,
-                "actor_type": "Integration",
-                "bypass_mode": "always",
-            }
-        ],
-        "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}],
-    }
-
-
 def _label(full: str, name: str, color: str, text: str) -> Step:
     argv = ["gh", "label", "create", name, "--repo", full, "--color", color]
     return Step([*argv, "--description", text, "--force"])
@@ -161,11 +144,10 @@ def plan(owner: str, repo: str) -> list[Step]:
         Step(["gh", "api", "-X", "PATCH", api, "--input", "-"], security),
         Step([*put, f"{api}/actions/permissions/workflow", "--input", "-"], workflow),
         Step(["gh", "api", "-X", "POST", f"{api}/rulesets", "--input", "-"], _ruleset(), "ruleset"),
-        Step(
-            ["gh", "api", "-X", "POST", f"{api}/rulesets", "--input", "-"],
-            _tag_ruleset(),
-            "ruleset",
-        ),
+        # No tag ruleset: its only useful shape needs a bypass actor of type Integration,
+        # which GitHub accepts only for organization-owned rulesets (HTTP 422 here). The
+        # threat it guarded — a tag pointing at pre-OSS history — is closed by that
+        # history no longer existing in this repository.
         *(_label(full, name, color, text) for name, color, text in LABELS),
         Step(
             [

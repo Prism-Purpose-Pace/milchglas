@@ -59,15 +59,18 @@ def _ruleset(name: str) -> dict[str, Any]:
     return body
 
 
-def test_tag_ruleset_lets_only_github_actions_touch_tags() -> None:
-    # Nobody but the release workflow creates tags, so no tag can carry old history.
-    ruleset = _ruleset("tags")
-    assert ruleset["target"] == "tag"
-    assert ruleset["conditions"]["ref_name"]["include"] == ["~ALL"]
-    assert {"creation", "update", "deletion"} <= {rule["type"] for rule in ruleset["rules"]}
-    assert ruleset["bypass_actors"] == [
-        {"actor_id": gb.GITHUB_ACTIONS_APP_ID, "actor_type": "Integration", "bypass_mode": "always"}
-    ]
+def test_no_ruleset_asks_for_an_integration_bypass() -> None:
+    # GitHub accepts a bypass actor of type Integration only for an organization-owned
+    # ruleset: "Actor GitHub Actions integration must be part of the ruleset source or
+    # owner organization" (HTTP 422). This repository belongs to a user account, and the
+    # run aborts on that error, so every later step (labels, project) is lost with it.
+    actor_types = {
+        actor.get("actor_type")
+        for step in PLAN
+        if step.kind == "ruleset" and step.body
+        for actor in step.body.get("bypass_actors", [])
+    }
+    assert "Integration" not in actor_types
 
 
 def test_main_ruleset_protects_the_default_branch() -> None:

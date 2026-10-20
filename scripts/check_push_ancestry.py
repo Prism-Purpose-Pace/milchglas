@@ -15,7 +15,8 @@ hook fails closed; outside a push (a manual gate run) it passes.
 Limit: pre-commit runs pre-push hooks for the FIRST ref of a multi-ref push only, so
 `git push --all` / `--mirror` / `--tags` are not fully covered here. The real protection
 is that a maintainer clone holds no pre-public history at all (maintainer runbook) and
-that the repository's tag ruleset lets only the release workflow create tags.
+that a maintainer clone holds no pre-public history to tag in the first place (tags
+themselves carry no ruleset: see MANUAL_FOLLOW_UP in scripts/github_bootstrap.py).
 """
 
 from __future__ import annotations
