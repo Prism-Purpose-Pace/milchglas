@@ -228,6 +228,22 @@ def test_missing_denylist_yields_none(tmp_path: Path) -> None:
     assert cpt.load_denylist(tmp_path / "absent.txt", {}) is None
 
 
+# A list that parses to zero patterns must read as "no denylist", not as "nothing is
+# denied": an empty pattern list would pass --require-denylist and silently skip the
+# whole term scan.
+def test_denylist_file_without_patterns_yields_none(tmp_path: Path) -> None:
+    denylist = tmp_path / "deny.txt"
+    denylist.write_text("# only a comment\n\n   \n", encoding="utf-8")
+    assert cpt.load_denylist(denylist, {}) is None
+
+
+def test_denylist_env_without_patterns_yields_none(tmp_path: Path) -> None:
+    denylist = tmp_path / "deny.txt"
+    denylist.write_text("fromfile\n", encoding="utf-8")
+    # The env var wins, so its emptiness must not fall back to the file either.
+    assert cpt.load_denylist(denylist, {"PUBLIC_DENYLIST": "# only a comment\n"}) is None
+
+
 def test_run_combines_path_and_term_findings(tmp_path: Path) -> None:
     (tmp_path / "a.md").write_text("Acme.example\n", encoding="utf-8")
     (tmp_path / "b.md").write_text("fine\n", encoding="utf-8")

@@ -21,7 +21,8 @@ Checks over the tracked (or given) files:
 Residual: matching is per line, so a term split across lines, encoded (base64, UTF-16
 without BOM) or spelled with homoglyphs from another script is not detected.
 
-Exit codes: 0 clean, 1 findings, 2 denylist missing (with --require-denylist) or invalid.
+Exit codes: 0 clean, 1 findings, 2 denylist missing or without patterns (with
+--require-denylist) or invalid.
 """
 
 from __future__ import annotations
@@ -101,11 +102,16 @@ def parse_denylist(text: str) -> list[re.Pattern[str]]:
 
 
 def load_denylist(file: Path, env: Mapping[str, str]) -> list[re.Pattern[str]] | None:
-    """Prefer the environment (CI secret), fall back to the local file, else None."""
+    """Prefer the environment (CI secret), fall back to the local file, else None.
+
+    A source that parses to zero patterns counts as absent: an empty list would pass
+    --require-denylist and skip the term scan without a word, so a mangled secret
+    (whitespace, comments only) would turn the guard off while CI stays green.
+    """
     if env.get(ENV_VAR, "").strip():
-        return parse_denylist(env[ENV_VAR])
+        return parse_denylist(env[ENV_VAR]) or None
     if file.is_file():
-        return parse_denylist(file.read_text(encoding="utf-8"))
+        return parse_denylist(file.read_text(encoding="utf-8")) or None
     return None
 
 
