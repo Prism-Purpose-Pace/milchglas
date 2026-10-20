@@ -32,6 +32,7 @@ TOPICS = ("caldav", "icalendar", "ics", "free-busy", "nextcloud", "privacy", "ca
 REQUIRED_CHECKS = ("lint", "typecheck", "test", "public-guard", "secret-scan")
 GITHUB_ACTIONS_APP_ID = 15368  # pins required checks to Actions, not to any status poster
 RULESET_NAME = "main"
+REVIEW_RULESET_NAME = "review"
 PROJECT_TITLE = "Milchglas"
 # GitHub's default labels (bug, enhancement, documentation, good first issue, ...) stay.
 LABELS = (
@@ -53,8 +54,9 @@ Done. Manual follow-up (no API for these):
 - Project board: enable the 'Auto-add to project' workflow for this repository.
 - Secret PUBLIC_DENYLIST (newline-separated private regexes for the term guard), as
   Actions secret AND as Dependabot secret (`gh secret set ... --app dependabot`).
-- Release PRs are opened by GITHUB_TOKEN and trigger no CI; review and merge them through
-  the admin bypass of the main ruleset.
+- Release PRs are opened by GITHUB_TOKEN and trigger no CI: close and reopen one to run
+  the required checks, then approve and merge it. Own PRs merge through the admin bypass
+  of the review ruleset, which skips only the approval.
 - Tags are NOT protected by a ruleset: a bypass actor of type Integration is only valid
   when the ruleset belongs to an organization, and this repository belongs to a user
   account ("Actor GitHub Actions integration must be part of the ruleset source or owner
@@ -79,11 +81,9 @@ def _ruleset() -> dict[str, Any]:
         "target": "branch",
         "enforcement": "active",
         "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
-        # Solo maintainer: admins may merge a PR whose checks cannot run (release PRs
-        # opened by GITHUB_TOKEN), never push around the PR requirement.
-        "bypass_actors": [
-            {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}
-        ],
+        # No bypass: a bypass skips every unmet rule of its ruleset, so required checks
+        # would turn optional for the maintainer. The review ruleset holds the bypass.
+        "bypass_actors": [],
         "rules": [
             {"type": "deletion"},
             {"type": "non_fast_forward"},
@@ -103,6 +103,32 @@ def _ruleset() -> dict[str, Any]:
                 "parameters": {
                     "strict_required_status_checks_policy": True,
                     "required_status_checks": checks,
+                },
+            },
+        ],
+    }
+
+
+def _review_ruleset() -> dict[str, Any]:
+    return {
+        "name": REVIEW_RULESET_NAME,
+        "target": "branch",
+        "enforcement": "active",
+        "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+        # Solo maintainer: nobody else can approve their own PRs, so admins may merge
+        # without the review; bot PRs (Dependabot, release-please) get a real approval.
+        "bypass_actors": [
+            {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}
+        ],
+        "rules": [
+            {
+                "type": "pull_request",
+                "parameters": {
+                    "required_approving_review_count": 1,
+                    "dismiss_stale_reviews_on_push": True,
+                    "require_code_owner_review": False,
+                    "require_last_push_approval": True,
+                    "required_review_thread_resolution": False,
                 },
             },
         ],
@@ -143,7 +169,10 @@ def plan(owner: str, repo: str) -> list[Step]:
         Step([*put, f"{api}/private-vulnerability-reporting"]),
         Step(["gh", "api", "-X", "PATCH", api, "--input", "-"], security),
         Step([*put, f"{api}/actions/permissions/workflow", "--input", "-"], workflow),
-        Step(["gh", "api", "-X", "POST", f"{api}/rulesets", "--input", "-"], _ruleset(), "ruleset"),
+        *(
+            Step(["gh", "api", "-X", "POST", f"{api}/rulesets", "--input", "-"], body, "ruleset")
+            for body in (_ruleset(), _review_ruleset())
+        ),
         # No tag ruleset: its only useful shape needs a bypass actor of type Integration,
         # which GitHub accepts only for organization-owned rulesets (HTTP 422 here). The
         # threat it guarded — a tag pointing at pre-OSS history — is closed by that
