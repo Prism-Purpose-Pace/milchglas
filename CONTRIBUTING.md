@@ -46,10 +46,12 @@ pre-commit install --install-hooks
 | Format | `uv run ruff format` |
 | Type-check (strict, blocking) | `uv run mypy` |
 | Type-check (advisory) | `uv run ty check` |
-| All local gates (commit stage, then push stage) | `pre-commit run --all-files` · `pre-commit run --hook-stage pre-push --all-files` |
+| All local gates (commit stage, then push stage) | `python3 scripts/gates.py` · `python3 scripts/gates.py run --hook-stage pre-push --all-files` |
 
 Always call the Python tools through `uv run`: the lock file pins the exact versions
-that the hooks and CI use. Gate details: [TOOLING.md](TOOLING.md).
+that the hooks and CI use. The one exception is `scripts/gates.py`, which runs on plain
+`python3` because it picks the cache directory that `uv` itself needs — see its module
+docstring. Gate details: [TOOLING.md](TOOLING.md).
 
 ## Tests
 
