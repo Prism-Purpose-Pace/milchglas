@@ -117,8 +117,11 @@ def _review_ruleset() -> dict[str, Any]:
         "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
         # Solo maintainer: nobody else can approve their own PRs, so admins may merge
         # without the review; bot PRs (Dependabot, release-please) get a real approval.
+        # Organization owners hold admin access implicitly and are a separate actor type
+        # (its actor_id is ignored); GitHub rejects that type for user-owned repositories.
         "bypass_actors": [
-            {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}
+            {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"},
+            {"actor_id": 1, "actor_type": "OrganizationAdmin", "bypass_mode": "pull_request"},
         ],
         "rules": [
             {
