@@ -103,9 +103,12 @@ def test_review_ruleset_requires_one_fresh_approval_and_nothing_else() -> None:
     assert params["required_approving_review_count"] == 1
     assert params["require_last_push_approval"] is True
     assert params["dismiss_stale_reviews_on_push"] is True
-    assert ruleset["bypass_actors"] == [
-        {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}
-    ]
+    # The repository belongs to an organization: an owner's admin access is implicit and
+    # GitHub models it as its own actor type next to the repository admin role.
+    actors = {(a["actor_type"], a["bypass_mode"]) for a in ruleset["bypass_actors"]}
+    assert actors == {("RepositoryRole", "pull_request"), ("OrganizationAdmin", "pull_request")}
+    roles = [a["actor_id"] for a in ruleset["bypass_actors"] if a["actor_type"] == "RepositoryRole"]
+    assert roles == [5]  # the admin role
 
 
 def test_required_checks_exist_as_ci_jobs() -> None:
