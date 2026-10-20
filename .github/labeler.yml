@@ -1,0 +1,26 @@
+# Path labels for pull requests, applied by .github/workflows/pr-triage.yml. Every
+# label must exist in LABELS of scripts/github_bootstrap.py; a test checks that.
+"area: caldav":
+  - changed-files:
+      - any-glob-to-any-file: ["src/milchglas/sources/**"]
+"area: core":
+  - changed-files:
+      - any-glob-to-any-file: ["src/milchglas/core/**"]
+"area: feed":
+  - changed-files:
+      - any-glob-to-any-file: ["src/milchglas/core/emit*.py"]
+"area: web":
+  - changed-files:
+      - any-glob-to-any-file: ["src/milchglas/web/**"]
+"area: deploy":
+  - changed-files:
+      - any-glob-to-any-file: ["deploy/**", "docs/runbook.md", "docs/consumers.md"]
+"ci":
+  - changed-files:
+      - any-glob-to-any-file: [".github/**", "scripts/**", ".pre-commit-config.yaml"]
+"dependencies":
+  - changed-files:
+      - any-glob-to-any-file: ["uv.lock"]
+"documentation":
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "*.md"]

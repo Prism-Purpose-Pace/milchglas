@@ -1,0 +1,30 @@
+name: PR triage
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  triage:
+    # Fork pull requests get a read-only token and are triaged by hand: pull_request_target
+    # would hand them a write token. Dependabot labels and assigns through dependabot.yml.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write # assignees are set through the issues API
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+      - name: Assign the author
+        if: github.event.action != 'synchronize'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          # A bot cannot be assigned; a release PR goes to whoever reopened it.
+          ASSIGNEE: ${{ github.event.pull_request.user.type == 'Bot' && github.actor || github.event.pull_request.user.login }}
+        run: gh pr edit "$PR_URL" --add-assignee "$ASSIGNEE"

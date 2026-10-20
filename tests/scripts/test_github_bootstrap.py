@@ -170,6 +170,14 @@ def test_main_ruleset_blocks_codeql_alerts() -> None:
     ]
 
 
+def test_labeler_only_applies_labels_the_bootstrap_creates() -> None:
+    # actions/labeler fails on a label the repository does not have.
+    config = (REPO / ".github/labeler.yml").read_text(encoding="utf-8")
+    used = set(re.findall(r'^"?([a-z][^":#]*)"?:\s*$', config, re.MULTILINE))
+    assert "documentation" in used
+    assert used <= {name for name, _, _ in gb.LABELS}
+
+
 def test_labels_are_upserted_with_force() -> None:
     labels = [s for s in PLAN if s.argv[:3] == ["gh", "label", "create"]]
     names = {s.argv[3] for s in labels}
