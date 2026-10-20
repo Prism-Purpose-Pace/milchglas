@@ -127,7 +127,7 @@ def plan(owner: str, repo: str) -> list[Step]:
         "--enable-wiki=false",
         "--enable-discussions=false",
         "--enable-merge-commit=false",
-        "--enable-squash-merge",
+        "--enable-squash-merge=false",  # squash commits take the account name as author
         "--enable-rebase-merge",
         "--delete-branch-on-merge",
         "--allow-update-branch",
