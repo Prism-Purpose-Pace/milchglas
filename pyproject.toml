@@ -87,6 +87,8 @@ ignore = [
 # test directory is a package, otherwise equal test basenames in tests/unit and
 # tests/contract collide in both mypy and pytest.
 "tests/**/*.py" = ["S101", "PLR2004"]
+# One test builds a throwaway git repository to prove the guard's range semantics.
+"tests/scripts/test_check_public_tree.py" = ["S101", "PLR2004", "S603", "S607"]
 # Stdlib gate scripts: print is their CLI output; subprocess runs literal git/gh argv.
 "scripts/*.py" = ["T201", "C901", "FURB167", "PERF401", "INP001"]
 "scripts/check_commit_msg.py" = ["PLR0912", "PLR2004"]
