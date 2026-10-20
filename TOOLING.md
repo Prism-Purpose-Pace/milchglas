@@ -59,7 +59,7 @@ permissions and grants per job only what it needs.
 | `ci.yml` | push to `main`, pull requests | `lint`, `typecheck`, `test`, `public-guard`, `secret-scan` (required checks), `osv-scan`, `dependency-review` (PRs), `zizmor` (workflow security lint) |
 | `codeql.yml` | push, pull requests, weekly | CodeQL for Python and Actions |
 | `scorecard.yml` | push to `main`, weekly | OpenSSF Scorecard, results to code scanning + badge |
-| `release-please.yml` | push to `main` | release PR with changelog and version bump from conventional commits |
+| `release-please.yml` | push to `main` | release PR with changelog and version bump from conventional commits; on a release, sdist and wheel with their provenance (`.sigstore.json`, `.intoto.jsonl`) as release assets |
 
 `public-guard` reads the maintainer's private denylist from the `PUBLIC_DENYLIST`
 secret (stored as Actions secret and as Dependabot secret) and reports only file, line

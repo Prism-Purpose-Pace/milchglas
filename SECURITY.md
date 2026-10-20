@@ -57,3 +57,6 @@ This is a volunteer, single-maintainer project; the targets below are best effor
 Secret scanning with push protection, Dependabot alerts and security updates, CodeQL,
 OpenSSF Scorecard, SHA-pinned GitHub Actions with least-privilege tokens, and local
 pre-commit gates (gitleaks, trufflehog, osv-scanner). See [TOOLING.md](TOOLING.md).
+
+Release assets carry build provenance signed through Sigstore. Verify a downloaded file
+with `gh attestation verify <file> --repo Prism-Purpose-Pace/milchglas`.

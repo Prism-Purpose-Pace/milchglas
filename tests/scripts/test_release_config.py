@@ -53,3 +53,17 @@ def test_changelog_has_a_header_for_the_current_version() -> None:
     changelog = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
     header = rf"^## \[?{re.escape(manifest['.'])}\]?"
     assert re.search(header, changelog, re.MULTILINE)
+
+
+def test_release_assets_carry_provenance_and_a_signature() -> None:
+    # OpenSSF Scorecard (Signed-Releases) skips a release without assets but scores one
+    # with unsigned assets 0, with a `.sigstore.json` 8 and with a `.intoto.jsonl` 10.
+    # release-please cuts the release with GITHUB_TOKEN, which starts no `release`
+    # workflow, so the asset job must hang off its `release_created` output.
+    workflow = (REPO / ".github/workflows/release-please.yml").read_text(encoding="utf-8")
+    code = "\n".join(line.split("#")[0] for line in workflow.splitlines())
+    assert "if: needs.release-please.outputs.release_created == 'true'" in code
+    assert re.search(r"uses: actions/attest-build-provenance@[0-9a-f]{40}\s", code)
+    assert re.search(r"\.intoto\.jsonl\b", code)
+    assert re.search(r"\.sigstore\.json\b", code)
+    assert "gh release upload" in code

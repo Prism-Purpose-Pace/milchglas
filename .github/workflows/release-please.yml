@@ -13,11 +13,50 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       # GITHUB_TOKEN on purpose: it keeps the release tag attributable to this workflow
       # instead of to a person's token. Its release PRs trigger no CI; the maintainer
       # closes and reopens one to run the required checks (TOOLING.md).
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # A release cut with GITHUB_TOKEN starts no `release` workflow, so the assets are
+  # built here. Every asset ships with build provenance: the Sigstore bundle
+  # (`gh attestation verify --bundle`) and its DSSE envelope as in-toto JSON Lines.
+  release-assets:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # upload release assets
+      id-token: write # Sigstore signing certificate
+      attestations: write # store the attestation on GitHub
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.12"
+          enable-cache: false # a release build must not restore a cache
+      - run: uv build
+      - id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/milchglas-*
+      - name: Upload distributions and provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE" "dist/milchglas-$TAG.sigstore.json"
+          jq -c .dsseEnvelope "$BUNDLE" > "dist/milchglas-$TAG.intoto.jsonl"
+          gh release upload "$TAG" dist/milchglas-* --repo "$GITHUB_REPOSITORY"
