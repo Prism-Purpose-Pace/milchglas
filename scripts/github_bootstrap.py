@@ -70,7 +70,17 @@ Done. Manual follow-up (no API for these):
   the required checks, then approve and merge it. Own PRs merge through the admin bypass
   of the review ruleset, which skips only the approval.
 - Tags are frozen by the tags ruleset (no move, no delete, no bypass); to repair a wrong
-  tag, disable that ruleset, fix the tag, enable it again."""
+  tag, disable that ruleset, fix the tag, enable it again.
+- If you added the admin:org scope for this run, drop it again:
+  `gh auth refresh -h github.com -r admin:org`."""
+ORG_POLICY_OFF = """\
+Organization {owner} does not allow GitHub Actions to create and approve pull requests.
+The repository setting cannot override it, so release-please cannot open release PRs.
+An organization owner enables it under Settings > Actions > General > Workflow
+permissions, or runs (scope admin:org):
+  gh api -X PUT orgs/{owner}/actions/permissions/workflow \
+-F can_approve_pull_request_reviews=true
+Nothing was changed."""
 
 
 class GhError(RuntimeError):
@@ -81,7 +91,7 @@ class GhError(RuntimeError):
 class Step:
     argv: list[str]
     body: dict[str, Any] | None = None
-    kind: str = "plain"  # "ruleset" and "project" need a lookup before they write
+    kind: str = "plain"  # "org-policy", "ruleset" and "project" read before they act
 
 
 def _ruleset() -> dict[str, Any]:
@@ -206,6 +216,8 @@ def plan(owner: str, repo: str) -> list[Step]:
     # Approval for first-time contributors only is defeated by one merged typo fix.
     forks = {"approval_policy": "all_external_contributors"}
     return [
+        # First, so a blocked organization stops the run before anything is written.
+        Step(["gh", "api", f"orgs/{owner}/actions/permissions/workflow"], kind="org-policy"),
         Step(edit),
         Step([*put, f"{api}/vulnerability-alerts"]),
         Step([*put, f"{api}/automated-security-fixes"]),
@@ -242,6 +254,20 @@ def _stdin(step: Step) -> str | None:
     return None if step.body is None else json.dumps(step.body)
 
 
+def _check_org_policy(step: Step, owner: str, full: str, runner: Runner) -> None:
+    # An organization's Actions policy caps the repository setting the workflow step sets.
+    owner_type = runner(["gh", "api", f"repos/{full}", "--jq", ".owner.type"], None).strip()
+    if owner_type != "Organization":
+        return
+    try:
+        policy: dict[str, Any] = json.loads(runner(step.argv, None) or "{}")
+    except GhError as exc:  # reading it needs admin:org
+        print(f"warning: organization Actions policy not checked: {exc}", file=sys.stderr)
+        return
+    if not policy.get("can_approve_pull_request_reviews"):
+        raise GhError(ORG_POLICY_OFF.format(owner=owner))
+
+
 def _upsert_ruleset(step: Step, full: str, runner: Runner) -> None:
     endpoint = f"repos/{full}/rulesets"
     existing: list[dict[str, Any]] = json.loads(runner(["gh", "api", endpoint], None) or "[]")
@@ -266,7 +292,9 @@ def _ensure_project(step: Step, owner: str, repo: str, runner: Runner) -> None:
 def apply(steps: Sequence[Step], owner: str, repo: str, runner: Runner) -> None:
     full = f"{owner}/{repo}"
     for step in steps:
-        if step.kind == "ruleset":
+        if step.kind == "org-policy":
+            _check_org_policy(step, owner, full, runner)
+        elif step.kind == "ruleset":
             _upsert_ruleset(step, full, runner)
         elif step.kind == "project":
             _ensure_project(step, owner, repo, runner)
