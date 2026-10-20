@@ -30,10 +30,10 @@ requires-python = ">=3.12,<3.13"
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/philippsied/milchglas"
-Issues = "https://github.com/philippsied/milchglas/issues"
-Security = "https://github.com/philippsied/milchglas/security/policy"
-Changelog = "https://github.com/philippsied/milchglas/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/Prism-Purpose-Pace/milchglas"
+Issues = "https://github.com/Prism-Purpose-Pace/milchglas/issues"
+Security = "https://github.com/Prism-Purpose-Pace/milchglas/security/policy"
+Changelog = "https://github.com/Prism-Purpose-Pace/milchglas/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
