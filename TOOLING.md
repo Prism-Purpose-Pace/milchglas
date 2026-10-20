@@ -94,11 +94,12 @@ project board) are applied with `uv run --script scripts/github_bootstrap.py --o
   pre-commit evaluates only the first ref of a multi-ref push (`--all`, `--mirror`,
   `--tags`). The protection against publishing pre-public history is that maintainer
   clones hold none — this repository contains no other history to tag.
-- The `tags` ruleset lets only GitHub Actions (release-please under `GITHUB_TOKEN`)
-  create, move or delete a tag; nobody else has a bypass. Its `Integration` bypass actor
-  is valid only because the repository belongs to an organization — on a user account
-  GitHub answers HTTP 422. Releasing with any other token (a personal token, a separate
-  GitHub App) fails at the tagging step until that actor is added.
+- The `tags` ruleset freezes every tag: nobody moves or deletes one, and nobody holds
+  a bypass (an admin disables the ruleset to repair a wrong tag). Creating a tag stays
+  open to writers, because release-please tags with `GITHUB_TOKEN` and GitHub rejects
+  GitHub Actions as a bypass actor — on a user account and in this organization alike
+  (HTTP 422). So anyone with write access can still create a tag; the mitigation is the
+  absent pre-public history above, not a rule.
 - Two rulesets guard `main`. `main` (no bypass) holds the required checks, linear
   history and the pull-request requirement for everyone, admins included; `review`
   requires one approval of the last push and is the only ruleset admins may bypass,

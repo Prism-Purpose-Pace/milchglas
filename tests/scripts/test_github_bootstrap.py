@@ -60,31 +60,30 @@ def _ruleset(name: str) -> dict[str, Any]:
     return body
 
 
-def test_tag_ruleset_lets_only_github_actions_touch_tags() -> None:
-    # Only the release workflow (release-please, GITHUB_TOKEN) creates, moves or deletes
-    # tags. A bypass actor of type Integration needs an organization-owned ruleset
-    # (HTTP 422 on a user account); the repository belongs to an organization since
-    # 2026-10-20.
+def test_tag_ruleset_freezes_existing_tags_without_bypass() -> None:
+    # Nobody may move or delete a tag; creating one stays open to writers, which is how
+    # release-please (GITHUB_TOKEN) tags a release. Admins disable the ruleset for an
+    # emergency fix instead of holding a standing bypass.
     ruleset = _ruleset("tags")
     assert ruleset["target"] == "tag"
     assert ruleset["enforcement"] == "active"
     assert ruleset["conditions"]["ref_name"]["include"] == ["~ALL"]
-    assert {"creation", "update", "deletion"} <= {rule["type"] for rule in ruleset["rules"]}
-    assert ruleset["bypass_actors"] == [
-        {"actor_id": gb.GITHUB_ACTIONS_APP_ID, "actor_type": "Integration", "bypass_mode": "always"}
-    ]
+    assert sorted(rule["type"] for rule in ruleset["rules"]) == ["deletion", "update"]
+    assert ruleset["bypass_actors"] == []
 
 
-def test_only_the_tag_ruleset_names_an_integration_bypass() -> None:
-    # An Integration bypass on a branch ruleset would let any workflow token skip it.
-    names = {
-        step.body["name"]
+def test_no_ruleset_asks_for_an_integration_bypass() -> None:
+    # GitHub rejects GitHub Actions (Integration 15368) as a bypass actor on a user
+    # account AND, measured 2026-10-20, in the Prism-Purpose-Pace organization: "Actor
+    # GitHub Actions integration must be part of the ruleset source or owner
+    # organization" (HTTP 422). The run aborts there, so labels and the project are lost.
+    actor_types = {
+        actor.get("actor_type")
         for step in PLAN
         if step.kind == "ruleset" and step.body
         for actor in step.body.get("bypass_actors", [])
-        if actor.get("actor_type") == "Integration"
     }
-    assert names == {"tags"}
+    assert "Integration" not in actor_types
 
 
 def test_main_ruleset_protects_the_default_branch() -> None:
