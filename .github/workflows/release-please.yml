@@ -14,8 +14,9 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      # GITHUB_TOKEN on purpose: the tag ruleset lets only GitHub Actions create tags. Its
-      # release PRs trigger no CI; the maintainer merges them via the ruleset bypass.
+      # GITHUB_TOKEN on purpose: it keeps the release tag attributable to this workflow
+      # instead of to a person's token. Its release PRs trigger no CI; the maintainer
+      # merges them via the main ruleset's bypass.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json

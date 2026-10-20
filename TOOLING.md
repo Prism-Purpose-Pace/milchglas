@@ -76,9 +76,12 @@ project board) are applied with `uv run --script scripts/github_bootstrap.py --o
 - The pre-push ancestry hook requires the public root to be the ONLY root of a pushed
   ref, so a merge that pulls in older history is refused. It sees one ref per push:
   pre-commit evaluates only the first ref of a multi-ref push (`--all`, `--mirror`,
-  `--tags`). The protection against
-  publishing pre-public history is that maintainer clones hold none, plus the `tags`
-  ruleset that lets only the release workflow create tags.
+  `--tags`). The protection against publishing pre-public history is that maintainer
+  clones hold none — this repository contains no other history to tag.
+- Tags carry no ruleset. The only useful shape needs a bypass actor of type
+  `Integration`, which GitHub accepts for organization-owned rulesets only; on a user
+  account it answers HTTP 422. Anyone with write access can therefore create or move a
+  tag, and the mitigation is the absent history above, not a rule.
 - Release PRs are opened with `GITHUB_TOKEN` and trigger no CI; the maintainer merges
-  them through the admin bypass after review. A personal token is not an option: the
-  `tags` ruleset would block the release tag it creates.
+  them through the admin bypass after review. `GITHUB_TOKEN` also keeps the release tag
+  attributable to the workflow rather than to a person's token.
