@@ -65,7 +65,11 @@ permissions and grants per job only what it needs.
 secret (stored as Actions secret and as Dependabot secret) and reports only file, line
 and pattern number — never the matched text. Without the secret the job fails, except
 on pull requests from forks, which check paths only; the full check runs again on the
-push to `main`.
+push to `main`. Commit messages and identities are scanned for the range a change adds
+(`base..head` on a pull request, `before..sha` on a push), never the whole history:
+commits GitHub creates itself carry the account's display name, and one such commit
+(`a995e8f`) would otherwise keep every later run red. Merge pull requests with **rebase**,
+not squash — a rebase keeps each commit's author, a squash commit takes the account name.
 
 Repository settings that files cannot express (security features, ruleset, labels,
 project board) are applied with `uv run --script scripts/github_bootstrap.py --owner

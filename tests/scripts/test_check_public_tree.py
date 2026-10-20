@@ -1,5 +1,7 @@
 """check_public_tree.py: private paths and denylisted terms never reach the public tree."""
 
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -209,14 +211,47 @@ def test_unreadable_file_is_reported_not_crashed(tmp_path: Path) -> None:
         locked.chmod(0o600)
 
 
-def test_ci_scans_the_branch_tip_not_the_synthesised_merge_commit() -> None:
-    # On a pull_request event HEAD is the merge commit GitHub synthesises for the preview.
-    # Its author is the PR author's bare GitHub display name, not the identity the branch
-    # commits carry, so scanning it reports findings about a commit that never lands while
-    # leaving the commits that do land unscanned.
+def test_ci_scans_only_the_commits_a_change_adds() -> None:
+    # Commits GitHub creates itself (the merge preview, and the squash commit of a merged
+    # PR) carry the account's bare display name, not the identity the branch commits carry.
+    # Scanning the whole history therefore turned main red for good once one such commit
+    # landed (a995e8f), and with it every later pull request. CI scans the range a change
+    # adds instead: base..head on a pull request, before..sha on a push.
     ci = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "--commit-messages HEAD" not in ci
-    assert '--commit-messages "$SCAN_REF"' in ci
+    assert '--commit-messages "$SCAN_REF"' not in ci
+    assert '--commit-messages "$SCAN_RANGE"' in ci
+    assert "github.event.pull_request.base.sha" in ci
+    assert "github.event.before" in ci
+
+
+def _git(repo: Path, *args: str) -> str:
+    env = {
+        "PATH": os.environ["PATH"],
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_SYSTEM": os.devnull,
+        "GIT_AUTHOR_NAME": "Dev",
+        "GIT_AUTHOR_EMAIL": "dev@example.org",
+        "GIT_COMMITTER_NAME": "Dev",
+        "GIT_COMMITTER_EMAIL": "dev@example.org",
+    }
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, env=env
+    ).stdout.strip()
+
+
+def test_a_range_leaves_published_history_below_its_base_unscanned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "commit", "-q", "--allow-empty", "-m", "published: acme.example")
+    base = _git(tmp_path, "rev-parse", "HEAD")
+    _git(tmp_path, "commit", "-q", "--allow-empty", "-m", "clean change")
+    head = _git(tmp_path, "rev-parse", "HEAD")
+    monkeypatch.chdir(tmp_path)
+    assert cpt.message_violations(cpt.commit_messages(f"{base}..{head}"), PATTERNS) == []
+    # the guard still guards: the same commit inside the scanned range is reported
+    assert cpt.message_violations(cpt.commit_messages(head), PATTERNS)
 
 
 def test_denylist_from_env_takes_precedence_over_file(tmp_path: Path) -> None:
