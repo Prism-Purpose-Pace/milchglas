@@ -225,6 +225,15 @@ def test_ci_scans_only_the_commits_a_change_adds() -> None:
     assert "github.event.before" in ci
 
 
+def test_local_push_hook_scans_only_unpushed_commits() -> None:
+    # Same defect as in CI, one level down: the pre-push hook scanned all of HEAD's
+    # history, so the published a995e8f blocked every local push before CI ever ran.
+    config = (REPO / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    entries = [line for line in config.splitlines() if "--commit-messages" in line]
+    assert entries
+    assert all(line.rstrip().endswith("--commit-messages origin/main..HEAD") for line in entries)
+
+
 def _git(repo: Path, *args: str) -> str:
     env = {
         "PATH": os.environ["PATH"],

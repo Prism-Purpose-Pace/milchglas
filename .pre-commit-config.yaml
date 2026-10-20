@@ -143,7 +143,9 @@ repos:
       - id: check-public-tree-history
         name: public-tree guard (all files + commit messages)
         language: system
-        entry: uv run --script scripts/check_public_tree.py --commit-messages HEAD
+        # Only commits not yet on origin/main: published history cannot be rewritten,
+        # and one GitHub-made commit (a995e8f) would otherwise block every push.
+        entry: uv run --script scripts/check_public_tree.py --commit-messages origin/main..HEAD
         always_run: true
         pass_filenames: false
         stages: [pre-push]
