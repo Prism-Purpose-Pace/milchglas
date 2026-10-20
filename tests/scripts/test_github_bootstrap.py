@@ -52,6 +52,20 @@ def test_workflow_token_is_read_only_but_may_open_release_prs() -> None:
     }
 
 
+def test_actions_must_be_pinned_to_a_commit_sha() -> None:
+    assert _body("repos/octo/milchglas/actions/permissions") == {
+        "enabled": True,
+        "allowed_actions": "all",
+        "sha_pinning_required": True,
+    }
+
+
+def test_fork_workflows_wait_for_approval_from_every_outside_contributor() -> None:
+    # "First-time contributors" only is defeated by one merged typo fix (GitHub's warning).
+    body = _body("repos/octo/milchglas/actions/permissions/fork-pr-contributor-approval")
+    assert body == {"approval_policy": "all_external_contributors"}
+
+
 def _ruleset(name: str) -> dict[str, Any]:
     bodies = [s.body for s in PLAN if s.kind == "ruleset" and s.body and s.body["name"] == name]
     assert len(bodies) == 1, name
@@ -127,8 +141,33 @@ def test_review_ruleset_requires_one_fresh_approval_and_nothing_else() -> None:
 def test_required_checks_exist_as_ci_jobs() -> None:
     ci = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     jobs = set(re.findall(r"^  ([a-z][a-z0-9-]*):\s*$", ci, re.MULTILINE))
+    # A reusable workflow reports its checks as "<caller job> / <called job>".
+    callers = {check.split(" / ")[0] for check in gb.REQUIRED_CHECKS}
     assert gb.REQUIRED_CHECKS
-    assert set(gb.REQUIRED_CHECKS) <= jobs
+    assert callers <= jobs
+
+
+def test_security_jobs_are_required_checks() -> None:
+    # A red vulnerability, dependency or workflow scan must block the merge like a red test.
+    assert {"osv-scan / osv-scan", "dependency-review", "zizmor"} <= set(gb.REQUIRED_CHECKS)
+
+
+def test_main_ruleset_blocks_codeql_alerts() -> None:
+    rules = [r for r in _ruleset("main")["rules"] if r["type"] == "code_scanning"]
+    assert rules == [
+        {
+            "type": "code_scanning",
+            "parameters": {
+                "code_scanning_tools": [
+                    {
+                        "tool": "CodeQL",
+                        "alerts_threshold": "errors",
+                        "security_alerts_threshold": "high_or_higher",
+                    }
+                ]
+            },
+        }
+    ]
 
 
 def test_labels_are_upserted_with_force() -> None:
