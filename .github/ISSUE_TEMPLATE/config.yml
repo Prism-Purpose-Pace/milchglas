@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/philippsied/milchglas/security/advisories/new
+    url: https://github.com/Prism-Purpose-Pace/milchglas/security/advisories/new
     about: Privately, please — never in a public issue. See SECURITY.md.
   - name: Read the specification
-    url: https://github.com/philippsied/milchglas/blob/main/docs/spec.md
+    url: https://github.com/Prism-Purpose-Pace/milchglas/blob/main/docs/spec.md
     about: Scope, decisions and open questions — many "why not X?" answers live here.

@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Security issue?** Do not file it here — use [private vulnerability reporting](https://github.com/philippsied/milchglas/security/advisories/new).
+        **Security issue?** Do not file it here — use [private vulnerability reporting](https://github.com/Prism-Purpose-Pace/milchglas/security/advisories/new).
         **Privacy:** never paste real calendar data, feed URLs with tokens, hostnames or credentials. Reproduce with synthetic events.
   - type: input
     id: version
