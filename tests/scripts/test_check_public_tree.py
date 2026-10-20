@@ -7,6 +7,7 @@ import pytest
 import check_public_tree as cpt
 
 PATTERNS = cpt.compile_patterns([r"acme\.example", r"\bsecretproject\b"])
+REPO = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize(
@@ -206,6 +207,16 @@ def test_unreadable_file_is_reported_not_crashed(tmp_path: Path) -> None:
         ]
     finally:
         locked.chmod(0o600)
+
+
+def test_ci_scans_the_branch_tip_not_the_synthesised_merge_commit() -> None:
+    # On a pull_request event HEAD is the merge commit GitHub synthesises for the preview.
+    # Its author is the PR author's bare GitHub display name, not the identity the branch
+    # commits carry, so scanning it reports findings about a commit that never lands while
+    # leaving the commits that do land unscanned.
+    ci = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "--commit-messages HEAD" not in ci
+    assert '--commit-messages "$SCAN_REF"' in ci
 
 
 def test_denylist_from_env_takes_precedence_over_file(tmp_path: Path) -> None:

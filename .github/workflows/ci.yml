@@ -67,13 +67,19 @@ jobs:
           persist-credentials: false
       # The secret exists as an Actions secret and as a Dependabot secret; only pull
       # requests from forks run without it (paths only) and are re-checked on main.
+      # SCAN_REF is the branch tip, never HEAD: on a pull_request event HEAD is the merge
+      # commit GitHub synthesises for the preview, whose author identity is the PR
+      # author's bare GitHub display name rather than the one the branch commits carry.
+      # That commit is never pushed to main, so scanning it reports findings about a
+      # commit that will not exist, while the commits that do land go unscanned.
       - name: Private paths, private terms and commit messages
         env:
           PUBLIC_DENYLIST: ${{ secrets.PUBLIC_DENYLIST }}
           FROM_FORK: ${{ github.event.pull_request.head.repo.fork }}
+          SCAN_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           if [ -n "$PUBLIC_DENYLIST" ]; then
-            python3 scripts/check_public_tree.py --require-denylist --commit-messages HEAD
+            python3 scripts/check_public_tree.py --require-denylist --commit-messages "$SCAN_REF"
           elif [ "$FROM_FORK" = "true" ]; then
             echo "::warning::PUBLIC_DENYLIST is not available to fork pull requests: checking paths only"
             python3 scripts/check_public_tree.py
