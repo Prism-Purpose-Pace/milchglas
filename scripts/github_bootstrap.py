@@ -27,9 +27,19 @@ if TYPE_CHECKING:
 
 DESCRIPTION = "Busy-only ICS feed from private CalDAV calendars: presence visible, content opaque"
 TOPICS = ("caldav", "icalendar", "ics", "free-busy", "nextcloud", "privacy", "calendar", "python")
-# Job ids in .github/workflows/ci.yml; a test keeps both lists in sync, otherwise the
-# ruleset would wait forever for a check that never reports.
-REQUIRED_CHECKS = ("lint", "typecheck", "test", "public-guard", "secret-scan")
+# Check names of jobs in .github/workflows/ci.yml (a reusable workflow reports as
+# "<caller> / <called job>"); a test keeps both in sync, otherwise the ruleset would
+# wait forever for a check that never reports. CodeQL is gated by the code_scanning rule.
+REQUIRED_CHECKS = (
+    "lint",
+    "typecheck",
+    "test",
+    "public-guard",
+    "secret-scan",
+    "osv-scan / osv-scan",
+    "dependency-review",
+    "zizmor",
+)
 GITHUB_ACTIONS_APP_ID = 15368  # pins required checks to Actions, not to any status poster
 RULESET_NAME = "main"
 REVIEW_RULESET_NAME = "review"
@@ -102,6 +112,18 @@ def _ruleset() -> dict[str, Any]:
                 "parameters": {
                     "strict_required_status_checks_policy": True,
                     "required_status_checks": checks,
+                },
+            },
+            {
+                "type": "code_scanning",
+                "parameters": {
+                    "code_scanning_tools": [
+                        {
+                            "tool": "CodeQL",
+                            "alerts_threshold": "errors",
+                            "security_alerts_threshold": "high_or_higher",
+                        }
+                    ]
                 },
             },
         ],
@@ -179,12 +201,19 @@ def plan(owner: str, repo: str) -> list[Step]:
     # protection is a setting (sending both risks a 422 that aborts the run).
     security = {"security_and_analysis": {"secret_scanning_push_protection": {"status": "enabled"}}}
     workflow = {"default_workflow_permissions": "read", "can_approve_pull_request_reviews": True}
+    actions = {"enabled": True, "allowed_actions": "all", "sha_pinning_required": True}
+    # Approval for first-time contributors only is defeated by one merged typo fix.
+    forks = {"approval_policy": "all_external_contributors"}
     return [
         Step(edit),
         Step([*put, f"{api}/vulnerability-alerts"]),
         Step([*put, f"{api}/automated-security-fixes"]),
         Step([*put, f"{api}/private-vulnerability-reporting"]),
         Step(["gh", "api", "-X", "PATCH", api, "--input", "-"], security),
+        Step([*put, f"{api}/actions/permissions", "--input", "-"], actions),
+        Step(
+            [*put, f"{api}/actions/permissions/fork-pr-contributor-approval", "--input", "-"], forks
+        ),
         Step([*put, f"{api}/actions/permissions/workflow", "--input", "-"], workflow),
         *(
             Step(["gh", "api", "-X", "POST", f"{api}/rulesets", "--input", "-"], body, "ruleset")

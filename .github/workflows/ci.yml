@@ -12,8 +12,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Job ids lint, typecheck, test, public-guard and secret-scan are required checks of
-# the main ruleset (scripts/github_bootstrap.py); rename them only together.
+# Job ids lint, typecheck, test, public-guard, secret-scan, osv-scan, dependency-review
+# and zizmor are required checks of the main ruleset (scripts/github_bootstrap.py);
+# rename them only together.
 jobs:
   lint:
     runs-on: ubuntu-24.04
