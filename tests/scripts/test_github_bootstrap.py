@@ -2,6 +2,7 @@
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -224,3 +225,17 @@ def test_apply_updates_existing_ruleset_and_reuses_project() -> None:
     ] in gh.calls
     assert not any(call[:3] == ["gh", "project", "create"] for call in gh.calls)
     assert ["gh", "project", "link", "3", "--owner", "octo", "--repo", "milchglas"] in gh.calls
+
+
+def test_gh_failure_carries_the_response_body() -> None:
+    # `gh api` prints GitHub's error body (the `errors` list of a 422) on stdout and only
+    # "Validation Failed (HTTP 422)" on stderr; without the body the cause is lost.
+    # The body is assembled at run time so the argv echo in the message cannot match it.
+    script = (
+        "import sys; print('{\"errors\": [\"' + 'dilavni rotca ssapyb'[::-1] + '\"]}'); "
+        "print('gh: Validation Failed (HTTP 422)', file=sys.stderr); sys.exit(1)"
+    )
+    with pytest.raises(gb.GhError) as failure:
+        gb.gh([sys.executable, "-c", script], None)
+    assert "bypass actor invalid" in str(failure.value)
+    assert "Validation Failed" in str(failure.value)

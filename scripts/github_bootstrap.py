@@ -251,7 +251,9 @@ def apply(steps: Sequence[Step], owner: str, repo: str, runner: Runner) -> None:
 def gh(argv: list[str], stdin: str | None) -> str:
     result = subprocess.run(argv, input=stdin, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        msg = f"{shlex.join(argv[:5])} failed: {result.stderr.strip()}"
+        # `gh api` prints GitHub's error body (a 422's `errors` list) on stdout.
+        detail = "\n".join(s for s in (result.stderr.strip(), result.stdout.strip()) if s)
+        msg = f"{shlex.join(argv[:5])} failed: {detail}"
         raise GhError(msg)
     return result.stdout
 
