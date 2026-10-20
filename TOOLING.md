@@ -68,8 +68,10 @@ on pull requests from forks, which check paths only; the full check runs again o
 push to `main`. Commit messages and identities are scanned for the range a change adds
 (`base..head` on a pull request, `before..sha` on a push), never the whole history:
 commits GitHub creates itself carry the account's display name, and one such commit
-(`a995e8f`) would otherwise keep every later run red. Merge pull requests with **rebase**,
-not squash — a rebase keeps each commit's author, a squash commit takes the account name.
+(`a995e8f`) would otherwise keep every later run red. Every commit GitHub writes takes the
+merging account's **profile name**: a squash commit as its author, a rebased commit as its
+committer. That profile name must therefore be the maintainer's full name, or the push run
+after each merge fails the guard. Merges use rebase, which keeps each commit's own author.
 
 Repository settings that files cannot express (security features, ruleset, labels,
 project board) are applied with `uv run --script scripts/github_bootstrap.py --owner
