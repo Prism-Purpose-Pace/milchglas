@@ -77,7 +77,9 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
 - Branch from `main`; one concern per pull request.
 - All required checks must be green: lint, typecheck, test, public-guard, secret-scan.
 - Fill in the pull request template, including the privacy checklist.
-- `main` is protected: pull requests are squash- or rebase-merged, history stays linear.
+- `main` is protected: pull requests are rebase-merged, history stays linear. Squash is
+  disabled because a squash commit is authored by the merging account's display name,
+  not by the commits' own identity.
 
 ## Licence
 

@@ -108,6 +108,16 @@ def test_repo_edit_disables_wiki_and_merge_commits() -> None:
     assert "--delete-branch-on-merge" in edit.argv
 
 
+def test_rebase_is_the_only_merge_method() -> None:
+    # A squash commit is created by GitHub and takes the account's display name as its
+    # author instead of the identity the branch commits carry; one such commit (a995e8f)
+    # tripped the public-tree guard. A rebase merge keeps every commit's author.
+    edit = next(s for s in PLAN if s.argv[:3] == ["gh", "repo", "edit"])
+    assert "--enable-squash-merge=false" in edit.argv
+    assert "--enable-rebase-merge" in edit.argv
+    assert "--enable-squash-merge" not in edit.argv
+
+
 def test_dry_run_prints_plan_without_calling_gh(capsys: pytest.CaptureFixture[str]) -> None:
     def refuse(argv: list[str], stdin: str | None) -> str:
         raise AssertionError(argv, stdin)
