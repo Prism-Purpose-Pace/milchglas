@@ -56,8 +56,9 @@ permissions and grants per job only what it needs.
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `ci.yml` | push to `main`, pull requests | `lint`, `typecheck`, `test`, `public-guard`, `secret-scan` (required checks), `osv-scan`, `dependency-review` (PRs), `zizmor` (workflow security lint) |
-| `codeql.yml` | push, pull requests, weekly | CodeQL for Python and Actions |
+| `ci.yml` | push to `main`, pull requests | `lint`, `typecheck`, `test`, `public-guard`, `secret-scan`, `osv-scan`, `dependency-review` (PRs), `zizmor` (workflow security lint) — all required checks |
+| `codeql.yml` | push, pull requests, weekly | CodeQL for Python and Actions; the `main` ruleset blocks a merge on an alert of severity error or a security alert of high or above |
+| `pr-triage.yml` | pull requests from this repository | path labels (`.github/labeler.yml`) and the author as assignee; Dependabot does the same through `dependabot.yml`, fork PRs are triaged by hand |
 | `scorecard.yml` | push to `main`, weekly | OpenSSF Scorecard, results to code scanning + badge |
 | `release-please.yml` | push to `main` | release PR with changelog and version bump from conventional commits; on a release, sdist and wheel with their provenance (`.sigstore.json`, `.intoto.jsonl`) as release assets |
 
@@ -74,8 +75,9 @@ committer. That profile name must therefore be the maintainer's full name, or th
 after each merge fails the guard. Merges use rebase, which keeps each commit's own author.
 
 Repository settings that files cannot express (security features, rulesets, labels,
-project board) are applied with `uv run --script scripts/github_bootstrap.py --owner
-<owner> --repo <repo>` (`--dry-run` to preview).
+project board, actions that must be pinned to a full commit SHA, approval of every
+outside contributor's fork workflows) are applied with `uv run --script
+scripts/github_bootstrap.py --owner <owner> --repo <repo>` (`--dry-run` to preview).
 
 ## Residual risk (read once)
 

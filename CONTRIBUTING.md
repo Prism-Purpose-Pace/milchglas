@@ -75,7 +75,9 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
 ## Pull requests
 
 - Branch from `main`; one concern per pull request.
-- All required checks must be green: lint, typecheck, test, public-guard, secret-scan.
+- All required checks must be green: lint, typecheck, test, public-guard, secret-scan,
+  osv-scan, dependency-review and zizmor; CodeQL must report no new alert of severity
+  error and no security alert of high or above.
 - A pull request needs one approval of its last push; the maintainer reviews.
 - Fill in the pull request template, including the privacy checklist.
 - `main` is protected: pull requests are rebase-merged, history stays linear. Squash is
