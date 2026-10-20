@@ -87,6 +87,27 @@ def test_main_ruleset_protects_the_default_branch() -> None:
     assert ruleset["conditions"]["ref_name"]["include"] == ["~DEFAULT_BRANCH"]
 
 
+def test_main_ruleset_binds_admins_too() -> None:
+    # A bypass skips every unmet rule of its ruleset, required checks included; the
+    # checks (public-guard among them) must hold for the maintainer as well.
+    assert _ruleset("main")["bypass_actors"] == []
+
+
+def test_review_ruleset_requires_one_fresh_approval_and_nothing_else() -> None:
+    ruleset = _ruleset("review")
+    assert ruleset["enforcement"] == "active"
+    assert ruleset["conditions"]["ref_name"]["include"] == ["~DEFAULT_BRANCH"]
+    # Only the review is bypassable: the solo maintainer cannot approve their own PRs.
+    assert [rule["type"] for rule in ruleset["rules"]] == ["pull_request"]
+    params = ruleset["rules"][0]["parameters"]
+    assert params["required_approving_review_count"] == 1
+    assert params["require_last_push_approval"] is True
+    assert params["dismiss_stale_reviews_on_push"] is True
+    assert ruleset["bypass_actors"] == [
+        {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}
+    ]
+
+
 def test_required_checks_exist_as_ci_jobs() -> None:
     ci = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     jobs = set(re.findall(r"^  ([a-z][a-z0-9-]*):\s*$", ci, re.MULTILINE))
@@ -147,15 +168,27 @@ class FakeGh:
         return ""
 
 
-def test_apply_creates_ruleset_and_links_new_project() -> None:
+def _posted_rulesets(gh: FakeGh) -> list[str]:
+    post = ["gh", "api", "-X", "POST", "repos/octo/milchglas/rulesets", "--input", "-"]
+    return [
+        json.loads(s or "{}")["name"] for c, s in zip(gh.calls, gh.stdins, strict=True) if c == post
+    ]
+
+
+def test_apply_creates_rulesets_and_links_new_project() -> None:
     gh = FakeGh()
     assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
-    post = ["gh", "api", "-X", "POST", "repos/octo/milchglas/rulesets", "--input", "-"]
-    assert post in gh.calls
-    sent = gh.stdins[gh.calls.index(post)]
-    assert sent is not None
-    assert json.loads(sent)["name"] == "main"
+    assert _posted_rulesets(gh) == ["main", "review"]
     assert ["gh", "project", "link", "7", "--owner", "octo", "--repo", "milchglas"] in gh.calls
+
+
+def test_apply_upserts_each_ruleset_by_name() -> None:
+    gh = FakeGh(existing_rulesets='[{"id": 42, "name": "main"}]')
+    assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
+    assert ["gh", "api", "-X", "PUT", "repos/octo/milchglas/rulesets/42", "--input", "-"] in (
+        gh.calls
+    )
+    assert _posted_rulesets(gh) == ["review"]
 
 
 def test_apply_updates_existing_ruleset_and_reuses_project() -> None:

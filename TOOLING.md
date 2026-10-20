@@ -98,6 +98,13 @@ project board) are applied with `uv run --script scripts/github_bootstrap.py --o
   `Integration`, which GitHub accepts for organization-owned rulesets only; on a user
   account it answers HTTP 422. Anyone with write access can therefore create or move a
   tag, and the mitigation is the absent history above, not a rule.
-- Release PRs are opened with `GITHUB_TOKEN` and trigger no CI; the maintainer merges
-  them through the admin bypass after review. `GITHUB_TOKEN` also keeps the release tag
-  attributable to the workflow rather than to a person's token.
+- Two rulesets guard `main`. `main` (no bypass) holds the required checks, linear
+  history and the pull-request requirement for everyone, admins included; `review`
+  requires one approval of the last push and is the only ruleset admins may bypass,
+  because a solo maintainer cannot approve their own pull requests. A bypass skips every
+  unmet rule of its ruleset, so keeping the checks in a ruleset without bypass is what
+  keeps them binding.
+- Release PRs are opened with `GITHUB_TOKEN` and trigger no CI; the maintainer closes and
+  reopens one to run the required checks, then approves and merges it. `GITHUB_TOKEN`
+  also keeps the release tag attributable to the workflow rather than to a person's
+  token.
