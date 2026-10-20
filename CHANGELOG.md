@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.1.2](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.1.1...v0.1.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **scripts:** Restore the tag ruleset under the organization owner ([8f0b523](https://github.com/Prism-Purpose-Pace/milchglas/commit/8f0b52355e2723940cf195d0c0297d69c2a408a7))
+
+
+### Documentation
+
+* Point repository links at the Prism-Purpose-Pace organization ([b43617b](https://github.com/Prism-Purpose-Pace/milchglas/commit/b43617beeb1a7eb7a9faf57c0c18d88fd78cfa94))
+
 ## [0.1.1](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.1.0...v0.1.1) (2026-10-20)
 
 
