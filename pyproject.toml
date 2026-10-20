@@ -144,6 +144,7 @@ addopts = [
     "-m",
     "not contract",
     "--cov=milchglas",
+    "--cov=scripts",
     "--cov-branch",
     "--cov-report=term-missing",
 ]
@@ -155,7 +156,15 @@ xfail_strict = true
 
 [tool.coverage.run]
 branch = true
-source = ["milchglas"]
+# scripts/ is in scope: the release guards live there and the suite imports them
+# in-process, so without them the floor would measure only the empty package and
+# could never fail. The emitted upstream gates are tested upstream, not here.
+source = ["milchglas", "scripts"]
+omit = [
+    "scripts/audit_script_deps.py",
+    "scripts/check_commit_msg.py",
+    "scripts/check_commit_size.py",
+]
 
 [tool.coverage.report]
 fail_under = 90
