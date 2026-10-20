@@ -39,6 +39,16 @@ brew install gitleaks trufflehog osv-scanner
 pre-commit install --install-hooks
 ```
 
+Run the gates through `python3 scripts/gates.py`, which picks a writable cache directory
+before handing off to `uv run --frozen pre-commit`. This repository configures no cache
+path anywhere, so a fresh clone works on any host: the script prefers an absolute value
+already in the environment, then `~/.cache/<tool>`, then the repo-local
+`.claude/.cache/<tool>`, then the system temp directory. It runs on plain `python3`
+because `uv` needs that cache before it can run anything, and it discards a relative
+value — relative paths are resolved by the process that reads them, with that process's
+CWD, which is how pre-commit's `uv venv` child once failed with `Operation not
+permitted`.
+
 ## CI (GitHub Actions)
 
 Every action is pinned to a full commit SHA; every workflow starts from empty token
