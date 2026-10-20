@@ -59,18 +59,31 @@ def _ruleset(name: str) -> dict[str, Any]:
     return body
 
 
-def test_no_ruleset_asks_for_an_integration_bypass() -> None:
-    # GitHub accepts a bypass actor of type Integration only for an organization-owned
-    # ruleset: "Actor GitHub Actions integration must be part of the ruleset source or
-    # owner organization" (HTTP 422). This repository belongs to a user account, and the
-    # run aborts on that error, so every later step (labels, project) is lost with it.
-    actor_types = {
-        actor.get("actor_type")
+def test_tag_ruleset_lets_only_github_actions_touch_tags() -> None:
+    # Only the release workflow (release-please, GITHUB_TOKEN) creates, moves or deletes
+    # tags. A bypass actor of type Integration needs an organization-owned ruleset
+    # (HTTP 422 on a user account); the repository belongs to an organization since
+    # 2026-10-20.
+    ruleset = _ruleset("tags")
+    assert ruleset["target"] == "tag"
+    assert ruleset["enforcement"] == "active"
+    assert ruleset["conditions"]["ref_name"]["include"] == ["~ALL"]
+    assert {"creation", "update", "deletion"} <= {rule["type"] for rule in ruleset["rules"]}
+    assert ruleset["bypass_actors"] == [
+        {"actor_id": gb.GITHUB_ACTIONS_APP_ID, "actor_type": "Integration", "bypass_mode": "always"}
+    ]
+
+
+def test_only_the_tag_ruleset_names_an_integration_bypass() -> None:
+    # An Integration bypass on a branch ruleset would let any workflow token skip it.
+    names = {
+        step.body["name"]
         for step in PLAN
         if step.kind == "ruleset" and step.body
         for actor in step.body.get("bypass_actors", [])
+        if actor.get("actor_type") == "Integration"
     }
-    assert "Integration" not in actor_types
+    assert names == {"tags"}
 
 
 def test_main_ruleset_protects_the_default_branch() -> None:
@@ -181,7 +194,7 @@ def _posted_rulesets(gh: FakeGh) -> list[str]:
 def test_apply_creates_rulesets_and_links_new_project() -> None:
     gh = FakeGh()
     assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
-    assert _posted_rulesets(gh) == ["main", "review"]
+    assert _posted_rulesets(gh) == ["main", "review", "tags"]
     assert ["gh", "project", "link", "7", "--owner", "octo", "--repo", "milchglas"] in gh.calls
 
 
@@ -191,7 +204,7 @@ def test_apply_upserts_each_ruleset_by_name() -> None:
     assert ["gh", "api", "-X", "PUT", "repos/octo/milchglas/rulesets/42", "--input", "-"] in (
         gh.calls
     )
-    assert _posted_rulesets(gh) == ["review"]
+    assert _posted_rulesets(gh) == ["review", "tags"]
 
 
 def test_apply_updates_existing_ruleset_and_reuses_project() -> None:

@@ -73,7 +73,7 @@ merging account's **profile name**: a squash commit as its author, a rebased com
 committer. That profile name must therefore be the maintainer's full name, or the push run
 after each merge fails the guard. Merges use rebase, which keeps each commit's own author.
 
-Repository settings that files cannot express (security features, ruleset, labels,
+Repository settings that files cannot express (security features, rulesets, labels,
 project board) are applied with `uv run --script scripts/github_bootstrap.py --owner
 <owner> --repo <repo>` (`--dry-run` to preview).
 
@@ -94,10 +94,11 @@ project board) are applied with `uv run --script scripts/github_bootstrap.py --o
   pre-commit evaluates only the first ref of a multi-ref push (`--all`, `--mirror`,
   `--tags`). The protection against publishing pre-public history is that maintainer
   clones hold none — this repository contains no other history to tag.
-- Tags carry no ruleset. The only useful shape needs a bypass actor of type
-  `Integration`, which GitHub accepts for organization-owned rulesets only; on a user
-  account it answers HTTP 422. Anyone with write access can therefore create or move a
-  tag, and the mitigation is the absent history above, not a rule.
+- The `tags` ruleset lets only GitHub Actions (release-please under `GITHUB_TOKEN`)
+  create, move or delete a tag; nobody else has a bypass. Its `Integration` bypass actor
+  is valid only because the repository belongs to an organization — on a user account
+  GitHub answers HTTP 422. Releasing with any other token (a personal token, a separate
+  GitHub App) fails at the tagging step until that actor is added.
 - Two rulesets guard `main`. `main` (no bypass) holds the required checks, linear
   history and the pull-request requirement for everyone, admins included; `review`
   requires one approval of the last push and is the only ruleset admins may bypass,
