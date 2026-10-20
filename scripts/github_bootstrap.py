@@ -52,6 +52,7 @@ LABELS = (
     ("security", "d93f0b", "Hardening; report vulnerabilities privately (SECURITY.md)"),
     ("dependencies", "0366d6", "Dependency updates"),
     ("ci", "5319e7", "Workflows, gates and tooling"),
+    ("documentation", "0075ca", "Docs, README and contributor guides"),
     ("area: caldav", "c5def5", "Fetching and parsing source calendars"),
     ("area: core", "c5def5", "Pure pipeline: filter, reduce, round, merge"),
     ("area: feed", "c5def5", "ICS emission and determinism"),
