@@ -57,8 +57,9 @@ Done. Manual follow-up (no API for these):
   Actions secret AND as Dependabot secret (`gh secret set ... --app dependabot`).
 - Release PRs are opened by GITHUB_TOKEN and trigger no CI: close and reopen one to run
   the required checks, then approve and merge it. Own PRs merge through the admin bypass
-  of the review ruleset, which skips only the approval. Only GitHub Actions may tag: a
-  release-please run under any other token is blocked by the tags ruleset."""
+  of the review ruleset, which skips only the approval.
+- Tags are frozen by the tags ruleset (no move, no delete, no bypass); to repair a wrong
+  tag, disable that ruleset, fix the tag, enable it again."""
 
 
 class GhError(RuntimeError):
@@ -142,17 +143,12 @@ def _tag_ruleset() -> dict[str, Any]:
         "target": "tag",
         "enforcement": "active",
         "conditions": {"ref_name": {"include": ["~ALL"], "exclude": []}},
-        # Only the release workflow (GitHub Actions) creates, moves or deletes tags, so
-        # no tag can be pushed onto history outside the public branch. An Integration
-        # bypass is valid for organization-owned rulesets only (HTTP 422 on a user account).
-        "bypass_actors": [
-            {
-                "actor_id": GITHUB_ACTIONS_APP_ID,
-                "actor_type": "Integration",
-                "bypass_mode": "always",
-            }
-        ],
-        "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}],
+        # A published tag never moves or disappears. Creation stays open to writers:
+        # release-please tags with GITHUB_TOKEN, and GitHub rejects GitHub Actions as a
+        # bypass actor even in this organization (HTTP 422, "must be part of the ruleset
+        # source or owner organization"). No bypass: admins disable the ruleset instead.
+        "bypass_actors": [],
+        "rules": [{"type": "update"}, {"type": "deletion"}],
     }
 
 
