@@ -11,7 +11,7 @@ failed before the change. -->
 
 - [ ] Title follows Conventional Commits (`feat:`, `fix:`, `docs:` …) — it becomes the release note
 - [ ] Tests added or updated; `uv run pytest` passes locally
-- [ ] `pre-commit run --all-files` passes
+- [ ] `python3 scripts/gates.py` passes (commit-stage gates; see CONTRIBUTING.md)
 - [ ] `docs/spec.md` / README updated if behaviour or configuration changed
 - [ ] No new runtime dependency, or it is pure Python and justified above
 
