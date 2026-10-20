@@ -78,8 +78,9 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
 - All required checks must be green: lint, typecheck, test, public-guard, secret-scan.
 - Fill in the pull request template, including the privacy checklist.
 - `main` is protected: pull requests are rebase-merged, history stays linear. Squash is
-  disabled because a squash commit is authored by the merging account's display name,
-  not by the commits' own identity.
+  disabled because a squash commit replaces the commits' authors with the merging
+  account's profile name; a rebase keeps the authors but still records that profile
+  name as committer, so the merging account needs its full name set.
 
 ## Licence
 
