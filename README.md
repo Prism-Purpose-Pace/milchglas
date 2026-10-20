@@ -2,9 +2,9 @@
 
 > Frosted glass for your calendar: others see *that* you are busy — never *what* you are doing.
 
-[![CI](https://github.com/philippsied/milchglas/actions/workflows/ci.yml/badge.svg)](https://github.com/philippsied/milchglas/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/philippsied/milchglas/actions/workflows/codeql.yml/badge.svg)](https://github.com/philippsied/milchglas/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/philippsied/milchglas/badge)](https://scorecard.dev/viewer/?uri=github.com/philippsied/milchglas)
+[![CI](https://github.com/Prism-Purpose-Pace/milchglas/actions/workflows/ci.yml/badge.svg)](https://github.com/Prism-Purpose-Pace/milchglas/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Prism-Purpose-Pace/milchglas/actions/workflows/codeql.yml/badge.svg)](https://github.com/Prism-Purpose-Pace/milchglas/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Prism-Purpose-Pace/milchglas/badge)](https://scorecard.dev/viewer/?uri=github.com/Prism-Purpose-Pace/milchglas)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Milchglas (German for *frosted glass*) reads private CalDAV calendars — for example on

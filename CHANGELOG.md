@@ -4,23 +4,23 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
-## [0.1.1](https://github.com/philippsied/milchglas/compare/v0.1.0...v0.1.1) (2026-10-20)
+## [0.1.1](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.1.0...v0.1.1) (2026-10-20)
 
 
 ### Bug Fixes
 
-* **ci:** Scan only the commit range a change adds ([d3b4e01](https://github.com/philippsied/milchglas/commit/d3b4e01082ee05785a275d96e901ed88ab1b923c))
-* **gates:** Pick the cache directory at runtime instead of in settings ([af35cc1](https://github.com/philippsied/milchglas/commit/af35cc1403932c58c8cd040c029b2cd6bd3df541))
-* **hooks:** Scan only unpushed commits in the pre-push guard ([3e37562](https://github.com/philippsied/milchglas/commit/3e37562bb56a9f10d335f6b2621e693480c6d153))
-* **scripts:** Drop the tag ruleset GitHub refuses on a user account ([#2](https://github.com/philippsied/milchglas/issues/2)) ([a995e8f](https://github.com/philippsied/milchglas/commit/a995e8f592ff09f6457ce984b7cdb55c14775d41))
-* **scripts:** Make rebase the only merge method ([d8d438d](https://github.com/philippsied/milchglas/commit/d8d438d50d1b979077fc0f887107b2b991f7b0bb))
+* **ci:** Scan only the commit range a change adds ([d3b4e01](https://github.com/Prism-Purpose-Pace/milchglas/commit/d3b4e01082ee05785a275d96e901ed88ab1b923c))
+* **gates:** Pick the cache directory at runtime instead of in settings ([af35cc1](https://github.com/Prism-Purpose-Pace/milchglas/commit/af35cc1403932c58c8cd040c029b2cd6bd3df541))
+* **hooks:** Scan only unpushed commits in the pre-push guard ([3e37562](https://github.com/Prism-Purpose-Pace/milchglas/commit/3e37562bb56a9f10d335f6b2621e693480c6d153))
+* **scripts:** Drop the tag ruleset GitHub refuses on a user account ([#2](https://github.com/Prism-Purpose-Pace/milchglas/issues/2)) ([a995e8f](https://github.com/Prism-Purpose-Pace/milchglas/commit/a995e8f592ff09f6457ce984b7cdb55c14775d41))
+* **scripts:** Make rebase the only merge method ([d8d438d](https://github.com/Prism-Purpose-Pace/milchglas/commit/d8d438d50d1b979077fc0f887107b2b991f7b0bb))
 
 
 ### Documentation
 
-* Drop the tag-ruleset claims the bootstrap no longer makes ([4f1ab9a](https://github.com/philippsied/milchglas/commit/4f1ab9a3c7a93540f0f06fca76e0a7bcc7106b5e))
-* **github:** Point the PR checklist at the gates wrapper ([79a8916](https://github.com/philippsied/milchglas/commit/79a8916e80be9e5918cbf2e9a6071ad9783eebd4))
-* State that GitHub-written commits take the merging profile name ([230f431](https://github.com/philippsied/milchglas/commit/230f4315da1592e18142e37037846d39805bbd56))
+* Drop the tag-ruleset claims the bootstrap no longer makes ([4f1ab9a](https://github.com/Prism-Purpose-Pace/milchglas/commit/4f1ab9a3c7a93540f0f06fca76e0a7bcc7106b5e))
+* **github:** Point the PR checklist at the gates wrapper ([79a8916](https://github.com/Prism-Purpose-Pace/milchglas/commit/79a8916e80be9e5918cbf2e9a6071ad9783eebd4))
+* State that GitHub-written commits take the merging profile name ([230f431](https://github.com/Prism-Purpose-Pace/milchglas/commit/230f4315da1592e18142e37037846d39805bbd56))
 
 ## 0.1.0 (2026-09-15)
 
