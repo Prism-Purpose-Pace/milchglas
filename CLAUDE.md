@@ -47,8 +47,9 @@ reduce, emit — pure, no I/O; ruff bans I/O imports there), `web/` (WSGI app se
 / last error); `deploy/<option>/`; `docs/`.
 
 - Non-secret config: one `config.json` (`tz`, `window_days`, `grid_minutes`, `summary`,
-  `ttl_seconds`, `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[]`, `token`);
-  changes apply on the next refresh without restart.
+  `ttl_seconds`, `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[]`,
+  `token_sha256`, `uid_salt`); changes apply on the next refresh without restart. Only
+  the SHA-256 of the feed token is stored, never the token itself (spec D-14).
 - Secrets and paths only via environment: `CALDAV_URL`, `CALDAV_USER`, `CALDAV_SECRET`,
   `MILCHGLAS_VAR_DIR`, `MILCHGLAS_LOG_LEVEL`.
 
@@ -59,9 +60,10 @@ reduce, emit — pure, no I/O; ruff bans I/O imports there), `web/` (WSGI app se
   `(start, end, tentative, allday)` immediately after parsing. Tests grep the feed and
   every log line for fixture titles.
 - **Redaction lives only in Milchglas.** Never rely on the server's `CLASS`; a
-  `CLASS:PRIVATE` event still produces a block.
-- **Exclude** `STATUS:CANCELLED`, `TRANSP:TRANSPARENT`, and events where a configured
-  owner e-mail has `PARTSTAT=DECLINED`.
+  `CLASS:PRIVATE` event that reaches Milchglas still produces a block (the read-only
+  service user never receives one; confidential ones arrive stripped, spec D-3).
+- **Exclude** `STATUS:CANCELLED`, `TRANSP:TRANSPARENT` on timed events (all-day events:
+  spec Q-12), and events where a configured owner e-mail has `PARTSTAT=DECLINED`.
 - **Rounding** in the configured local time zone: start floored, end ceiled to the grid;
   then merge overlapping **and adjacent** intervals — no two output blocks may touch.
 - **Output:** only `UID, DTSTAMP, DTSTART, DTEND, SUMMARY, TRANSP, STATUS` (+ optional
