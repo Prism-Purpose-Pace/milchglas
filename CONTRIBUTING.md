@@ -35,7 +35,12 @@ Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/), and for the local g
 uv sync
 uv tool install pre-commit --with pre-commit-uv
 pre-commit install --install-hooks
+uv run --script scripts/install_push_guard.py
 ```
+
+The last line installs `.git/hooks/pre-push.legacy`: pre-commit hands a pre-push hook one
+ref at most, so this entry reads git's own list and scans every ref of a push
+([TOOLING.md](TOOLING.md)). A maintainer clone refuses commits until it is installed.
 
 | Purpose | Command |
 |---|---|

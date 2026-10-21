@@ -2,6 +2,7 @@
 # Install once:  uv tool install pre-commit --with pre-commit-uv
 #                brew install gitleaks trufflehog osv-scanner
 #                pre-commit install --install-hooks
+#                uv run --script scripts/install_push_guard.py
 #
 # Single version source: the Python tools (ruff, mypy, pytest) run as local hooks
 # through `uv run --frozen`, so their versions come from uv.lock and match the
@@ -182,6 +183,15 @@ repos:
         always_run: true
         pass_filenames: false
         stages: [pre-push]
+      # pre-commit hands pre-push hooks one ref at most (none for a push without a new commit);
+      # the legacy entry reads git's own list. Refuses a commit while the shim is missing.
+      - id: check-push-guard-installed
+        name: push guard installed (pre-push.legacy reads every pushed ref)
+        language: system
+        entry: uv run --script scripts/install_push_guard.py --check
+        always_run: true
+        pass_filenames: false
+        verbose: true
 
   # ---------------------------------------------------------------------------
   # Dependency CVE scan — cross-ecosystem, blocking (osv-scanner)
