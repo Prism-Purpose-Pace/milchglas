@@ -15,8 +15,8 @@ Checks over the tracked (or given) files:
   line-separator and combining characters (and Hangul fillers) before it is split into
   lines. The denylist itself is private: it comes from the PUBLIC_DENYLIST environment
   variable (a CI secret) or a local file (default .claude/context/public-denylist.txt).
-  Reports name file, line and pattern index only - never the matched text - so public CI
-  logs cannot leak what is guarded. Denylist patterns must be ASCII (enforced: exit 2).
+  Reports name file, line and pattern index - never the matched text, except that a file-name
+  hit prints the path, which holds the term - so public CI logs leak no guarded content. Denylist patterns must be ASCII (enforced: exit 2).
 - --message-files: the paths are commit-message files; only their content is term-scanned.
 - --pre-push: the pre-push hook. Scans what the push transfers, not HEAD or the working tree:
   every commit the pushed commit reaches that no remote-tracking ref of the remote holds
