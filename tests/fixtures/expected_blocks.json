@@ -1,0 +1,57 @@
+{
+  "source_fixtures": ["objects/demo2.ics", "objects/demo3.ics"],
+  "tz": "Europe/Berlin",
+  "now": "2026-09-28T00:00:00+02:00",
+  "window": {
+    "start_local": "2026-09-28T00:00:00+02:00",
+    "end_local": "2026-10-26T00:00:00+01:00",
+    "start_utc": "20260927T220000Z",
+    "end_utc": "20261025T230000Z"
+  },
+  "owner_emails": ["owner@example.org"],
+  "timed_utc": [
+    {"start": "20260927T220000Z", "end": "20260927T231500Z", "from": ["BBX-D2-01"], "depends_on": "Q-E2E-1"},
+    {"start": "20260929T070000Z", "end": "20260929T100000Z", "from": ["BBX-D2-04", "BBX-D2-05", "BBX-D3-01"]},
+    {"start": "20260929T160000Z", "end": "20260929T173000Z", "from": ["BBX-D2-17"]},
+    {"start": "20260930T120000Z", "end": "20260930T133000Z", "from": ["BBX-D2-06", "BBX-D2-07", "BBX-D3-02"]},
+    {"start": "20261001T080000Z", "end": "20261001T090000Z", "from": ["BBX-D2-08"]},
+    {"start": "20261001T110000Z", "end": "20261001T120000Z", "from": ["BBX-D2-09", "BBX-D2-10"]},
+    {"start": "20261002T130000Z", "end": "20261002T140000Z", "from": ["BBX-D2-12"]},
+    {"start": "20261005T120000Z", "end": "20261005T130000Z", "from": ["BBX-D2-14"]},
+    {"start": "20261006T060000Z", "end": "20261006T070000Z", "from": ["BBX-D2-15"]},
+    {"start": "20261006T100000Z", "end": "20261006T103000Z", "from": ["BBX-D2-16"]},
+    {"start": "20261007T160000Z", "end": "20261007T170000Z", "from": ["BBX-D3-04"]},
+    {"start": "20261008T180000Z", "end": "20261010T060000Z", "from": ["BBX-D2-18"]},
+    {"start": "20261012T080000Z", "end": "20261012T090000Z", "from": ["BBX-D3-06"], "depends_on": "Q-E2E-1"},
+    {"start": "20261014T050000Z", "end": "20261014T060000Z", "from": ["BBX-D2-17"]},
+    {"start": "20261020T160000Z", "end": "20261020T173000Z", "from": ["BBX-D2-17"]},
+    {"start": "20261023T070000Z", "end": "20261023T080000Z", "from": ["BBX-D3-14"]},
+    {"start": "20261024T070000Z", "end": "20261024T080000Z", "from": ["BBX-D3-14"]},
+    {"start": "20261024T233000Z", "end": "20261025T023000Z", "from": ["BBX-D3-15"]},
+    {"start": "20261025T080000Z", "end": "20261025T090000Z", "from": ["BBX-D3-14"]},
+    {"start": "20261025T210000Z", "end": "20261025T230000Z", "from": ["BBX-D2-19"]}
+  ],
+  "allday_date": [
+    {"start": "20260928", "end": "20260929", "from": ["BBX-D3-12"], "depends_on": "Q-E2E-1"},
+    {"start": "20261003", "end": "20261005", "from": ["BBX-D3-11"]},
+    {"start": "20261012", "end": "20261013", "from": ["BBX-D3-05"], "depends_on": "Q-E2E-1"},
+    {"start": "20261015", "end": "20261016", "from": ["BBX-D2-23"]},
+    {"start": "20261017", "end": "20261020", "from": ["BBX-D3-08", "BBX-D2-24"]},
+    {"start": "20261021", "end": "20261023", "from": ["BBX-D3-09", "BBX-D3-10"]}
+  ],
+  "no_block": {
+    "BBX-D2-02": "ends exactly at window start",
+    "BBX-D2-03": "before window",
+    "BBX-D2-11": "STATUS:CANCELLED",
+    "BBX-D2-13": "owner PARTSTAT=DECLINED",
+    "BBX-D2-20": "starts exactly at window end",
+    "BBX-D2-21": "after window",
+    "BBX-D2-22": "TRANSP:TRANSPARENT (timed)",
+    "BBX-D2-25": "TRANSP:TRANSPARENT (all-day)",
+    "BBX-D3-03": "TRANSP:TRANSPARENT (timed)",
+    "BBX-D3-07": "TRANSP:TRANSPARENT (all-day)",
+    "BBX-D3-13": "all-day ending exactly at window start",
+    "BBX-D3-16": "all-day starting exactly at window end"
+  },
+  "forbidden_substrings": ["BBX-"]
+}
