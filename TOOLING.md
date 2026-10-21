@@ -18,7 +18,7 @@ bumps `uv.lock` and the SHA-pinned GitHub Actions weekly.
 | Workflow schema validation | pre-commit | check-jsonschema 0.37.4 |
 | Fast secret scan (staged diff) | pre-commit | gitleaks v8.30.1 |
 | Public-tree guard (private paths; private terms in file names, content, commit messages and identities when a denylist is present; a push to the canonical repository requires it; every pushed ref through `pre-push.legacy`) | pre-commit + pre-push | `scripts/check_public_tree.py` (stdlib) |
-| Push guard installed (maintainer clone: `.git/hooks/pre-push.legacy` present and current, git < 2.54) | pre-commit | `scripts/install_push_guard.py --check` (stdlib) |
+| Push guard installed (maintainer clone: `.git/hooks/pre-push.legacy` present and current, pre-commit's hook passes `--hook-dir`) | pre-commit | `scripts/install_push_guard.py --check` (stdlib) |
 | Pushed ref descends from the public root commit | pre-push | `scripts/check_push_ancestry.py` (stdlib) |
 | Commit size (warn 5/100, block 20/800) | pre-commit | `scripts/check_commit_size.py` (stdlib) |
 | PEP 723 script-deps CVE audit | pre-commit (warn) + pre-push (block) | `scripts/audit_script_deps.py` (stdlib) |
@@ -160,8 +160,11 @@ Verifying a release asset: see [SECURITY.md](SECURITY.md).
   `check_public_tree.py --pre-push-refs` reads each line (ref names, each tag object,
   what the peeled commit transfers); a non-zero exit stops the push. The shim is per clone
   and unversioned, so a commit-stage preflight (`install_push_guard.py --check`) fails in a
-  maintainer clone that lacks it, and on git 2.54 or later, where pre-commit skips the
-  legacy hook (`hook_impl._run_legacy`, `# git 2.54+ hooks`) and the route would go silent.
+  maintainer clone that lacks it, and when pre-commit's hook stops passing `--hook-dir`:
+  run as a git config hook (git 2.54+), pre-commit skips the legacy hook
+  (`hook_impl._run_legacy`), and the route would go silent. That failure is the cue to move
+  the guard to its own git config hook (`hook.<name>.event = pre-push`), which git hands every
+  ref line as well. pre-commit's classic hook passes the flag on any git version.
   The `--pre-push` hook stays as the first-ref fallback. The ancestry hook above still sees
   one ref: push one ref per `git push` there.
 - The `tags` ruleset freezes every tag: nobody moves or deletes one, and nobody holds
