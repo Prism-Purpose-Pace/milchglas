@@ -140,6 +140,16 @@ repos:
         name: public-tree guard (staged files)
         language: system
         entry: uv run --script scripts/check_public_tree.py
+      # One fact, one place: the spec owns the config keys and its thresholds; CLAUDE.md,
+      # architecture and threat model must not drift from it. Scoped to the commits that
+      # touch one of the four documents; `uv run --script scripts/check_spec_drift.py`
+      # audits the whole tree at any time.
+      - id: check-spec-drift
+        name: spec drift (config keys, placeholder thresholds)
+        language: system
+        entry: uv run --script scripts/check_spec_drift.py
+        files: ^(docs/spec\.md|docs/architecture\.md|docs/threat-model\.md|CLAUDE\.md)$
+        pass_filenames: false
       - id: check-public-tree-history
         name: public-tree guard (all files + commit messages)
         language: system
