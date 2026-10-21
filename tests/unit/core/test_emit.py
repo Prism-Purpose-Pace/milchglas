@@ -81,7 +81,7 @@ def test_feed_matches_the_golden_bytes() -> None:
     assert_feed_invariants(feed)
 
 
-def test_feed_has_no_method_md_9() -> None:
+def test_feed_has_no_method_emit_2() -> None:
     # Without METHOD, RFC 5545 §3.8.7.2 reads DTSTAMP as the component's last revision,
     # which is what the feed carries; with METHOD it would mean the creation of this copy.
     assert not [line for line in logical_lines(GOLDEN) if line.startswith("METHOD")]
@@ -127,7 +127,7 @@ def test_feed_orders_day_blocks_first_then_by_start_emit_9() -> None:
         (86461, "PT24H1M1S"),
     ],
 )
-def test_ttl_sets_both_refresh_hints(ttl_seconds: int, duration: str) -> None:
+def test_ttl_sets_both_refresh_hints_emit_2(ttl_seconds: int, duration: str) -> None:
     lines = logical_lines(_emit([], ttl_seconds=ttl_seconds))
     hints = [line for line in lines if line.startswith(("REFRESH-INTERVAL", "X-PUBLISHED-TTL"))]
     assert hints == [
@@ -193,7 +193,7 @@ def test_summary_is_escaped_as_rfc_5545_text_emit_6(summary: str, escaped: str) 
         "LONE-SURROGATE",
     ],
 )
-def test_summary_with_a_line_break_or_control_character_is_rejected(summary: str) -> None:
+def test_summary_with_a_line_break_or_control_character_is_rejected_emit_6(summary: str) -> None:
     # The only free text in the feed: a raw line break would start a new property.
     with pytest.raises(ValueError, match="summary") as caught:
         _emit([TIMED], summary=summary)
