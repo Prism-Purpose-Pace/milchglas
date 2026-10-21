@@ -131,39 +131,39 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 
 ---
 
-## 4. Research findings (as of 2026-09-13)
+## 4. Research findings (as of 2026-09-13, corrected 2026-10-21)
 
 ### 4.1 Nextcloud
-- Calendars can be published via a public read-only link; `?export` yields ICS **with full details** [FACT].
-- No calendar-level "share/export busy only" exists; feature requests open since 2016 (calendar #171, #1044) [FACT].
-- Per-event visibility exists: *Show full event* (`CLASS:PUBLIC`, default) / *When shared show only busy* (`CLASS:CONFIDENTIAL`) / *Hide* (`CLASS:PRIVATE`). There is no per-calendar default; every event must be set manually (#4086) [FACT].
-- Enforcement is unreliable: "urgent privacy issue" report that all group sharees see full data despite the option (calendar #7694, Nov 2025, Calendar 5.5.9 / dav 1.31.1) [REPORT]; CalDAV clients historically received full titles while the web UI showed "busy" (server #10392) [REPORT]; sharees with edit rights see everything, and editing a confidential event overwrites the owner's title with "Busy" (#10865, #4044) [REPORT]; attendees always see full details (#7846) [REPORT].
-- Free/busy lookups work only inside the same instance; no external free/busy export [FACT].
+- Calendars can be published via a public read-only link; `?export` yields ICS **with full details** for `CLASS:PUBLIC` events (the default); `CLASS:CONFIDENTIAL` events are redacted to "Busy" and `CLASS:PRIVATE` events are omitted [FACT].
+- No calendar-level "share/export busy only" exists; the feature request server #11214 is open since 2018-09-14, and the older calendar #171 (closed as won't-implement, 2016) and #1044 (closed 2019) are superseded [FACT].
+- Per-event visibility exists: *Show full event* (`CLASS:PUBLIC`, default) / *When shared show only busy* (`CLASS:CONFIDENTIAL`) / *Hide* (`CLASS:PRIVATE`). There is no per-calendar default; every event must be set manually (server #11214; calendar #4086 was closed as its duplicate) [FACT].
+- Visibility depends on the share permission. Read-only sharees get `CLASS:CONFIDENTIAL` events as "Busy", with `STATUS`, `TRANSP` and `ATTENDEE` removed, and never see `CLASS:PRIVATE` ones [FACT, server source v35.0.1]. Writable sharees see full events since server PR #54533 (Aug 2025, backported to 30 and 31), which also fixed the title overwrite of calendar #4044 [FACT]. The CalDAV-vs-web mismatch of server #10392 was fixed in 2018 (PR #12458) [FACT, historical]. Calendar #7694 (Nov 2025, "all group sharees see full data") is an unconfirmed report that a commenter ties to write access [REPORT]. Invited attendees get details through the invitation, while the shared view stays busy-only (calendar #7846) [REPORT].
+- No public or unauthenticated free/busy export exists; free/busy lookups in the UI work only inside the same instance [REPORT, community thread]. An authenticated sharee can run the RFC 4791 `free-busy-query` REPORT inherited from sabre/dav [FACT, source level; live check V-3].
 - Nextcloud can *subscribe* to external WebCal/ICS feeds (reverse direction is free) [FACT].
-- Nextcloud Appointments conflict detection silently ignores subscribed ICS feeds (server #60312) [REPORT] — relevant only if meetergo were ever replaced.
+- Nextcloud Appointments conflict detection silently ignores subscribed ICS feeds (calendar #8446, transferred from server #60312; `CalendarProvider` reads only the user's calendars, never subscriptions) [FACT, source level] — relevant only if meetergo were ever replaced.
 - **Design consequence [DECIDED D-3]:** Nextcloud sharing is used for *least privilege* (read-only service user), never for redaction. Redaction happens in Milchglas. `CLASS:PRIVATE` must never be used on private events — hidden events would become bookable slots.
 
 ### 4.2 mailbox.org / Open-Xchange
-- External iCal feeds **can** be subscribed in the web client: arrow next to *Neuer Termin* → *Von URL (iCal) importieren* → dialog *iCal-Feed abonnieren* → calendar appears under *Meine Kalender* [FACT, mailbox.org KB migration article]. An older KB FAQ states the opposite; the newer article wins, to be confirmed by test [VERIFY V-1].
-- OX's ICal calendar provider caches feeds server-side; the refresh interval is admin-configured and a feed's `REFRESH-INTERVAL` is honoured [FACT, OX middleware docs]. The effective interval at mailbox.org is unknown [VERIFY V-1].
+- External iCal feeds **can** be subscribed in the web client: arrow next to *Neuer Termin* → *Von URL (iCal) importieren* → dialog *iCal-Feed abonnieren* → calendar appears under *Meine Kalender* [FACT, mailbox.org KB migration article]. The current KB FAQ no longer states otherwise (checked 2026-10-21); the refresh interval and credentials remain to be confirmed by test [VERIFY V-1].
+- OX's ICal calendar provider caches feeds server-side; the refresh interval is admin-configured and a feed's `REFRESH-INTERVAL` is honoured [FACT, OX middleware docs]. OX defaults: `com.openexchange.calendar.ical.refreshInterval` 10080 min (7 days), `retryAfterErrorInterval` 3600 s (a failed fetch pauses refreshes for an hour), maximum feed size 5 MB [FACT, OX 8.54 property reference]. Whether mailbox.org honours a PT15M `REFRESH-INTERVAL` is unknown [VERIFY V-1].
 - Whether optional HTTP credentials can be entered for a feed at mailbox.org is unknown (OX supports it in principle) [VERIFY V-1].
-- Public share links (`?ical=true`) are read-only; anyone with the link sees all content [FACT].
-- Subscribed feed calendars may not sync to phones through mailbox.org's CalDAV [REPORT, user forum].
+- Public share links (`?ical=true`) are read-only; anyone with the link sees all content of standard-visibility appointments, while private-classified appointments show non-participants only times and "Private" [FACT, OX docs; the anonymous link export itself is untested].
+- Subscribed feed calendars may not sync to phones through mailbox.org's CalDAV [REPORT, user forum; not re-found 2026-10-21]. The OX default `com.openexchange.calendar.ical.usedForSync=true` offers them over CalDAV unless the operator disables it [FACT]; mailbox.org's value is unknown.
 - Calendars are not encrypted at rest [FACT] — an argument for never storing private titles there.
 
 ### 4.3 meetergo
 - Connects Nextcloud via CalDAV, mailbox.org via generic CalDAV, and any ICS/iCal link read-only for availability checks; bookings are not written to ICS calendars [FACT, help.meetergo.com, updated 2026-01].
-- ICS URLs must be publicly reachable; services requiring authentication are not supported [FACT].
+- ICS URLs must be publicly reachable; private and local addresses are rejected [FACT]. For services that require authentication, meetergo advises their public sharing option instead, so authenticated feeds are not supported in practice [FACT, help page wording].
 - Multiple connected calendars are all checked for conflicts; per-calendar "read appointments" toggles exist [FACT].
-- Refresh cadence described as "regelmäßig" (minutes) [FACT, unspecific].
+- Refresh cadence described as "regelmäßig"; changes usually sync within 5-10 minutes, a manual refresh exists, and meetergo re-checks the calendar before confirming a booking and refuses the booking if that check fails. On a failed update it keeps the busy times it loaded last; with no stored data it blocks the host's time [FACT, help.meetergo.com, 2026-07-28].
 
 ### 4.4 Shared web hosting (Passenger-based)
 - Python runs **only** as WSGI apps under Phusion Passenger; no CLI, no SSH Python, no Python cron [FACT, hosting provider Helpcenter].
 - Python/Node/Ruby are available only from a higher hosting tier upward [FACT].
-- `pip` is not available; packages must be uploaded [FACT/REPORT].
-- SSH access and (shell/PHP) cron jobs are included in all tariffs [FACT].
-- Changed Python settings only apply after *disable → enable*; the control-panel session expires silently after ~15 min [REPORT].
-- Panel generation differs by package age; the operator's specific package must be checked [VERIFY V-6].
+- `pip` is not usable, because Python cannot run via CLI, SSH or cron (derived from the [FACT] above; one community report agrees); packages must be uploaded [REPORT].
+- SSH access and (shell/PHP) cron jobs are included in all tariffs; the entry tariff allows one cron job [FACT].
+- Changed Python settings only apply after *disable → enable* [FACT, German Helpcenter page; the English page says "after an application restart"]; the control-panel session expires silently after ~15 min [REPORT].
+- Panel generation differs by package age; the operator's specific package must be checked [VERIFY V-6]. These facts describe the provider inferred from the traits above; V-6 records which provider it is.
 
 ### 4.5 Prior art (not adopted, informs design)
 - `ical-filter-proxy` (fork with `freebusy_mode`): strips everything except date/time/status from an ICS feed. Requires an existing full-detail ICS URL as input.
@@ -482,12 +482,12 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - mailbox.org user forum — threads on iCal import errors and feed calendars not syncing via DAV.
 - Open-Xchange App Suite middleware documentation — ICal calendar provider (caching, admin refresh interval, `REFRESH-INTERVAL` honoured, optional credentials).
 - Nextcloud user manual (34) — calendar publishing and WebCal subscriptions. https://docs.nextcloud.com/server/latest/user_manual/en/groupware/calendar.html
-- Nextcloud GitHub — calendar #171, #1044, #4044, #4086, #7694, #7846; server #10392, #10865, #60312. https://github.com/nextcloud/calendar/issues/7694
+- Nextcloud GitHub — server #11214 (open busy-only request), PR #54533, PR #12458, #10392 (fixed 2018); calendar #171, #1044, #4086 (closed), #4044 (fixed 2025), #7694, #7846, #8446 (was server #60312). https://github.com/nextcloud/server/issues/11214 · https://github.com/nextcloud/calendar/issues/7694
 - Nextcloud community — "export free/busy only" support thread (NC 30, 2025): not possible.
 - meetergo Help — *Kalender-Integrationen* and *ICS/iCal-Kalender verbinden* (updated 2026-01-08). https://help.meetergo.com/de/integrations/calendars/ · https://help.meetergo.com/de/integrations/calendars/connecting-ics-calendars/
-- Shared web hosting provider Helpcenter — Python via Phusion Passenger only, on higher tiers; community reports on `pip` unavailability, disable→enable quirk, control-panel session timeout; tariff overview (SSH + cron in all tariffs).
-- RFC 4791 (CalDAV: `calendar-query`, `expand`, `free-busy-query`), RFC 5545 (iCalendar).
-- Prior art: `ical-filter-proxy` (freebusy_mode fork), keeper.sh, zeitfenster.
+- Shared web hosting provider Helpcenter — Python via Phusion Passenger only, on higher tiers; settings apply after disable→enable (German page); one community report on `pip`; community reports on the control-panel session timeout; tariff overview (SSH + cron in all tariffs, one cron job on the entry tariff).
+- RFC 4791 (CalDAV: `calendar-query`, `expand`, `free-busy-query`), RFC 5545 (iCalendar), RFC 7986 (updates RFC 5545: `REFRESH-INTERVAL`, `NAME`); `X-PUBLISHED-TTL` and `X-WR-CALNAME` are vendor extensions (MS-OXCICAL).
+- Prior art: `ical-filter-proxy` (freebusy_mode fork, https://github.com/fvoges/ical-filter-proxy), keeper.sh (https://github.com/ridafkih/keeper.sh), zeitfenster (https://github.com/Embedded-Focus/zeitfenster).
 
 **Added 2026-10-21** (validation of the research claims; sources for Section 3):
 
@@ -495,10 +495,21 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - meetergo Help — why calendar events do not block availability (changes sync within 5–10 min; re-check before a booking is confirmed). https://help.meetergo.com/de/scheduling/availability/why-are-events-in-my-calendar-not-blocking-my-availability/
 - Open-Xchange middleware configuration properties, version 8 (`refreshInterval` default 10080 min, `retryAfterErrorInterval` 3600 s). https://documentation.open-xchange.com/components/middleware/config/8/properties.json
 - Nextcloud server v35.0.1 — `apps/dav/lib/CalDAV/` (`CalDavBackend::calendarQuery` skips unparsable and over-limit objects; `CalendarObject` and `Calendar` redact or hide events for sharees) and `lib/private/User/User.php` (quota values). https://github.com/nextcloud/server/tree/v35.0.1/apps/dav/lib/CalDAV
-- sabre/vobject 4.5.6 — `Settings::$maxRecurrences` (3500). https://github.com/sabre-io/vobject/blob/4.5.6/lib/Settings.php
+- sabre/vobject 4.5.6 — `Settings::$maxRecurrences` (3500); `Recur/EventIterator` (expanded instances keep `DURATION` with a UTC `DTSTART`). https://github.com/sabre-io/vobject/blob/4.5.6/lib/Settings.php · https://github.com/sabre-io/vobject/blob/4.5.6/lib/Recur/EventIterator.php
 - Coolify v4.4.6 — `ApplicationDeploymentJob` writes runtime variables into the application's `.env` on the server. https://github.com/coollabsio/coolify/blob/v4.4.6/app/Jobs/ApplicationDeploymentJob.php
 - Traefik — access logs (fields can be dropped, access logs disabled per router). https://doc.traefik.io/traefik/reference/install-configuration/observability/logs-and-accesslogs/
 - PEP 693 — Python 3.12 release schedule (security fixes until about October 2028). https://peps.python.org/pep-0693/
+- Re-validation 2026-10-21: Nextcloud server source at v35.0.1, sabre/dav 4.7.0, sabre/vobject 4.5.6 (the versions Nextcloud 33–35 pin, `nextcloud/3rdparty` `composer.lock`); OX middleware property reference 8.54.465; Phusion Passenger docs (environment variables, PassengerPoolIdleTime); systemd.exec and systemd.resource-control (systemd 262); W3C TAG "Good Practices for Capability URLs" (First Public Working Draft, 2014). https://www.phusionpassenger.com/library/indepth/environment_variables.html · https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html · https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html · https://www.w3.org/TR/capability-urls/
+- Nextcloud administration manual — brute-force protection (failures are delayed, then answered with `429`). https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/bruteforce_configuration.html
+- Calendar client defaults for all-day events: Thunderbird (pref `calendar.events.defaultTransparency.allday.transparent`, written as `TRANSPARENT`), Microsoft Outlook support (classic Outlook shows new all-day events as free), Nextcloud Calendar and OX (busy); RFC 5545 section 3.8.2.7 (`TRANSPARENT` is invisible to busy-time searches). https://support.microsoft.com/en-us/outlook/calendar/change-an-appointment-meeting-or-event-in-outlook
+- RFC 5545 sections 3.1 (lines over 75 octets: SHOULD NOT), 3.2.12 (PARTSTAT defaults to NEEDS-ACTION), 3.3.5 (a local time in a DST gap takes the pre-gap offset), 3.3.6 (nominal days and weeks), 3.3.11 (TEXT escaping), 3.8.7.2 (DTSTAMP with and without `METHOD`); RFC 5321 (case-sensitive local part); RFC 8657 (CAA `accounturi`).
+- icalendar 7.3.0 — `vText` turns a literal `\N` into a newline when parsing. https://pypi.org/project/icalendar/7.3.0/
+- gunicorn settings — control socket (on by default since 25.1.0), access log (off by default). https://gunicorn.org/reference/settings/#control_socket
+- Docker — packet filtering and firewalls (`DOCKER-USER`; no per-container egress filter by default). https://docs.docker.com/engine/network/firewall-iptables/
+- Trivy — secret scanning of image layers and image configuration (`--image-config-scanners secret`); advisory GHSA-69fq-xp46-6x23 (its GitHub Actions compromised on 2026-03-19). https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23
+- `ckulka/baikal` container image (Baïkal 0.10.1, sabre/dav ~4.7.0; php8.2 variant). https://github.com/ckulka/baikal-docker
+- Atheris 3.1.0 (wheels for cp312–cp314 manylinux x86_64 only, no sdist). https://pypi.org/project/atheris/3.1.0/#files
+- OWASP Cheat Sheet Series — Password Storage, Authentication, Cross-Site Request Forgery Prevention. https://github.com/OWASP/CheatSheetSeries
 
 ---
 
