@@ -1,7 +1,8 @@
-# Milchglas — Product Requirements (v0.4)
+# Milchglas — Product Requirements (v0.5)
 
 > v0.3 is the public edition of the internal v0.2 draft: product renamed, operator-specific details removed.
 > v0.4 adds Sections 2–3 (MoSCoW goals, limits, operation, load) and applies the 2026-10-21 re-validation: corrected findings and sources, a 33-day window, a hashed feed token, decisions D-12 to D-15, open questions Q-9 to Q-22, NFR-P4, NFR-S7, AC-19 to AC-22 and V-9.
+> v0.5 applies the 2026-10-21 review: corrected Nextcloud request and service-user facts, a grid rule that divides every UTC-offset change of `tz`, a per-refresh calendar check, print-only `init` and `rotate-token`, a liveness-only container check, open question Q-23 and limitation L11. The timing median, the token-hash log prefix and the Microsoft busy hint are dropped, and the Option A unit files stay in the backlog.
 
 **Status:** Draft · **Date:** 2026-10-21 · **Supersedes:** Architecture & Implementation Concept v0.1 (2026-09-13), now folded into Sections 7, 9 and 12 of this PRD.
 
