@@ -8,7 +8,7 @@ only, never a value, because the library quotes raw values in its messages.
 import re
 from collections.abc import Collection
 from dataclasses import replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from enum import Enum
 from zoneinfo import ZoneInfo
 
@@ -101,10 +101,15 @@ def _span(event: Component, tz: ZoneInfo, text: str | None) -> Block | Skip:
         raise MalformedEventError(msg)
     duration = None if text is None else _parse_duration(text)
     start = _read(event, "DTSTART")
-    if isinstance(start, datetime):
-        return _timed(event, _zoned(start, tz), tz, duration)
-    if isinstance(start, date):
-        return _allday(event, start, duration)
+    try:
+        if isinstance(start, datetime):
+            return _timed(event, _zoned(start, tz), tz, duration)
+        if isinstance(start, date):
+            return _allday(event, start, duration)
+    except OverflowError:
+        # Dates near year 1 or 9999, or a huge duration; the message would hold no content.
+        msg = "a time is out of range"
+        raise MalformedEventError(msg) from None
     msg = "DTSTART is missing or neither a date nor a date-time"
     raise MalformedEventError(msg)
 
@@ -113,36 +118,44 @@ def _timed(
     event: Component, start: datetime, tz: ZoneInfo, duration: _Duration | None
 ) -> TimedBlock | Skip:
     end = _read(event, "DTEND")
+    ends: list[datetime] = []
     if isinstance(end, datetime):
-        stop = _zoned(end, tz)
-    elif end is None and duration is not None:
-        stop = _after(start, duration, tz)
-    elif end is None:
-        stop = start
-    else:
+        ends.append(_zoned(end, tz))
+    elif end is not None:
         msg = "DTEND or DURATION does not fit a date-time DTSTART"
         raise MalformedEventError(msg)
+    if duration is not None:
+        # RFC 5545 §3.3.6: the days of a DURATION count in the zone the event was written
+        # in. A UTC or floating start has none, so `tz` stands in for it (OPEN Q-20).
+        own = start.tzinfo if "TZID" in event["DTSTART"].params else None
+        ends.append(_after(start, duration, own or tz))
     # Instants, not wall times: two datetimes of one tzinfo compare by wall clock, which
-    # ignores the gap and the fold of a DST change (RFC 5545 §3.3.5).
-    start, stop = start.astimezone(UTC), stop.astimezone(UTC)
-    if stop == start:
+    # ignores the gap and the fold of a DST change (RFC 5545 §3.3.5). DTEND and DURATION
+    # together are invalid (§3.6.1); the later end errs towards busy, never free (G5).
+    begin = start.astimezone(UTC)
+    stop = max((moment.astimezone(UTC) for moment in ends), default=begin)
+    if stop == begin:
         return Skip.EMPTY
-    if stop < start:
+    if stop < begin:
         return Skip.NEGATIVE
-    return TimedBlock(start, stop)
+    return TimedBlock(begin, stop)
 
 
 def _allday(event: Component, start: date, duration: _Duration | None) -> DayBlock | Skip:
     end = _read(event, "DTEND")
+    ends: list[date] = []
     if isinstance(end, date) and not isinstance(end, datetime):
-        stop = end
-    elif end is None and duration is not None and not duration[1] % timedelta(days=1):
-        stop = start + timedelta(days=duration[0]) + duration[1]
-    elif end is None and duration is None:
-        stop = start + timedelta(days=1)
-    else:
+        ends.append(end)
+    elif end is not None:
         msg = "DTEND or DURATION does not fit a date DTSTART"
         raise MalformedEventError(msg)
+    if duration is not None:
+        days, exact = duration
+        if exact % timedelta(days=1):
+            msg = "DTEND or DURATION does not fit a date DTSTART"
+            raise MalformedEventError(msg)
+        ends.append(start + timedelta(days=days) + exact)
+    stop = max(ends, default=start + timedelta(days=1))
     if stop == start:
         return Skip.EMPTY
     if stop < start:
@@ -183,11 +196,17 @@ def _read(event: Component, name: str) -> object:
     if prop is None:
         return None
     try:
-        return prop.dt
+        value = prop.dt
     except (AttributeError, ValueError):
         # The library's message quotes the raw value, which may be private text.
         msg = f"{name} is unreadable"
         raise MalformedEventError(msg) from None
+    if isinstance(value, datetime) and value.tzinfo is None and "TZID" in prop.params:
+        # An unresolvable TZID comes back naive and without an error; reading it as
+        # floating time in `tz` would shift the event by the zone difference, unannounced.
+        msg = f"{name} has an unknown TZID"
+        raise MalformedEventError(msg)
+    return value
 
 
 def _zoned(value: datetime, tz: ZoneInfo) -> datetime:
@@ -209,13 +228,13 @@ def _parse_duration(text: str) -> _Duration:
     )
 
 
-def _after(start: datetime, duration: _Duration, tz: ZoneInfo) -> datetime:
-    """OPEN Q-20 default: days and weeks are nominal in `tz`, the rest is exact.
+def _after(start: datetime, duration: _Duration, zone: tzinfo) -> datetime:
+    """OPEN Q-20 default: days and weeks are nominal in `zone`, the rest is exact.
 
-    RFC 5545 §3.3.6 counts a day as the same wall time next day. The server expands an
-    instance to a UTC DTSTART and keeps DURATION, so the day is counted in the configured
-    zone, not in UTC: P1D from 2026-10-24 07:00Z ends 08:00Z, 25 real hours (CORE-DUR-6).
-    PT24H has no day part and stays 24 real hours.
+    RFC 5545 §3.3.6 counts a day as the same wall time next day, in the zone of DTSTART.
+    The server expands an instance to a UTC DTSTART and keeps DURATION, so for those the
+    caller passes the configured zone, not UTC: P1D from 2026-10-24 07:00Z ends 08:00Z,
+    25 real hours (CORE-DUR-6). PT24H has no day part and stays 24 real hours.
     """
     days, exact = duration
-    return (start.astimezone(tz) + timedelta(days=days)).astimezone(UTC) + exact
+    return (start.astimezone(zone) + timedelta(days=days)).astimezone(UTC) + exact

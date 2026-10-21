@@ -183,16 +183,19 @@ def test_events_without_positive_length_yield_no_block(uid: str, expected: Skip)
         ("CORE-DUR-6-expanded-autumn", timed("2026-10-24T07:00Z", "2026-10-25T08:00Z")),
         ("CORE-DUR-6-expanded-spring", timed("2026-03-28T08:00Z", "2026-03-29T07:00Z")),
         ("CORE-DUR-6-week-and-time", timed("2026-10-20T07:00Z", "2026-10-27T09:00Z")),
-        # The documented weakness: an event made in a zone with other DST dates counts its
-        # days in the configured zone (New York changes on 11-01, Berlin on 10-25).
-        ("CORE-DUR-6-other-zone", timed("2026-10-24T07:00Z", "2026-10-25T08:00Z")),
+        # RFC 5545 §3.3.6 counts the day in the event's own zone: New York changes on 11-01,
+        # so 09:00 EDT + P1D is 09:00 EST, 25 real hours (Berlin changed a week earlier).
+        ("CORE-DUR-6-other-zone", timed("2026-10-31T13:00Z", "2026-11-01T14:00Z")),
         # The time part is exact: 01:30 CEST + PT2H = 02:30 CET, not 03:30 CET.
         ("dur-exact-across-fold", timed("2026-10-25T01:30+02:00", "2026-10-25T02:30+01:00")),
         # Hours are exact time even when they add up to a day: PT24H is 24 real hours,
         # not "one day", so on the spring day it ends at 08:00Z, not 07:00Z.
         ("dur-24-hours-across-spring", timed("2026-03-28T08:00Z", "2026-03-29T08:00Z")),
         ("dur-36-hours-across-spring", timed("2026-03-28T08:00Z", "2026-03-29T20:00Z")),
-        ("dtend-wins-over-duration", timed("2026-10-01T16:00Z", "2026-10-01T16:30Z")),
+        # RFC 5545 §3.6.1 forbids both; the later end errs towards busy (G5), never free.
+        ("dtend-shorter-than-duration", timed("2026-10-01T16:00Z", "2026-10-01T18:00Z")),
+        ("dtend-later-than-duration", timed("2026-10-01T16:00Z", "2026-10-01T18:00Z")),
+        ("allday-dtend-and-duration", day("2026-10-12", "2026-10-15")),
         ("utc", timed("2026-10-07T16:00Z", "2026-10-07T17:00Z")),
         # Floating time is read in the configured zone.
         ("floating", timed("2026-10-01T09:00+02:00", "2026-10-01T10:00+02:00")),
@@ -217,6 +220,12 @@ def test_event_times_reduce_to_one_block(uid: str, expected: Block) -> None:
         "no-start",
         "broken-start",
         "broken-duration",
+        # icalendar returns a naive time for a TZID it cannot resolve and reports no error.
+        "unknown-tzid-start",
+        "unknown-tzid-end",
+        # The arithmetic runs past year 9999 (OverflowError in the standard library).
+        "dur-weeks-beyond-year-9999",
+        "allday-beyond-year-9999",
     ],
 )
 def test_malformed_times_raise_without_quoting_the_event(uid: str) -> None:
