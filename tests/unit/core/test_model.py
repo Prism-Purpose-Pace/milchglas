@@ -351,6 +351,31 @@ def test_grid_fits_counts_only_the_changes_in_the_366_days_after_start(
     assert grid_fits_zone(30, PYONGYANG, start)
 
 
+@pytest.mark.parametrize(
+    ("grid", "expected", "on_grid"),
+    [
+        # 03:15 CEST is 195 minutes after local midnight: not a multiple of 45.
+        (45, timed("2026-03-29T00:30Z", "2026-03-29T01:15Z"), False),
+        (15, timed("2026-03-29T00:30Z", "2026-03-29T00:45Z"), True),
+    ],
+    ids=["rejected-grid-45", "accepted-grid-15"],
+)
+def test_the_grid_the_zone_check_rejects_is_the_one_that_leaves_an_edge_off_the_grid(
+    grid: int, expected: TimedBlock, *, on_grid: bool
+) -> None:
+    # 01:30-01:31 CET on the spring-forward day. The 60-minute change is a multiple of 15
+    # and not of 45, so only the 45-minute grid carries the ceiled end across the change
+    # onto the wrong side of the grid.
+    block = timed("2026-03-29T01:30+01:00", "2026-03-29T01:31+01:00")
+    [rounded] = round_to_grid([block], grid, BERLIN)
+    assert rounded == expected
+    assert isinstance(rounded, TimedBlock)
+    local = rounded.end.astimezone(BERLIN)
+    assert ((local.hour * 60 + local.minute) % grid == 0) is on_grid
+    assert (round_to_grid([rounded], grid, BERLIN) == [rounded]) is on_grid
+    assert grid_fits_zone(grid, BERLIN, JAN_2026) is on_grid
+
+
 def test_grid_fits_needs_an_aware_start() -> None:
     with pytest.raises(ValueError, match="aware"):
         grid_fits_zone(15, BERLIN, datetime(2026, 1, 1))
