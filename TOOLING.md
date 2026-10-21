@@ -78,6 +78,55 @@ Repository settings that files cannot express (security features, rulesets, labe
 project board, actions that must be pinned to a full commit SHA, approval of every
 outside contributor's fork workflows) are applied with `uv run --script
 scripts/github_bootstrap.py --owner <owner> --repo <repo>` (`--dry-run` to preview).
+For an organization owner it first reads the organization's Actions policy and stops
+before any write when the organization withholds pull-request creation from GitHub
+Actions: the repository setting cannot override it, and release-please could not open
+release PRs.
+
+## Maintainer operations (`gh`)
+
+Commands only the maintainer runs; agents never push or merge. `N` is a pull request
+number, `ID` a workflow run id, `<owner>` the account or organization.
+
+Merge your own pull request once every required check is green. `--admin` uses the
+bypass of the `review` ruleset and skips only the approval; the `main` ruleset has no
+bypass, so the checks still bind.
+
+```bash
+gh pr merge N --rebase --admin
+```
+
+A release PR is opened with `GITHUB_TOKEN`, so its checks do not start on their own.
+Close and reopen it to run them, wait for the required checks, then merge it:
+
+```bash
+gh pr close N && gh pr reopen N
+gh pr checks N --required --watch
+gh pr merge N --rebase --admin
+```
+
+Re-run only the failed jobs of a run:
+
+```bash
+gh run list --repo <owner>/milchglas --limit 5
+gh run rerun ID --failed
+```
+
+After the repository moves to another owner, point the remote at it, re-apply the
+settings (reading the organization policy needs `admin:org`), check that the
+`PUBLIC_DENYLIST` secret survived for both apps, then drop the extra scope again.
+"Auto-add to project" on the project board has no API; enable it in the web UI.
+
+```bash
+git remote set-url origin https://github.com/<owner>/milchglas.git
+gh auth refresh -h github.com -s admin:org,project
+uv run --script scripts/github_bootstrap.py --owner <owner> --repo milchglas
+gh secret list --repo <owner>/milchglas
+gh secret list --repo <owner>/milchglas --app dependabot
+gh auth refresh -h github.com -r admin:org
+```
+
+Verifying a release asset: see [SECURITY.md](SECURITY.md).
 
 ## Residual risk (read once)
 
