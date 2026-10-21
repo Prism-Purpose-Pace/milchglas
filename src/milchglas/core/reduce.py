@@ -100,11 +100,14 @@ def _timed(event: Component, start: datetime, tz: ZoneInfo) -> TimedBlock | Skip
     else:
         msg = "DTEND or DURATION does not fit a date-time DTSTART"
         raise MalformedEventError(msg)
+    # Instants, not wall times: two datetimes of one tzinfo compare by wall clock, which
+    # ignores the gap and the fold of a DST change (RFC 5545 §3.3.5).
+    start, stop = start.astimezone(UTC), stop.astimezone(UTC)
     if stop == start:
         return Skip.EMPTY
     if stop < start:
         return Skip.NEGATIVE
-    return TimedBlock(start.astimezone(UTC), stop.astimezone(UTC))
+    return TimedBlock(start, stop)
 
 
 def _allday(event: Component, start: date) -> DayBlock | Skip:
