@@ -202,14 +202,14 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 
 | ID | Requirement | MVP | Later |
 |---|---|---|---|
-| FR-1 | Read all *enabled* calendars of the service user via CalDAV (Basic auth, HTTPS, 10 s timeout, 3 retries with backoff) | ✔ | |
-| FR-2 | Expand recurrences server-side (`expand`); local expansion with `recurring-ical-events` as fallback | ✔ | |
-| FR-3 | Exclude `STATUS:CANCELLED`, `TRANSP:TRANSPARENT`, and events the owner has declined (`PARTSTAT=DECLINED` for configured owner e-mails) | ✔ | |
+| FR-1 | Read all *enabled* calendars of the service user via CalDAV (Basic auth, HTTPS, 10 s timeout, 3 retries with backoff on timeouts and 5xx; `401`, `403` and `429` end the run without retry; the HTTP client keeps no cookies; outbound rules NFR-S7) | ✔ | |
+| FR-2 | Expand recurrences server-side (`expand`) | ✔ | local expansion with `recurring-ical-events` (MVP only if V-4 fails; guarded per Q-18) |
+| FR-3 | Exclude `STATUS:CANCELLED`, timed events with `TRANSP:TRANSPARENT` (all-day events: Q-12), and events the owner has declined (`PARTSTAT=DECLINED` for configured owner e-mails; `NEEDS-ACTION` blocks, Q-19). Owner addresses are compared lower-cased as a whole, a pragmatic choice: RFC 5321 makes the local part case-sensitive | ✔ | |
 | FR-4 | Reduce every event to `(start, end, tentative, allday)` immediately; discard all other fields | ✔ | |
 | FR-5 | Window clip: `[today 00:00 local, today + window_days]` | ✔ | |
-| FR-6 | Round to grid (default 15 min; start floored, end ceiled, computed in `Europe/Berlin`) and merge overlapping/adjacent intervals | ✔ | |
-| FR-7 | Emit RFC 5545 ICS: `VEVENT` per merged interval, UTC, deterministic `UID`, `REFRESH-INTERVAL`/`X-PUBLISHED-TTL` = TTL, `X-WR-CALNAME` | ✔ | |
-| FR-8 | Write the feed atomically; on any failure keep the previous file and record the error | ✔ | |
+| FR-6 | Round to grid (default 15 min; start floored, end ceiled, computed in `Europe/Berlin`) and merge overlapping/adjacent intervals; a grid that does not divide 1440 and every UTC offset of `tz` in the window is a configuration error (AC-22) | ✔ | |
+| FR-7 | Emit RFC 5545 ICS (with the RFC 7986 `REFRESH-INTERVAL`): `VEVENT` per merged interval, UTC, deterministic `UID`, `REFRESH-INTERVAL`/`X-PUBLISHED-TTL` = TTL, `X-WR-CALNAME`; no `METHOD` property. Configuration strings that reach the output (`summary`, the calendar name) contain no control characters (configuration error) and are TEXT-escaped by Milchglas per RFC 5545 section 3.3.11, never through icalendar's `vText`, which turns a literal `\N` into a newline | ✔ | |
+| FR-8 | Write the feed atomically: a uniquely named temporary file in the feed's own directory, `fsync`, `os.replace`, then `fsync` of the directory; never via `tmpfs /tmp` (a rename across filesystems fails with `EXDEV`). On any failure keep the previous file and record the error. One run at a time: an exclusive lock file in `MILCHGLAS_VAR_DIR`; a second run exits non-zero without touching feed or state | ✔ | |
 | FR-9 | Serve the feed at `https://<host>/f/<token>.ics` over HTTPS; unknown paths → identical 404 | ✔ | |
 | FR-10 | Refresh every 15 min (cron/timer/loop) — mechanism depends on Option (Section 9) | ✔ | |
 | FR-11 | `/healthz`: 200 if last success < 60 min, else 503; no other data | ✔ | |
@@ -229,30 +229,46 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 
 ### 7.1 Privacy
 - NFR-P1 No Class-A content (titles, descriptions, attendees, locations) is ever written to disk, logs, metrics or error messages. Tests assert absence.
-- NFR-P2 The busy pattern is minimised: window ≤ 28 days by default, 15-min grid, merged blocks (block count ≠ appointment count).
-- NFR-P3 Feed output contains exactly: `UID, DTSTAMP, DTSTART, DTEND, SUMMARY, TRANSP, STATUS` (+ optional `X-MICROSOFT-CDO-BUSYSTATUS`).
+- NFR-P2 The busy pattern is minimised: window ≤ 33 days by default, 15-min grid, merged blocks (block count ≤ appointment count; isolated appointments stay individually visible).
+- NFR-P3 Feed output contains exactly: `UID, DTSTAMP, DTSTART, DTEND, SUMMARY, TRANSP, STATUS` (+ optional `X-MICROSOFT-CDO-BUSYSTATUS`, off by default; only Exchange and Outlook document honouring it, both consumers use `TRANSP:OPAQUE`).
+- NFR-P4 Errors are recorded as exception class, calendar index and HTTP status. Exception text from the parser or HTTP layers, calendar names, hrefs, request headers and response bodies never reach logs or state, at any log level. `MILCHGLAS_LOG_LEVEL=DEBUG` never enables `http.client` debug output.
 
 ### 7.2 Security
-- NFR-S1 Feed access by capability URL: ≥ 256-bit random token, constant-time comparison, HTTPS only, `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`, no directory listing.
-- NFR-S2 Secrets (`CALDAV_SECRET`, session secret) from environment or a `0600` file outside any document root; never in Git, images, config JSON or UI.
-- NFR-S3 Nextcloud service user has read-only shares only, zero quota; app password revocable in one click.
-- NFR-S4 Process runs unprivileged; where possible read-only filesystem except the state directory; outbound connections only to the Nextcloud host.
-- NFR-S5 Logs redact tokens; access logs must not contain the feed path with token (strip or hash at the proxy).
-- NFR-S6 [LATER, with admin UI] scrypt password hashing, lockout after 5 failures, HMAC-signed `HttpOnly; Secure; SameSite=Strict` cookie, CSRF double-submit, optional CIDR allow-list.
+- NFR-S1 Feed access by capability URL: ≥ 256-bit random token, constant-time comparison, HTTPS only, `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`, no directory listing. The token has 256 bits from a CSPRNG (`secrets.token_urlsafe(32)`) and is generated by `milchglas init`. `web` compares `hmac.compare_digest` over SHA-256 digests of bytes: the presented path segment is hashed as UTF-8 bytes and compared with the stored digest (D-14), so neither length, prefix nor a non-ASCII character changes the code path; `web` refuses to start on a malformed `token_sha256`. With one shared token (until FR-16), a leak at either consumer forces a rotation for both.
+- NFR-S2 Secrets (`CALDAV_SECRET`, session secret) from environment or a `0600` file outside any document root; never in Git, images, config JSON or UI. The feed token is a secret: only its SHA-256 is stored (D-14).
+- NFR-S3 The Nextcloud service user has read-only shares only; quota `0 B` (never `none`, which is unlimited); its app password is created with filesystem access disabled; the system address book is not exposed to it (or user enumeration is limited); its own calendar home stays empty. The app password is revocable in one click.
+- NFR-S4 Process runs unprivileged; where possible read-only filesystem except the state directory; outbound connections only to the Nextcloud host. `web` holds no CalDAV credential (D-13). The egress limit is enforced by the systemd IP allow-list under Option A and is optional under Option B (Section 9).
+- NFR-S5 Logs redact tokens. Access logs never contain the feed path: under Traefik drop `RequestPath` and `RequestLine` or disable access logs on the feed router (`observability.accesslogs=false`); Traefik cannot hash a field, and the platform replaces user access-log flags when its traffic analytics is on. Caddy may hash or replace `request>uri`. gunicorn runs without an access log. `web` logs one line per successful feed fetch with the client network (/24 for IPv4, /48 for IPv6), a user-agent class and the first 8 hex characters of `token_sha256`, never the token, so a third-party poller becomes visible before FR-16.
+- NFR-S6 [LATER, with admin UI] scrypt password hashing from the standard library with N=2^17, r=8, p=1 and `maxmem` raised above `hashlib.scrypt`'s 32 MiB default (OWASP ranks Argon2id first, but its Python bindings are native code, NFR-O3); a time-boxed or exponential lockout instead of a fixed lock after 5 failures, which on the only admin account is a denial-of-service lever; HMAC-signed `HttpOnly; Secure; SameSite=Strict` cookie; a signed, session-bound double-submit CSRF token; optional CIDR allow-list.
+- NFR-S7 Every CalDAV request goes to the origin (scheme, host, port) of `CALDAV_URL`, which must be `https`, with certificate verification on. Calendar hrefs are absolute paths without scheme, host or dot segments. A 3xx answer is a failure whose error names the status and the Location host. A refresh run has a total deadline (default 120 s) besides the 10 s socket timeout. The contract suite reaches its plain-HTTP server through an explicit test-only switch that production code never reads.
 
 ### 7.3 Reliability / fail-safety
-- NFR-R1 Source failure never produces an empty or missing feed (D-7d).
-- NFR-R2 `/healthz` enables external alerting (uptime monitor → e-mail).
+- NFR-R1 Source failure never produces an empty or missing feed (D-7d). Zero enabled calendars is a configuration error (Q-16); objects that Nextcloud drops server-side are outside its reach (L5).
+- NFR-R2 `/healthz` enables external alerting (uptime monitor → e-mail; AC-19).
 - NFR-R3 [LATER] Fail-closed blockers after 48 h (FR-15).
 
 ### 7.4 Correctness
 - NFR-C1 Golden tests: overlap merge, adjacency, grid rounding, DST spring/fall in `Europe/Berlin`, all-day, multi-day, tentative, cancelled, declined, RRULE + EXDATE + overridden instance, window clipping, UID determinism, RFC 5545 folding; output re-parses with `icalendar`.
-- NFR-C2 Contract tests against a sabre/dav-based server (Baïkal container) for PROPFIND, `calendar-query` + `expand`, and (later) `free-busy-query`.
+  - A local time inside the spring gap takes the pre-gap offset (RFC 5545 section 3.3.5): 2026-03-29 02:30 Europe/Berlin is 01:30Z, so 02:30–03:30 yields no block and 02:30–04:00 yields 01:30Z–02:00Z.
+  - Parser fixtures include a malformed `DTSTART`, a missing `DTEND` (RFC 5545 default length), an expanded instance that still holds `RRULE`, an entity bomb and an external entity naming a local file (Q-14); each yields exact blocks or a failed refresh with the last feed byte-identical and no file read.
+  - The parser unfolds on bytes before UTF-8 decoding and accepts content lines over 75 octets (RFC 5545 section 3.1); the emitter folds strictly.
+  - Each fixture records its provenance. sabre writes `calendar-data` as escaped XML text (CR as `&#13;`), never CDATA, so CDATA and raw-CRLF variants are synthetic robustness fixtures. A `404` propstat is an error only for `calendar-data`; a `404` for another requested property is ignored.
+  - A fuzz job (Atheris) exercises the parser on linux/amd64 only, because Atheris ships no macOS arm64 wheel and no sdist; the harness keeps the literal line `import atheris`, which OpenSSF Scorecard detects. If ClusterFuzzLite is adopted later, it runs batch fuzzing plus the continuous-builds task.
+- NFR-C2 Contract tests against a sabre/dav-based server (Baïkal container) for PROPFIND, `calendar-query` + `expand` mechanics and (later) `free-busy-query`. Nextcloud sharee semantics (PRIVATE hidden, CONFIDENTIAL redacted, `_shared_by_` hrefs, per-object errors answered with 207, the 3500-instance limit) are pinned from AC-0.3 captures of the real server. The server stack is pinned: Nextcloud 35.0.x = sabre/dav 4.7.0 + sabre/vobject 4.5.6. The contract server is pinned by digest: the `ckulka/baikal` php8.2 variant (Baïkal 0.10.1, sabre/dav ~4.7.0; the default apache variant runs PHP 8.1, no longer supported; PHP 8.2 security support ends 2026-12-31). The suite records the Baïkal, sabre/dav and sabre/vobject versions (`composer show`); a vobject other than 4.5.6 is a recorded deviation. The expand-shape asserts of AC-0.3 also run on every contract answer.
 
 ### 7.5 Operability
-- NFR-O1 One config file, one state file, one log stream; `python -m milchglas refresh` is idempotent and safe to run by hand.
-- NFR-O2 Runbook covers: rotate token, swap calendar, recover from stale/fail-closed, migrate host (copy state dir).
-- NFR-O3 Runtime dependencies pure Python only (`icalendar`, `python-dateutil`, `tzdata`, `recurring-ical-events`, `x-wr-timezone`) so Options A–C share one codebase.
+- NFR-O1 One config file, one state file, one log stream; `python -m milchglas refresh` is idempotent and safe to run by hand. `python -m milchglas init` creates the UID salt and the feed token (the token is printed once, only its SHA-256 is stored, D-14); `rotate-token` replaces the token; `refresh` never generates a salt. `refresh --dry-run` prints counts and timestamps only; no command dumps raw source data. One run at a time (FR-8).
+- NFR-O2 Runbook covers: rotate token (`rotate-token`, cadence Q-21), swap calendar, recover from stale/fail-closed, migrate host (copy state dir). It also covers:
+  - a host migration changes DNS before the old host is released and rotates the token;
+  - after each Nextcloud upgrade, search its log for "Caught parsing exception" and "max instances exceeded"; split daily series older than nine years (this assumes vobject's default of 3500 iterations, which AC-0.3 checks);
+  - `owner_emails` lists every address the owner is invited under; an event that must not block is not marked confidential (D-3); a list of the enabled calendars that third parties can write to, because their invitations block (Q-19);
+  - the uptime monitor and its executed alert (AC-19); troubleshooting uses `refresh --dry-run` only;
+  - a redeploy keeps the old `web` serving until the new one is healthy, because a non-200 answer makes mailbox.org wait 3600 s before its next fetch (OX `retryAfterErrorInterval`);
+  - a CAA record with `accounturi` (RFC 8657) limits issuance to the operator's ACME account; MFA on the platform, the Git host and the DNS registrar is a deploy prerequisite; NTP is a prerequisite;
+  - Option A installs only a release wheel verified with `gh attestation verify`, never a package by name (D-15);
+  - the feed URL travels only from the server terminal to the consumer dialog, never through mail, chat or a browser tab; the feed host name names neither the person nor the purpose (Q-22);
+  - the optional egress rule under Option B (Section 9).
+- NFR-O3 Runtime dependencies pure Python only (`icalendar`, `python-dateutil`, `tzdata`, `recurring-ical-events`, `x-wr-timezone`) so Options A–C share one codebase. Once runtime dependencies enter `uv.lock`, CI fails on any wheel in the runtime closure that is not `py*-none-any` with `Root-Is-Purelib: true`.
 
 ---
 
@@ -263,7 +279,7 @@ Nextcloud ──read-only CalDAV (svc-milchglas)──► Milchglas core
                                                    fetch → expand → filter → reduce → round → merge → emit
                                                    └─► busy.ics (atomic write; keep last good on error)
                                                               │
-                                        HTTPS  /f/<token>.ics │  (static file or WSGI route)
+                                        HTTPS  /f/<token>.ics │  (WSGI route; Option D: static file)
                                    ┌──────────────────────────┴──────────────────────────┐
                                    ▼                                                     ▼
                      mailbox.org: subscribed iCal feed                     meetergo: ICS conflict calendar
@@ -285,7 +301,6 @@ atomic_replace("busy.ics", ics) if ok else keep_previous()   # FR-8
 BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Milchglas//<version>//DE
-METHOD:PUBLISH
 X-WR-CALNAME:Privat (busy)
 REFRESH-INTERVAL;VALUE=DURATION:PT15M
 X-PUBLISHED-TTL:PT15M
@@ -301,7 +316,7 @@ END:VEVENT
 END:VCALENDAR
 ```
 
-**Config (`config.json`, non-secret):** `tz`, `window_days` (28), `grid_minutes` (15), `summary`, `ttl_seconds` (900), `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[] {href, name, enabled}`, `token` (MVP: single).
+**Config (`config.json`, non-secret):** `tz`, `window_days` (33), `grid_minutes` (15), `summary`, `ttl_seconds` (900), `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[] {href, name, enabled}`, `token_sha256` (hex SHA-256 of the feed token; the token itself is never stored on the server; MVP: single), `uid_salt`. Validated on every refresh (AC-22).
 **Environment:** `CALDAV_URL`, `CALDAV_USER`, `CALDAV_SECRET`, `MILCHGLAS_VAR_DIR`, `MILCHGLAS_LOG_LEVEL`.
 
 **Repository layout (proposed):**
@@ -311,7 +326,7 @@ milchglas/
 ├── src/milchglas/{__main__.py, config.py, state.py, refresh.py}
 ├── src/milchglas/sources/{caldav.py, parse.py}
 ├── src/milchglas/core/{model.py, reduce.py, emit.py}
-├── src/milchglas/web/{app.py, feed.py}          # WSGI; used by B (gunicorn) and C (Passenger); optional in A
+├── src/milchglas/web/{app.py, feed.py}          # WSGI; used by A, B (gunicorn) and C (Passenger)
 ├── tests/{unit, fixtures, contract}
 ├── deploy/{vps-systemd, docker-paas, shared-hosting-python, shared-hosting-php}   # one folder per Option
 └── docs/{adr, runbook.md, consumers.md}
