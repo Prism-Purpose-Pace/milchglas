@@ -78,7 +78,8 @@ reduce, emit — pure, no I/O; ruff bans I/O imports there), `web/` (WSGI app se
   constant-time compare); the right token gets `200 text/calendar; charset=utf-8` with
   `ETag`, `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`. Tokens never appear in
   logs.
-- **Health:** only `/healthz` (200 if the last success is < 60 min old, else 503, no body
+- **Health:** only `/healthz` (200 if the last success is < 60 min old and `token_sha256` is
+  readable, else 503, spec Q-23; no body
   data). One stdout log stream, SIGTERM finishes the current write before exit.
 
 ## Working agreements
