@@ -23,13 +23,15 @@ Checks over the tracked (or given) files:
   origin/main (message, author, committer) and the pushed ref names. pre-commit exports the
   pushed ref (PRE_COMMIT_TO_REF, else PRE_COMMIT_LOCAL_BRANCH); outside a push it is HEAD.
   A push whose ref cannot be resolved is refused. pre-commit hands hooks only the first
-  ref of a multi-ref push, so push one ref per `git push`.
+  ref of a multi-ref push, so push one ref per `git push`. Without a denylist the push is
+  refused (exit 2) when PRE_COMMIT_REMOTE_URL names the canonical repository; to any other
+  remote, or in a manual run, the term scan is skipped with a notice.
 
 Residual: matching is per line, so a term split across lines, encoded (base64, UTF-16
 without BOM) or spelled with homoglyphs from another script is not detected.
 
 Exit codes: 0 clean, 1 findings, 2 denylist missing or without patterns (with
---require-denylist) or invalid.
+--require-denylist, or with --pre-push to the canonical repository) or invalid.
 """
 
 from __future__ import annotations
@@ -67,6 +69,15 @@ HANGUL_FILLERS = frozenset(map(chr, (0x115F, 0x1160, 0x3164, 0xFFA0)))
 KEPT_CONTROLS = frozenset("\n\t")
 # --pre-push: commits below this ref are published and cannot be rewritten.
 PUSH_BASE = "origin/main"
+# Only writers can push to this repository (contributors push to forks), so a --pre-push to
+# it without a denylist must refuse: the skip would publish unscanned, with no CI before it.
+CANONICAL_REPOSITORY = "Prism-Purpose-Pace/milchglas"
+# Matched on the path tail, whatever the scheme, host, user, token or port: an URL form
+# nobody listed must refuse, not skip. Case-insensitive like GitHub's owner/name.
+CANONICAL_URL = re.compile(
+    rf"[:/]{re.escape(CANONICAL_REPOSITORY)}(\.git)?/?\Z",
+    re.IGNORECASE,
+)
 # What pre-commit exports about a push (pre-commit commands/hook_impl.py); any of these
 # marks a push, so an unresolvable pushed ref there is refused rather than read as HEAD.
 PUSH_VARIABLES = ("PRE_COMMIT_REMOTE_NAME", "PRE_COMMIT_TO_REF", "PRE_COMMIT_LOCAL_BRANCH")
@@ -333,6 +344,11 @@ def pre_push_report(
     return report
 
 
+def pushes_to_canonical(env: Mapping[str, str]) -> bool:
+    """Whether the remote pre-commit exports (PRE_COMMIT_REMOTE_URL) is the canonical repository."""
+    return CANONICAL_URL.search(env.get("PRE_COMMIT_REMOTE_URL", "").strip()) is not None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Keep private material out of the public tree.")
     parser.add_argument("paths", nargs="*", help="files to check (default: git ls-files)")
@@ -373,6 +389,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if patterns is None:
         if args.require_denylist:
             print("check-public-tree: no denylist (PUBLIC_DENYLIST or --denylist)", file=sys.stderr)
+            return 2
+        if args.pre_push and pushes_to_canonical(os.environ):
+            print(
+                "check-public-tree: a push to the canonical repository needs the denylist: "
+                f"provide PUBLIC_DENYLIST or the main checkout's {DEFAULT_DENYLIST}",
+                file=sys.stderr,
+            )
             return 2
         print("check-public-tree: no denylist found, term scan skipped", file=sys.stderr)
     if args.pre_push:

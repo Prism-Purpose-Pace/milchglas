@@ -248,6 +248,18 @@ def test_commit_message_hook_runs_the_term_guard_on_the_message() -> None:
     assert "stages: [commit-msg]" in block
 
 
+@pytest.mark.parametrize(
+    "hook", ["check-public-tree", "check-public-tree-message", "check-public-tree-history"]
+)
+def test_guard_hooks_show_their_output_on_a_pass(hook: str) -> None:
+    # pre-commit hides the output of a passing hook, so the skip notice ("no denylist found,
+    # term scan skipped") stayed invisible behind `Passed`; verbose hooks print it.
+    config = (REPO / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    assert f"- id: {hook}\n" in config
+    block = config.split(f"- id: {hook}\n", 1)[-1].split("- id:", 1)[0]
+    assert "verbose: true\n" in block
+
+
 def test_commit_message_file_with_a_denylisted_term_is_reported(tmp_path: Path) -> None:
     (tmp_path / ".git").mkdir()
     (tmp_path / ".git/COMMIT_EDITMSG").write_text("fix: cite secretproject\n", encoding="utf-8")
@@ -575,6 +587,105 @@ def test_pre_push_refuses_inputs_it_would_ignore(push_repo: Path, extra: list[st
     with pytest.raises(SystemExit) as exit_info:
         cpt.main(["--denylist", str(push_repo.parent / "deny.txt"), "--pre-push", *extra])
     assert exit_info.value.code == 2
+
+
+# A push to the canonical repository (only writers push there) with no denylist reachable
+# would publish unscanned: pre-commit hides a passing hook's skip notice and nothing runs
+# CI before a branch is public. Public contributors push to forks and keep the skip.
+CANONICAL_URLS = [
+    "https://github.com/Prism-Purpose-Pace/milchglas",
+    "https://github.com/Prism-Purpose-Pace/milchglas.git",
+    "https://github.com/Prism-Purpose-Pace/milchglas/",
+    "https://github.com/Prism-Purpose-Pace/milchglas.git/",
+    "git@github.com:Prism-Purpose-Pace/milchglas",
+    "git@github.com:Prism-Purpose-Pace/milchglas.git",
+    "ssh://git@github.com/Prism-Purpose-Pace/milchglas",
+    "ssh://git@github.com/Prism-Purpose-Pace/milchglas.git",
+    "https://GitHub.com/prism-purpose-pace/MILCHGLAS.git",
+    # Forms a hand-written list misses: a token in the URL, a port, http, no ssh user, a
+    # mirror host. Matching the path tail makes an unknown form refuse instead of skip.
+    "https://x-access-token:t0ken@github.com/Prism-Purpose-Pace/milchglas.git",
+    "ssh://git@github.com:22/Prism-Purpose-Pace/milchglas.git",
+    "http://github.com/Prism-Purpose-Pace/milchglas",
+    "ssh://github.com/Prism-Purpose-Pace/milchglas.git",
+    "git@gitlab.com:Prism-Purpose-Pace/milchglas.git",
+]
+NOT_CANONICAL_URLS = [
+    "https://github.com/someone/milchglas.git",
+    "https://github.com/Prism-Purpose-Pace/milchglas-fork",
+    "https://github.com/Prism-Purpose-Pace/milchglas.git.evil",
+    "https://github.com/Prism-Purpose-Pace/milchglas/extra",
+    "https://github.com/other-Prism-Purpose-Pace/milchglas.git",
+    "/srv/git/milchglas.git",
+    "",
+]
+NOT_CANONICAL_IDS = [
+    "fork",
+    "name-suffix",
+    "name-trailing-text",
+    "extra-path",
+    "owner-prefix",
+    "local-path",
+    "empty",
+]
+
+
+def _pre_push_without_denylist(repo: Path) -> int:
+    # PUBLIC_DENYLIST is unset (push_repo), the file is absent and the tmp repo has no
+    # .claude/context/ for the main-checkout fallback to find.
+    return cpt.main(["--denylist", str(repo.parent / "absent.txt"), "--pre-push"])
+
+
+@pytest.mark.parametrize("url", CANONICAL_URLS)
+def test_pre_push_to_the_canonical_repository_refuses_without_a_denylist(
+    push_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    url: str,
+) -> None:
+    monkeypatch.setenv("PRE_COMMIT_REMOTE_URL", url)
+    assert _pre_push_without_denylist(push_repo) == 2
+    err = capsys.readouterr().err
+    assert "PUBLIC_DENYLIST" in err
+    assert str(cpt.DEFAULT_DENYLIST) in err
+    assert "term scan skipped" not in err
+
+
+@pytest.mark.parametrize("url", NOT_CANONICAL_URLS, ids=NOT_CANONICAL_IDS)
+def test_pre_push_to_another_remote_keeps_the_skip_without_a_denylist(
+    push_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    url: str,
+) -> None:
+    monkeypatch.setenv("PRE_COMMIT_REMOTE_URL", url)
+    assert _pre_push_without_denylist(push_repo) == 0
+    assert "term scan skipped" in capsys.readouterr().err
+
+
+def test_manual_pre_push_run_without_a_remote_keeps_the_skip_without_a_denylist(
+    push_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _pre_push_without_denylist(push_repo) == 0  # PRE_COMMIT_REMOTE_URL unset
+    assert "term scan skipped" in capsys.readouterr().err
+
+
+def test_pre_push_to_the_canonical_repository_passes_with_a_denylist_and_a_clean_tree(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PRE_COMMIT_REMOTE_URL", CANONICAL_URLS[1])
+    assert _pre_push(push_repo) == 0
+    _commit_files(push_repo, {"head.md": TERM_TEXT}, "feat: add head")
+    assert _pre_push(push_repo) == 1  # the denylist is read and still guards
+
+
+def test_commit_stage_without_a_denylist_keeps_the_skip_for_the_canonical_remote(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Only the push refuses: a commit has no remote, and a contributor commit stays unblocked.
+    monkeypatch.setenv("PRE_COMMIT_REMOTE_URL", CANONICAL_URLS[1])
+    assert cpt.main(["--denylist", str(push_repo.parent / "absent.txt"), "README.md"]) == 0
+    assert "term scan skipped" in capsys.readouterr().err
 
 
 def test_denylist_from_env_takes_precedence_over_file(tmp_path: Path) -> None:
