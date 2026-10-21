@@ -229,6 +229,13 @@ def _after(start: datetime, duration: _Duration, zone: tzinfo) -> datetime:
     The server expands an instance to a UTC DTSTART and keeps DURATION, so for those the
     caller passes the configured zone, not UTC: P1D from 2026-10-24 07:00Z ends 08:00Z,
     25 real hours (CORE-DUR-6). PT24H has no day part and stays 24 real hours.
+
+    Without a day part the start's UTC instant is kept: adding a timedelta to a datetime
+    in `zone` resets its `fold` (PEP 495), which would move a start in the second pass of
+    an overlap one overlap earlier. With a day part the wall time counts, so the first
+    pass of an ambiguous end time wins (RFC 5545 §3.3.5).
     """
     days, exact = duration
+    if days == 0:
+        return start.astimezone(UTC) + exact
     return (start.astimezone(zone) + timedelta(days=days)).astimezone(UTC) + exact

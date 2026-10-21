@@ -3,14 +3,19 @@
 A caller handles an event it cannot read by catching `MalformedEventError` and keeping the
 last feed. Any other exception from `reduce_event` would end the refresh loop instead, so
 the only outcomes allowed are a block, a skip reason, or that one error.
+
+The second property (PROP-14) holds the end of a DURATION event to an RFC 5545 reading
+written out again in the test, over the 2026 offset changes of every zone the tz database
+has.
 """
 
 import zoneinfo
-from datetime import date, time
-from functools import partial
+from bisect import bisect_left
+from datetime import UTC, date, datetime, time, timedelta
+from functools import cache, partial
 from zoneinfo import ZoneInfo
 
-from hypothesis import assume, find, given
+from hypothesis import assume, example, find, given
 from hypothesis import strategies as st
 from icalendar import Calendar
 
@@ -111,3 +116,111 @@ def test_generated_events_reach_every_kind_of_outcome_prop_13() -> None:
     # Without this the property above could hold only because nothing ever succeeds.
     for kind in (TimedBlock, DayBlock, Skip, MalformedEventError):
         find(st.tuples(events(), st.sampled_from(ZONES)), partial(_is, kind))
+
+
+# --- the end of a DURATION event beside an offset change (PROP-14) -------------------------
+
+_YEAR = datetime(2026, 1, 1, tzinfo=UTC)
+type _Case = tuple[str, datetime, int, int, int, str]  # zone, start, weeks, days, minutes, text
+
+
+@cache
+def _changes_2026(zone: str) -> tuple[datetime, ...]:
+    """The UTC instants, to the minute, at which `zone` takes a new offset in 2026.
+
+    A daily scan, then bisection on the minute; shortcut: two changes inside one day would
+    go unseen, and the tz database has none in 2026.
+    """
+    info = ZoneInfo(zone)
+    found: list[datetime] = []
+    before = _YEAR.astimezone(info).utcoffset()
+    for day in range(1, 366):
+        high = _YEAR + timedelta(days=day)
+        if high.astimezone(info).utcoffset() == before:
+            continue
+        low = high - timedelta(days=1)
+        minute = bisect_left(
+            range(24 * 60 + 1),
+            x=True,
+            key=lambda m: (low + timedelta(minutes=m)).astimezone(info).utcoffset() != before,
+        )
+        found.append(low + timedelta(minutes=minute))
+        before = high.astimezone(info).utcoffset()
+    return tuple(found)
+
+
+@st.composite
+def _cases(draw: st.DrawFn) -> _Case:
+    """A zone, a UTC start within three hours of one of its 2026 changes, and a DURATION."""
+    zone = draw(st.sampled_from(ZONES))
+    changes = _changes_2026(zone)
+    # A zone without a change in 2026 still gets a start: the plain path must stay right.
+    anchor = (
+        draw(st.sampled_from(changes))
+        if changes
+        else _YEAR + timedelta(minutes=draw(st.integers(0, 365 * 24 * 60)))
+    )
+    start = anchor + timedelta(minutes=draw(st.integers(-180, 180)))
+    # Half the cases have no day or week part: that is the path the fold broke.
+    weeks, days = draw(st.just((0, 0)) | st.tuples(st.integers(0, 1), st.integers(0, 2)))
+    minutes = draw(st.integers(0, 240))
+    zero_days = draw(st.booleans())  # `P0DT30M` as well as `PT30M`
+    date_part = (f"{weeks}W" if weeks else "") + (
+        f"{days}D" if days or (zero_days and not weeks) else ""
+    )
+    time_part = ""
+    if minutes or not date_part:
+        time_part = draw(st.sampled_from([f"T{minutes}M", f"T{minutes // 60}H{minutes % 60}M"]))
+    return zone, start, weeks, days, minutes, f"P{date_part}{time_part}"
+
+
+def _rfc_interval(case: _Case) -> tuple[datetime, datetime] | None:
+    """RFC 5545 §3.3.6 and §3.3.5, from the case alone: no milchglas name is used."""
+    zone, start, weeks, days, minutes, _ = case
+    exact = timedelta(minutes=minutes)
+    if weeks == 0 and days == 0:
+        end = start + exact  # no nominal part: the UTC instant plus real time
+    else:
+        info = ZoneInfo(zone)
+        wall = start.astimezone(info).replace(tzinfo=None) + timedelta(days=7 * weeks + days)
+        # An ambiguous or missing wall time reads as the first pass, the offset before a gap.
+        end = wall.replace(tzinfo=info, fold=0).astimezone(UTC) + exact
+    return None if end == start else (start, end)
+
+
+@given(_cases())
+@example(("Europe/Berlin", datetime(2026, 10, 25, 1, 10, tzinfo=UTC), 0, 0, 30, "PT30M"))
+@example(("Europe/Berlin", datetime(2026, 10, 25, 1, 30, tzinfo=UTC), 0, 0, 60, "PT1H"))
+@example(("Australia/Lord_Howe", datetime(2026, 4, 4, 15, 10, tzinfo=UTC), 0, 0, 10, "PT10M"))
+@example(("Europe/Berlin", datetime(2026, 10, 25, 1, 10, tzinfo=UTC), 0, 1, 30, "P1DT30M"))
+def test_reduce_end_follows_rfc_beside_an_offset_change_prop_14(case: _Case) -> None:
+    zone, start, _, _, _, text = case
+    ics = "\r\n".join(
+        [
+            "BEGIN:VCALENDAR",
+            "BEGIN:VEVENT",
+            "UID:generated",
+            f"DTSTART:{start:%Y%m%dT%H%M%SZ}",
+            f"DURATION:{text}",
+            "END:VEVENT",
+            "END:VCALENDAR",
+            "",
+        ]
+    )
+    got = _reduce((ics, text), zone)
+    want = _rfc_interval(case)
+    if want is None:
+        assert got is Skip.EMPTY
+    else:
+        assert isinstance(got, TimedBlock)
+        assert (got.start, got.end) == want
+
+
+def _starts_in_a_fold_second_pass_with_exact_time_only(case: _Case) -> bool:
+    zone, start, weeks, days, minutes, _ = case
+    return start.astimezone(ZoneInfo(zone)).fold == 1 and weeks == days == 0 and minutes > 0
+
+
+def test_generated_cases_reach_a_fold_second_pass_without_a_day_part_prop_14() -> None:
+    # Without this the property above could hold only because the search never gets there.
+    find(_cases(), _starts_in_a_fold_second_pass_with_exact_time_only)
