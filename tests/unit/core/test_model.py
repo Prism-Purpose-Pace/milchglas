@@ -23,7 +23,7 @@ WINDOW = window(at("2026-09-28T00:00+02:00"), BERLIN, 28)
 @pytest.mark.parametrize(
     ("start", "end"),
     [
-        (datetime(2026, 10, 1, 8), datetime(2026, 10, 1, 9)),  # noqa: DTZ001 - naive on purpose
+        (datetime(2026, 10, 1, 8), datetime(2026, 10, 1, 9)),
         (
             datetime(2026, 10, 1, 8, tzinfo=BERLIN),
             datetime(2026, 10, 1, 9, tzinfo=BERLIN),
@@ -89,7 +89,7 @@ def test_window_rejects_a_non_positive_length(days: int) -> None:
 
 def test_window_rejects_a_naive_now() -> None:
     with pytest.raises(ValueError, match="aware"):
-        window(datetime(2026, 9, 28, 9), BERLIN, 28)  # noqa: DTZ001 - the input under test
+        window(datetime(2026, 9, 28, 9), BERLIN, 28)
 
 
 # --- clip (FR-5) --------------------------------------------------------------------------

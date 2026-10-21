@@ -29,7 +29,7 @@ def uid(salt: str, block: Block) -> str:
     return f"{digest.hexdigest()[:32]}@milchglas"
 
 
-def emit(  # noqa: PLR0913 - every argument is one field of the published feed
+def emit(
     blocks: Iterable[Block],
     *,
     summary: str,
