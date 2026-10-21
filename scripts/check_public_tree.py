@@ -442,8 +442,12 @@ def pre_push_report(
 
 
 def pushes_to_canonical(url: str) -> bool:
-    """Whether the push URL (PRE_COMMIT_REMOTE_URL, or git's argv) is the canonical repository."""
-    return CANONICAL_URL.search(url.strip()) is not None
+    """Whether the push URL (PRE_COMMIT_REMOTE_URL, or git's argv) is the canonical repository.
+
+    GitHub resolves `//`, `/./` and `x/../` in the path to the same repository, so the URL is
+    normalised before the tail match.
+    """
+    return CANONICAL_URL.search(posixpath.normpath(url.strip())) is not None
 
 
 def scan(args: argparse.Namespace, patterns: Sequence[re.Pattern[str]] | None) -> list[str]:

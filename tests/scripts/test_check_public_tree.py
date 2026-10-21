@@ -807,6 +807,14 @@ CANONICAL_URLS = [
     "http://github.com/Prism-Purpose-Pace/milchglas",
     "ssh://github.com/Prism-Purpose-Pace/milchglas.git",
     "git@gitlab.com:Prism-Purpose-Pace/milchglas.git",
+    # Non-normalised forms that GitHub resolves to the same repository (git ls-remote): a
+    # doubled slash, a dot segment, a parent segment. The path is normalised before the match.
+    "https://github.com/Prism-Purpose-Pace/milchglas.git//",
+    "https://github.com/Prism-Purpose-Pace//milchglas.git",
+    "https://github.com/Prism-Purpose-Pace/./milchglas.git",
+    "https://github.com/Prism-Purpose-Pace/milchglas.git/.",
+    "https://github.com/Prism-Purpose-Pace/x/../milchglas.git",
+    "git@github.com:Prism-Purpose-Pace/./milchglas.git",
 ]
 NOT_CANONICAL_URLS = [
     "https://github.com/someone/milchglas.git",
@@ -814,6 +822,7 @@ NOT_CANONICAL_URLS = [
     "https://github.com/Prism-Purpose-Pace/milchglas.git.evil",
     "https://github.com/Prism-Purpose-Pace/milchglas/extra",
     "https://github.com/other-Prism-Purpose-Pace/milchglas.git",
+    "https://github.com/Prism-Purpose-Pace/milchglas/../other.git",
     "/srv/git/milchglas.git",
     "",
 ]
@@ -823,6 +832,7 @@ NOT_CANONICAL_IDS = [
     "name-trailing-text",
     "extra-path",
     "owner-prefix",
+    "parent-segment-to-another-repo",
     "local-path",
     "empty",
 ]
