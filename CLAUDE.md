@@ -84,6 +84,5 @@ reduce, emit — pure, no I/O; ruff bans I/O imports there), `web/` (WSGI app se
 
 - Smallest change that serves the task; tests first (see CONTRIBUTING.md § Tests).
 - Conventional commits; never push, never `--no-verify`.
-- `.claude/` and `.local/` are git-ignored maintainer space (private agent rules and
-  notes). Never add files from there; the public-tree guard (pre-commit + CI) rejects
-  them.
+- `.claude/` and `.local/` are git-ignored maintainer space: never add files from there
+  (the public-tree guard rejects them in pre-commit and CI).
