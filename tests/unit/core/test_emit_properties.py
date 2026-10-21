@@ -1,6 +1,7 @@
 """Properties of the emitted feed over generated blocks (catalogue PROP-7 to PROP-10)."""
 
 import re
+import unicodedata
 from dataclasses import replace
 
 import pytest
@@ -14,9 +15,24 @@ from tests.support.feed import assert_feed_invariants, logical_lines, parse_feed
 from tests.support.strategies import GRIDS, YEAR_START, mixed_blocks
 
 WINDOW = window(YEAR_START, BERLIN, 365)
-# What emit must refuse in a summary: every C0/C1 control except TAB, and the Unicode
-# line and paragraph separators.
-UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u2028\u2029]")
+# What emit must refuse in a summary, decided from the Unicode database and not from the
+# emitter's own pattern: controls (C0, DEL, C1) except TAB, the line and paragraph
+# separators, and lone surrogates, which cannot be written as UTF-8.
+UNSAFE_CATEGORIES = frozenset({"Cc", "Zl", "Zp", "Cs"})
+
+
+def _unsafe(text: str) -> bool:
+    return any(c != "\t" and unicodedata.category(c) in UNSAFE_CATEGORIES for c in text)
+
+
+# Plain text rarely draws the refused set, and `st.text` drops surrogates: the ends of
+# both surrogate ranges are named, and the characters are joined by hand.
+SUMMARIES = st.lists(
+    st.characters()
+    | st.characters(categories=["Cc", "Zl", "Zp"])
+    | st.sampled_from(["\ud800", "\udbff", "\udc00", "\udfff"]),
+    max_size=200,
+).map("".join)
 
 
 def _feed(blocks: list[Block], summary: str = "Blocker Privat", ttl_seconds: int = 900) -> bytes:
@@ -66,9 +82,9 @@ def test_every_generated_feed_holds_the_invariants_prop_10(blocks: list[Block], 
     assert_feed_invariants(_pipeline(blocks, WINDOW, grid))
 
 
-@given(st.text(max_size=200))
+@given(SUMMARIES)
 def test_any_summary_is_either_refused_or_survives_a_reparse(summary: str) -> None:
-    if UNSAFE.search(summary):
+    if _unsafe(summary):
         with pytest.raises(ValueError, match="summary"):
             _feed([], summary)
         return

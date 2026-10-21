@@ -16,8 +16,9 @@ from milchglas.core.model import Block, DayBlock, TimedBlock
 CALNAME = "Privat (busy)"
 _LIMIT = 75  # octets per line, CRLF excluded (RFC 5545 §3.1)
 # RFC 5545 §3.3.11 TEXT allows no control character but TAB; U+2028/U+2029 are refused
-# too, because some readers (Python's str.splitlines among them) break lines there.
-_UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u2028\u2029]")
+# too, because some readers (Python's str.splitlines among them) break lines there. A
+# lone surrogate has no UTF-8 form: refused here, not as an encoding error later.
+_UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u2028\u2029\ud800-\udfff]")
 # A TEXT escape (backslash + character) is never split across a fold.
 _UNIT = re.compile(r"\\.|.", re.DOTALL)
 
