@@ -5,8 +5,9 @@ Human contributors: [CONTRIBUTING.md](CONTRIBUTING.md) holds the same rules.
 
 Milchglas reads CalDAV calendars read-only, reduces every event to anonymous time
 intervals and publishes a busy-only ICS feed. Spec: [docs/spec.md](docs/spec.md).
-**Status: pre-feature** — package skeleton and toolchain in place (`src/milchglas/`,
-`tests/`); no pipeline code yet. Toolchain rationale: [TOOLING.md](TOOLING.md).
+**Status: core only** — the pure pipeline core is in place (`src/milchglas/core/`:
+model, reduce, emit; fixtures in `tests/fixtures/`); no fetch, web or refresh code yet.
+Toolchain rationale: [TOOLING.md](TOOLING.md).
 
 ## Stack
 
