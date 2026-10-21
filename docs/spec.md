@@ -339,38 +339,40 @@ milchglas/
 All four options share Sections 6–8 unless stated. Differences are in scheduling, serving, secrets, maintenance and security posture.
 
 ### Option A — Script as cron job or daemon on a Linux VPS
-- **Shape:** Python package in a venv; `systemd` service + timer (every 15 min) or a `--loop` daemon; feed written to `/srv/milchglas/feed/<token>.ics`; served as a static file by Caddy (automatic TLS) or by the VPS's existing reverse proxy.
-- **Prerequisites:** a VPS where ports 80/443 are free, or a route in an existing proxy. On a self-hosted PaaS host where Traefik (or a similar edge proxy) already owns 80/443, Option A there means either a file-provider route to a local port or a *second* small VPS (≈ €3–5/month).
+- **Shape:** Python package in a venv; a `systemd` refresh service + timer (every 15 min) or a `--loop` daemon, and a service running the WSGI app behind Caddy (automatic TLS) or the existing proxy; state in `/srv/milchglas`, owned by the static system user `milchglas`.
+- **Prerequisites:** either a VPS where ports 80/443 are free (Caddy obtains the certificate itself), or a route in an existing proxy. On a self-hosted PaaS host where Traefik (or a similar edge proxy) already owns 80/443, Option A there means either a file-provider route to a local port (Traefik terminates TLS and owns the certificate; the local service speaks plain HTTP on localhost) or a *second* small VPS (≈ €6–10/month, measured 2026-10-21).
 - **Scheduling:** native cron/systemd timer — the simplest and most transparent mechanism of all options.
-- **Secrets:** `EnvironmentFile=/etc/milchglas/env` (`0600`, root-owned); systemd hardening (`DynamicUser=yes`, `ProtectSystem=strict`, `ReadWritePaths=/srv/milchglas`, `IPAddressAllow=<nextcloud>` for egress, `PrivateTmp`, `NoNewPrivileges`).
-- **Maintenance:** SSH + edit `config.json`; `systemctl start milchglas-refresh` to force a run; token rotation = rename file + update consumers.
+- **Secrets:** `EnvironmentFile=/etc/milchglas/env` (`0600`, root-owned), loaded by the refresh unit only (D-13). Hardening: static `User=milchglas` (sysusers.d), `ProtectSystem=strict`, `ReadWritePaths=/srv/milchglas` on the refresh unit, `PrivateTmp=yes`, `NoNewPrivileges=yes`; egress `IPAddressDeny=any` plus `IPAddressAllow=` for the CalDAV host's addresses, the resolver and localhost (an allow-list alone blocks nothing; entries are IP prefixes, not names; the filter needs eBPF cgroup support); `LimitCORE=0`, `CapabilityBoundingSet=`, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`, `SystemCallFilter=@system-service`. A provider address change fails the refresh visibly (D-7d). A unit-file test fails when a directive is missing; `systemd-analyze security` stays below a stated score.
+- **Maintenance:** SSH + edit `config.json`; `systemctl start milchglas-refresh` to force a run; token rotation = `rotate-token` and update the consumers; upgrades install only a release wheel verified with `gh attestation verify` (D-15).
 - **Security posture:** strongest of all options (systemd sandbox, kernel-level egress allow-list, no container daemon).
 - **Effort:** 1 evening if a VPS with free ports exists; +1 hour for Caddy/TLS.
 - **Pros:** minimal moving parts; best hardening; no Docker.  **Cons:** awkward when the PaaS host already owns ports 80/443; a second VPS adds cost and upkeep; no Git-push deploys.
 
 ### Option B — Docker container(s) on a self-hosted PaaS (recommended for now)
-- **Shape:** one image (`python:3.12-slim`, non-root UID, `read_only` FS, `tmpfs /tmp`, volume for state). Compose services: `web` (gunicorn serving `/f/<token>.ics` and `/healthz`) and `refresher` (`python -m milchglas refresh --loop --interval 900`). Traefik (or the PaaS's built-in proxy) provides TLS on an operator-chosen subdomain, e.g. `feed.example.org`.
+- **Shape:** one image (`python:3.12-slim`, non-root UID, `read_only` FS, `tmpfs /tmp`, volume for state). Compose services: `web` (gunicorn serving `/f/<token>.ics` and `/healthz`) and `refresher` (`python -m milchglas refresh --loop --interval 900`). Traefik (or the PaaS's built-in proxy) provides TLS on an operator-chosen subdomain, e.g. `feed.example.org`. Python 3.12 receives security fixes only and reaches end of life around 2028-10 (PEP 693); the image moves to a newer minor before then.
+  - Hardening, both services: non-root `user`, `read_only: true`, `tmpfs /tmp`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `ulimits: core: 0`, memory and pids limits, no Docker socket; the volume mounted read-only in `web`; `config.json` read-only in both; only `web` publishes a port. The Dockerfile pins `python:3.12-slim` by digest, installs only with `uv sync --frozen --no-dev`, and creates and chowns the state directory (a non-root process can write an empty named volume only then). Dependabot watches the image with an ignore rule that holds the 3.12 minor. Whether the platform keeps `read_only`, `cap_drop`, `security_opt` and `tmpfs` is unverified until `docker inspect` checks it after deployment (AC-13).
+  - gunicorn runs with `--no-control-socket` (since 25.1.0 it opens a control socket under `$XDG_RUNTIME_DIR` or `$HOME/.gunicorn` by default, which fails on a read-only root and is only logged), `--worker-tmp-dir /tmp`, no access log, and a worker timeout.
 - **Prerequisites:** DNS record for the chosen subdomain; the PaaS app created from the Git repo.
-- **Scheduling:** in-container loop (or `supercronic`); lazy refresh in `web` as a safety net.
-- **Secrets:** the PaaS's environment variables (encrypted at rest); never in the image.
-- **Maintenance:** Git push → redeploy; `config.json` on the volume edited via the PaaS's terminal or a mounted file; `/healthz` wired to any HTTP uptime monitor.
-- **Security posture:** good; egress restriction needs extra Docker network rules (optional); the PaaS and its edge proxy are already exposed anyway.
+- **Scheduling:** in-container loop (or `supercronic`); `web` never refreshes and holds no `CALDAV_*` (D-13).
+- **Secrets:** the PaaS's environment variables: encrypted in the platform database, but written in plaintext to a server-side `.env` at each deployment and visible in the container environment; never in the image. Only `refresher` receives `CALDAV_*`; whether the platform injects every variable into every Compose service is unverified, and if it does, `web` refuses to start until the Compose file scopes the variables per service.
+- **Maintenance:** a push to the protected `main` branch → redeploy (the platform builds the image itself, so a release tag would add no provenance); a redeploy keeps the old `web` serving until the new one is healthy (NFR-O2). `config.json` on the volume is edited through the platform's file-mount editor (the slim image ships no editor for the terminal); the config directory is mounted, not the single file, because a single-file bind mount keeps the original inode, so an edit that writes a new file and renames it can stay invisible to the container (Docker behaviour, not re-verified). `/healthz` is wired to an HTTP uptime monitor (AC-19).
+- **Security posture:** good; egress restriction is optional and documented in the runbook (a host `DOCKER-USER` rule allowing only the CalDAV host; Docker applies no per-container egress filter by default, and the rule lives on the host outside the repository and breaks on a provider address change); the PaaS and its edge proxy are already exposed anyway.
 - **Effort:** 1 evening for MVP; matches a common self-hosting platform and mental model.
 - **Pros:** fits a Docker/Git-based workflow already in place; Git-based deploys; logs and health in one place; stateless image makes migration a volume copy.  **Cons:** long-term availability of the current host is not guaranteed; Docker layer; per-app egress control is manual.
 
 ### Option C — Python script on shared web hosting (incl. website/UI)
 - **Shape:** WSGI app under Phusion Passenger on a subdomain (`passenger_wsgi.py`, app root **outside** `httpdocs`). The same app serves the feed route *and* the maintenance website (Section 12, FR-17/18) — on this class of shared hosting this is not optional, because there is no other way to trigger Python: no CLI, no Python cron [FACT].
-- **Prerequisites:** a hosting tier that includes Python support [VERIFY V-6]; pure-Python dependencies vendored by hand (no `pip`); env vars via the control panel if offered, else `0600` `.env` in the app root.
-- **Scheduling:** *lazy refresh* on feed request when cache age > TTL, plus a shell cron `*/15 * * * * curl -fsS https://<host>/f/<token>.ics -o /dev/null` (shell cron is allowed; it keeps the cache warm and the Passenger process alive).
-- **Secrets:** `.env` on a shared filesystem — weaker than A/B by nature.
-- **Maintenance:** the in-app admin UI (auth per NFR-S6) is the primary maintenance channel; code updates via SFTP/Git; remember the *disable → enable* quirk after settings changes [REPORT].
+- **Prerequisites:** a hosting tier that includes Python support [VERIFY V-6]; pure-Python dependencies vendored by hand (no `pip`); secrets in a `0600` env file in the app root outside `httpdocs`, parsed by `passenger_wsgi.py` with a stdlib parser, because Passenger has no `.env` loader and the panel's Python module has no environment field [VERIFY V-6].
+- **Scheduling:** *lazy refresh* on feed request when cache age > TTL, plus a panel scheduled task of the type "Fetch a URL" every 15 min against the feed URL (no `curl` needed in the chrooted shell). It keeps the cache warm; it does not keep the Passenger process alive (Passenger's default idle time is 300 s), so expect a cold start per refresh [VERIFY V-6 reads the host's idle time].
+- **Secrets:** the `0600` env file on a shared filesystem — weaker than A/B by nature.
+- **Maintenance:** the in-app admin UI (auth per NFR-S6) is the primary maintenance channel; code updates via SFTP/Git; remember the *disable → enable* quirk after settings changes [FACT, 4.4].
 - **Security posture:** shared hosting; no egress control, limited logs; mitigated by D-2 (read-only service user, revocable app password).
 - **Effort:** 2–3 evenings (vendoring, Passenger quirks, admin UI becomes MVP-mandatory here).
 - **Pros:** runs on web hosting many operators already have; needs no VPS; no Docker.  **Cons:** tariff dependency; hand vendoring; Passenger sandbox; admin UI is forced into MVP scope; shared filesystem for the secret.
 
 ### Option D — PHP application on shared web hosting
 - **Shape:** PHP 8.x CLI script run by the hosting control panel's cron every 15 min (`php -f /…/milchglas/refresh.php`), writing `<token>.ics` into a subdomain docroot; served as a static file by Apache/nginx; optional admin page protected by directory protection (`.htaccess`) — Passenger is not involved, so directory protection works normally.
-- **Prerequisites:** any shared-hosting tariff with PHP + cron + SSH included [FACT]; Composer via SSH (`php composer.phar require sabre/vobject`) for parsing and recurrence iteration, or rely on CalDAV server-side `expand` with a minimal hand-written parser.
+- **Prerequisites:** any shared-hosting tariff with PHP + cron + SSH included [FACT: PHP CLI via SSH; scheduled tasks can run a PHP script]; Composer via SSH (`php composer.phar require sabre/vobject:4.5.6`, the version the Nextcloud server pins, for byte parity) for parsing and recurrence iteration [Composer availability: VERIFY V-6; fallback: vendor sabre/vobject offline], or rely on CalDAV server-side `expand` with a minimal hand-written parser.
 - **Scheduling:** real cron — as clean as Option A.
 - **Secrets:** `config.php` outside the docroot, `0600`; same shared-filesystem caveat as C.
 - **Maintenance:** SFTP/Git + `.htaccess`-protected status page; token rotation = rename file.
@@ -382,10 +384,10 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 
 | Criterion | A · VPS script | B · PaaS Docker | C · shared-hosting Python | D · shared-hosting PHP |
 |---|---|---|---|---|
-| Scheduling | native timer ★ | in-container loop | lazy + curl cron | native cron ★ |
-| Secrets at rest | root-owned env file, sandboxed ★ | PaaS env ★ | shared FS `.env` | shared FS config |
-| Egress control | systemd IP allow-list ★ | manual Docker rules | none | none |
-| Maintenance channel | SSH | Git push + terminal | in-app UI (mandatory) | SFTP + `.htaccess` page |
+| Scheduling | native timer ★ | in-container loop | lazy + panel URL task | native cron ★ |
+| Secrets at rest | root-owned env file, sandboxed ★ | PaaS env (encrypted in the platform DB, plaintext `.env` on the server) | shared FS `.env` | shared FS config |
+| Egress control | systemd IP allow-list with `IPAddressDeny=any` ★ | manual Docker rules | none (assumed; V-6) | none (assumed; V-6) |
+| Maintenance channel | SSH | Git push + file-mount editor | in-app UI (mandatory) | SFTP + `.htaccess` page |
 | Codebase | shared Python core | shared Python core | shared Python core | separate PHP port |
 | Prerequisite risk | free ports / 2nd VPS | PaaS host not guaranteed long-term | sufficient hosting tier, `pip`-less | none |
 | Effort to MVP | ~1 evening | ~1 evening | 2–3 evenings | 1–2 evenings |
