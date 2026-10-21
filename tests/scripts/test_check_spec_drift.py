@@ -89,7 +89,9 @@ def test_guide_missing_a_key_fails(tmp_path: Path, capsys: pytest.CaptureFixture
     guide = swap(GUIDE, "`token_sha256`, `uid_salt`", "`token_sha256`")
     code, err = check(tree(tmp_path, guide=guide), capsys)
     assert code == 1
-    assert "CLAUDE.md:49: config key `uid_salt` is in the spec" in err
+    # The guide is the real file, so take the list's first line from it, not a literal.
+    line = next(n for n, text in enumerate(guide.splitlines(), 1) if "one `config.json`" in text)
+    assert f"CLAUDE.md:{line}: config key `uid_salt` is in the spec" in err
     assert err.count("config key") == 1
 
 
