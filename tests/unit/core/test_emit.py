@@ -5,7 +5,6 @@ from dataclasses import replace
 from datetime import datetime
 
 import pytest
-from icalendar import vText
 
 from milchglas.core.emit import emit, uid
 from milchglas.core.model import Block, TimedBlock
@@ -139,12 +138,27 @@ def test_ttl_must_be_positive(ttl_seconds: int) -> None:
 # --- summary: escaping, injection, folding (EMIT-6, EMIT-7) -------------------------------
 
 
-def test_summary_is_escaped_as_rfc_5545_text_emit_6() -> None:
-    summary = "Blocker, Privat; A\\B\tC"
+# RFC 5545 §3.3.11: TEXT escapes backslash, semicolon and comma; \n and \N in the escaped
+# form mean a line break, so a literal backslash before n or N must be escaped too. A
+# fixed table (FR-7), not icalendar's vText, which reads a literal \N as a newline.
+ESCAPES = [
+    ("Blocker Privat", "Blocker Privat"),
+    ("A\\B", "A\\\\B"),
+    ("Blocker; Privat", "Blocker\\; Privat"),
+    ("Blocker, Privat", "Blocker\\, Privat"),
+    ("C:\\New", "C:\\\\New"),
+    ("a\\nb", "a\\\\nb"),
+    ('Termin: "privat"', 'Termin: "privat"'),
+    ("Blocker\tPrivat", "Blocker\tPrivat"),
+    ("Größe €", "Größe €"),
+]
+
+
+@pytest.mark.parametrize(("summary", "escaped"), ESCAPES)
+def test_summary_is_escaped_as_rfc_5545_text_emit_6(summary: str, escaped: str) -> None:
     feed = _emit([TIMED], summary=summary)
-    assert "SUMMARY:Blocker\\, Privat\\; A\\\\B\tC" in logical_lines(feed)
-    assert f"SUMMARY:{vText(summary).to_ical().decode()}" in logical_lines(feed)  # oracle
-    assert summaries(feed) == [summary]
+    assert f"SUMMARY:{escaped}" in logical_lines(feed)
+    assert summaries(feed) == [summary]  # a real reader gets the configured text back
 
 
 @pytest.mark.parametrize(
