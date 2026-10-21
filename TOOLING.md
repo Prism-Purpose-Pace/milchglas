@@ -167,6 +167,12 @@ Verifying a release asset: see [SECURITY.md](SECURITY.md).
   ref line as well. pre-commit's classic hook passes the flag on any git version.
   The `--pre-push` hook stays as the first-ref fallback. The ancestry hook above still sees
   one ref: push one ref per `git push` there.
+  Known limits: the every-ref scan runs only while `pre-push.legacy` exists. It is gone after
+  `pre-commit install -f` (pre-commit suggests that flag when it finds the legacy file), and it
+  is not demanded in a clone without the denylist or the private repo. A tree whose guard
+  predates `--pre-push-refs` cannot push through the shim. So push from the main checkout,
+  with `install_push_guard.py --check` at exit 0, and rerun the installer after every
+  `pre-commit install`.
 - The `tags` ruleset freezes every tag: nobody moves or deletes one, and nobody holds
   a bypass (an admin disables the ruleset to repair a wrong tag). Creating a tag stays
   open to writers, because release-please tags with `GITHUB_TOKEN` and GitHub rejects
