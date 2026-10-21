@@ -142,8 +142,18 @@ def test_events_without_positive_length_yield_no_block(uid: str, expected: Skip)
         ("CORE-DUR-2", day("2026-10-03", "2026-10-05")),
         ("CORE-DUR-3", day("2026-10-07", "2026-10-08")),
         ("allday-dtend", day("2026-10-12", "2026-10-13")),
-        # DUR-4: RFC 5545 §3.3.6, a day is nominal: 09:00 CET + P1D = 09:00 CEST (23 h).
+        # OPEN Q-20 default: days and weeks are nominal in the configured zone,
+        # the time part is exact (RFC 5545 §3.3.6). DUR-4: 09:00 CET + P1D = 09:00 CEST.
         ("CORE-DUR-4", timed("2026-03-28T09:00+01:00", "2026-03-29T09:00+02:00")),
+        ("CORE-DUR-6-zoned-autumn", timed("2026-10-24T07:00Z", "2026-10-25T08:00Z")),
+        # As the server expands it: UTC DTSTART, DURATION kept. Read in UTC, the autumn
+        # instance would end at 07:00Z, a false-free hour; the spring one an hour late.
+        ("CORE-DUR-6-expanded-autumn", timed("2026-10-24T07:00Z", "2026-10-25T08:00Z")),
+        ("CORE-DUR-6-expanded-spring", timed("2026-03-28T08:00Z", "2026-03-29T07:00Z")),
+        ("CORE-DUR-6-week-and-time", timed("2026-10-20T07:00Z", "2026-10-27T09:00Z")),
+        # The documented weakness: an event made in a zone with other DST dates counts its
+        # days in the configured zone (New York changes on 11-01, Berlin on 10-25).
+        ("CORE-DUR-6-other-zone", timed("2026-10-24T07:00Z", "2026-10-25T08:00Z")),
         # The time part is exact: 01:30 CEST + PT2H = 02:30 CET, not 03:30 CET.
         ("dur-exact-across-fold", timed("2026-10-25T01:30+02:00", "2026-10-25T02:30+01:00")),
         ("dtend-wins-over-duration", timed("2026-10-01T16:00Z", "2026-10-01T16:30Z")),
