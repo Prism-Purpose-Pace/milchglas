@@ -14,7 +14,7 @@ and release setup in `TOOLING.md`, `SECURITY.md` and `.github/workflows/`.
 - **Method:** scope and assets (section 1), trust boundaries and a data-flow diagram
   (section 2), STRIDE per element and per data flow (section 3), a privacy pass with the LINDDUN
   categories linking, identifying, detecting and data disclosure (section 4), summary and
-  proposed spec changes (section 5), evidence (section 6).
+  the spec changes adopted from it (section 5), evidence (section 6).
 - **Date of analysis:** 2026-10-21. Factual claims carry an evidence ID (E-n, section 6) with
   source and verdict.
 
@@ -339,8 +339,10 @@ linking (combining data to learn more), identifying (tying data to a person), de
 
 ## 5. Summary
 
-**Counts.** 58 threats (52 STRIDE rows in section 3, 6 privacy rows in section 4). Risk: 6 High,
-33 Medium, 19 Low. Gap: 13 open, 38 partial, 7 none. Spec changes proposed: 25 (section 5.2).
+**Counts.** 62 threats (56 STRIDE rows in section 3, 6 privacy rows in section 4). Risk: 6 High,
+34 Medium, 22 Low. Gap: 0 open, 17 partial, 45 none. Spec changes proposed: 25, all adopted in
+spec v0.4 or v0.5 (section 5.2). Changes since the first pass: T-12, T-17, T-30 and T-39 re-rated
+down (D-13, D-14, AC-19), T-21 re-rated up (OR4), T-59 to T-62 added.
 
 ### 5.1 Top five risks
 
@@ -349,47 +351,51 @@ Six threats score 6 (High). Ties are broken by (a) whether the threat needs an a
 
 | Rank | ID | Risk | Why it ranks here | First control |
 |---|---|---|---|---|
-| 1 | T-39 | 6 H | No attacker needed (an expired app password suffices); an unnoticed stale feed turns into double bookings, breaking G5; the monitor is backlog and fail-closed is LATER. | Uptime monitor with alerting as an MVP deploy step (SC-10). |
-| 2 | T-09 | 6 H | Breaks G3 and NFR-P1, the reason the project exists; the leak path is confirmed in the parser source (E-1). | Errors recorded as class, calendar index and status only; AC-8 extended to the error path (SC-5). |
-| 3 | T-07 | 6 H | No attacker needed; the lenient parser silently drops malformed properties (E-1), so Q-14 never fires and a block goes missing. | Treat collected parser errors as unparsable; golden fixtures for malformed and odd times (SC-4). |
-| 4 | T-16 | 6 H | No attacker needed; a config slip publishes a valid empty feed, which meetergo trusts as "free". | Zero enabled calendars is a config error; a drop to zero blocks raises a warning (SC-8). |
-| 5 | T-10 | 6 H | Debug logging prints the Basic credential through `http.client` (E-3); the lever operators pull first during an outage. | A log-hygiene NFR that binds every log level, plus a test run at DEBUG (SC-5). |
+| 1 | T-09 | 6 H | Breaks G3 and NFR-P1, the reason the project exists; the leak path is confirmed in the parser source (E-1). | Errors recorded as class, calendar index and status only; AC-8 extended to the error path (NFR-P4, SC-5). |
+| 2 | T-07 | 6 H | No attacker needed; the lenient parser silently drops malformed properties (E-1), so a block goes missing unless the Q-14 error rule is built. | Collected parser errors count as unparsable; golden fixtures for malformed and odd times (Q-14, NFR-C1, SC-4). |
+| 3 | T-60 | 6 H | No attacker needed; Nextcloud drops objects without error (L5), which Milchglas cannot see, so a slot is offered. | One AC-0.3 contract case per drop; a reproduced drop fails V-4 and makes the FR-2 fallback MVP. |
+| 4 | T-16 | 6 H | No attacker needed; a valid empty feed is published, which meetergo trusts as "free". | Zero enabled calendars is a config error, a drop to zero records a warning, and the `PROPFIND` check fails a replaced share (Q-16, FR-1, SC-8). |
+| 5 | T-10 | 6 H | Debug logging prints the Basic credential through `http.client` (E-3); the lever operators pull first during an outage. | DEBUG never enables `http.client` debug output; a test run at DEBUG (NFR-P4, SC-5). |
 
-Next in line: T-12 (6 H, lazy refresh would put the credential and content into `web`; a
-decision, not a test, closes it, SC-7).
+Next in line: T-21 (6 H; the platform's default build-time injection, which AC-13 detects only
+after a deployment, OR4). T-39 and T-12 led this list in the first pass; AC-19 and D-13 moved
+each to 3 M.
 
-### 5.2 Proposed spec changes
+### 5.2 Spec changes adopted
 
-Proposals only; the spec is unchanged. Each line names the spec text it would add or amend and
-the threats it closes. New identifiers are left to the maintainer, so the table uses SC-n.
+The first pass proposed 25 spec changes as SC-n; spec v0.4 and v0.5 adopted all of them. The
+rows above cite the spec IDs; this table keeps the SC-n anchors resolvable and states where the
+spec chose a different form.
 
-| ID | Kind | Proposed text | Closes |
+| ID | Adopted as | Closes | Different form |
 |---|---|---|---|
-| SC-1 | Amend NFR-S2 and spec section 8 | "The feed token is a secret. It comes from the environment or a `0600` file outside any document root and is never stored in `config.json`; alternatively `config.json` holds only the token's SHA-256." AC-13 extends to the token. | T-17, T-30 |
-| SC-2 | Amend NFR-S1 | "Milchglas generates the token (256 bits from a CSPRNG) and refuses to start with a shorter one. The comparison runs over SHA-256 digests with a constant-time compare." | T-22, T-23 |
-| SC-3 | New NFR-S (outbound requests) with an AC | "Every CalDAV request goes to the origin of `CALDAV_URL` over HTTPS with certificate verification. Calendar hrefs are relative paths without dot segments. A 3xx answer is a failure. A refresh run has a total deadline." The AC holds one test per sentence. | T-01, T-02, T-03, T-04 |
-| SC-4 | Amend the Q-14 default; extend NFR-C1 | "An object is unparsable when the parser reports any error for it, including errors collected in lenient mode, or when an expanded answer still carries RRULE or RDATE while local expansion is off. A multistatus body with a DOCTYPE is rejected." NFR-C1 adds fixtures: malformed and floating DTSTART, missing DTEND, DTEND before DTSTART, an entity bomb. | T-05, T-06, T-07 |
-| SC-5 | New NFR-P (error and log hygiene); extend AC-8 | "Errors are recorded as exception class, calendar index and HTTP status. Exception text from the parser or HTTP layers, calendar names, hrefs, request headers and response bodies never reach logs or state, at any log level." AC-8 adds a malformed-line fixture and a run at DEBUG. | T-09, T-10, T-56 |
-| SC-6 | New OPEN Q | "Does an owner `PARTSTAT=NEEDS-ACTION` produce a block?" Default: yes (busy), configurable: a block too many costs a slot, a block too few costs a double booking. | T-08 |
-| SC-7 | New OPEN Q | "Is the lazy refresh in `web` (spec section 9, Option B) built?" Default: no; `web` never receives `CALDAV_*` and refuses to start when one is set. | T-12, T-20 |
-| SC-8 | Amend the Q-16 default | "Zero enabled calendars is a configuration error. A drop from a non-empty feed to zero blocks is published as Q-16 says, but records a warning in state and log." | T-16 |
-| SC-9 | New VERIFY | "Consumers keep their last copy when the feed is unreachable." Test: the feed answers 404, 503 and a timeout; meetergo still blocks the test slot and refuses the booking; mailbox.org keeps the blocks. If false: an availability target for `web` (new NFR-R) and a review of FR-15. | T-33 |
-| SC-10 | New AC (MVP); pulls the section 12 item "Uptime monitor + e-mail alert" forward | "An external monitor polls `/healthz`; a 503 alerts the operator; the alert path is executed once during deployment." Decide at the same time whether FR-15 and Q-4 move into the MVP. | T-39 |
-| SC-11 | Amend spec section 9, Option A, and NFR-S4 | Add `IPAddressDeny=any` with allow entries for the CalDAV host and the resolver, `LimitCORE=0`, `CapabilityBoundingSet=`, `RestrictAddressFamilies=`, `SystemCallFilter=@system-service`, and a `systemd-analyze security` threshold as the AC. | T-11, T-52 |
-| SC-12 | Amend spec section 9, Option B, NFR-S4 and AC-13 | `cap_drop: [ALL]`, `no-new-privileges`, `ulimits: core: 0`, memory and pids limits, the volume read-only in `web`, `config.json` read-only in both services, no Docker socket, the base image pinned by digest, installation only from `uv.lock`, egress limited to the CalDAV host. CI checks the Compose file and the Dockerfile, builds the image and scans its layers for secrets. | T-11, T-15, T-18, T-21, T-44, T-45, T-51 |
-| SC-13 | Extend NFR-S5 with a deploy AC | "A deploy acceptance test fetches the feed with a canary token and finds the token in none of the proxy, platform or app logs; the canary path returns the identical 404 and the plain-HTTP router answers 404 without a redirect." | T-29, T-31, T-32 |
-| SC-14 | New OPEN Q | "Log each successful feed fetch with client network, user-agent class and a keyed-hash token prefix, for leak detection?" Default: yes. | T-36 |
-| SC-15 | New OPEN Q | "Token rotation cadence?" Default: yearly and after any provider breach notice; until FR-16, both consumers are re-subscribed together. | T-34 |
-| SC-16 | Extend AC-9 | A matrix of methods, conditional headers and traversal encodings; the NFR-S1 and Q-17 headers asserted; a measurable timing bound; no versioned `Server` header. | T-23, T-24, T-25, T-27, T-28 |
-| SC-17 | New AC (MVP) | "Token rotation needs no restart: within one refresh interval the old token returns 404 and the new one 200; Option A leaves no file named by the old token." | T-30, T-37 |
-| SC-18 | Amend NFR-O2 (runbook) | The host migration changes DNS before the old host is released and rotates the token; a CAA record with `accounturi`; MFA on the platform, the Git host and the DNS registrar; deployments come from release tags, and Option A installs a wheel verified with `gh attestation verify`; NTP as a prerequisite; the feed URL travels only from the server terminal to the consumer dialog. | T-18, T-35, T-40, T-46, T-49 |
-| SC-19 | New OPEN Q | "Register the `milchglas` name on PyPI?" Default: no publication; the runbook installs only verified release assets, and an install by name is documented as unsafe. | T-46 |
-| SC-20 | New OPEN Q (privacy) | "Minimise the pattern beyond NFR-P2: a coarser default grid, merging blocks separated by less than a gap, per-source all-day handling (FR-13); and Q-6 guidance for a host name that names neither person nor purpose?" Default: the NFR-P2 defaults stay; the naming guidance goes into the runbook. | T-53, T-55 |
-| SC-21 | Amend FR-7 and NFR-P3 | "Configuration strings that reach the output contain no control characters and are TEXT-escaped per RFC 5545 section 3.3.11." | T-13 |
-| SC-22 | Amend FR-8; extend AC-7 | "An atomic write is a uniquely named temp file in the feed directory, fsync, then rename; one run at a time, under a lock." AC-7 adds a full-disk case and a concurrent run. | T-14 |
-| SC-23 | Amend the Q-13 default | "A refresh never generates the salt; a missing salt fails the refresh; only an explicit init command creates it." | T-19 |
-| SC-24 | New AC (configuration schema) | "Invalid values (an unknown key, `window_days` out of range, a grid that does not divide 60, an unknown `tz`) fail the refresh and keep the last feed; a changed configuration logs the names of the changed keys." | T-18, T-41 |
-| SC-25 | Amend NFR-O1 | "`refresh --dry-run` prints counts and timestamps only; no command dumps raw source data." | T-42 |
+| SC-1 | D-14, NFR-S2, AC-22 | T-17, T-30 | Only the SHA-256 is stored (`token_sha256`) |
+| SC-2 | NFR-S1, D-14, NFR-O1 | T-22, T-23 | |
+| SC-3 | NFR-S7, AC-22 | T-01 to T-04 | |
+| SC-4 | Q-14, NFR-C1 | T-05, T-06, T-07 | The DOCTYPE check is an expat handler, stdlib only |
+| SC-5 | NFR-P4, AC-8 | T-09, T-10, T-56 | |
+| SC-6 | Q-19 | T-08 | NEEDS-ACTION blocks; a mode switch is LATER |
+| SC-7 | D-13 | T-12, T-20 | Decided instead of left open; Option C keeps its lazy refresh |
+| SC-8 | Q-16 | T-16 | |
+| SC-9 | V-9 | T-33 | |
+| SC-10 | AC-19, OR6, NFR-R2 | T-39 | FR-15 and Q-4 stay LATER |
+| SC-11 | Section 9, Option A | T-11, T-52 | The units are backlog (section 12) |
+| SC-12 | Section 9, Option B; NFR-S4; AC-13 | T-11, T-15, T-18, T-21, T-44, T-45, T-51 | CI checks the Compose file and the Dockerfile but builds no image: the platform builds the deployed one, so AC-13 checks that image after deployment (OR4) |
+| SC-13 | NFR-S5, AC-21 | T-29, T-31, T-32 | |
+| SC-14 | NFR-S5 | T-36 | Without the token-hash prefix |
+| SC-15 | Q-21 | T-34 | |
+| SC-16 | AC-9 | T-23 to T-25, T-27, T-28 | One digest comparison per 404 path replaces a timing bound (R-9) |
+| SC-17 | AC-20 | T-30, T-37 | |
+| SC-18 | NFR-O2; section 9, Option B (maintenance); D-15 | T-18, T-35, T-40, T-46, T-49 | Option B deploys a push to the protected `main` branch: the platform builds the image, so a tag-based deploy adds no provenance |
+| SC-19 | D-15 | T-46 | No publication on PyPI |
+| SC-20 | Q-22 | T-53, T-55 | |
+| SC-21 | FR-7, AC-22 | T-13 | |
+| SC-22 | FR-8, AC-7 | T-14 | |
+| SC-23 | Q-13, NFR-O1, AC-22 | T-19 | |
+| SC-24 | AC-22 | T-18, T-41 | The grid divides 1440 and every UTC-offset change of `tz` within 366 days after the run |
+| SC-25 | NFR-O1, NFR-O2 | T-42 | |
+
+The v0.5 review added T-59 (Q-23), T-60 (L5, L11, V-4), T-61 (OR3, FR-1) and T-62 (NFR-O1).
 
 Repository checks that need no spec change: keep `zizmor` required (T-43, T-47); a test that the
 uv version pinned in the release workflow satisfies `[build-system].requires` (T-48); a
