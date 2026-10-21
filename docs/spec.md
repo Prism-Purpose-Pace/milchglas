@@ -1,8 +1,9 @@
-# Milchglas — Product Requirements (v0.3)
+# Milchglas — Product Requirements (v0.4)
 
 > v0.3 is the public edition of the internal v0.2 draft: product renamed, operator-specific details removed.
+> v0.4 adds Sections 2–3 (MoSCoW goals, limits, operation, load) and applies the 2026-10-21 re-validation: corrected findings and sources, a 33-day window, a hashed feed token, decisions D-12 to D-15, open questions Q-9 to Q-22, NFR-P4, NFR-S7, AC-19 to AC-22 and V-9.
 
-**Status:** Draft · **Date:** 2026-09-15 · **Supersedes:** Architecture & Implementation Concept v0.1 (2026-09-13), now folded into Sections 7, 9 and 12 of this PRD.
+**Status:** Draft · **Date:** 2026-10-21 · **Supersedes:** Architecture & Implementation Concept v0.1 (2026-09-13), now folded into Sections 7, 9 and 12 of this PRD.
 
 > **For contributors and AI agents:** Section 0 explains the markers used. Build the MVP scope (Section 6, "MVP" column) first. Everything in Section 12 is backlog and must not be pulled forward without an explicit maintainer decision. Deployment options are in Section 9; the default target is Option B unless the maintainer decides otherwise (Decision D-9).
 
@@ -52,13 +53,13 @@ One list, prioritised with MoSCoW. **Must** goals are the MVP (Section 6, "MVP" 
 |---|---|---|---|
 | G1 | Must | Publish an ICS feed that contains only busy intervals — no titles, descriptions, locations, attendees, categories, alarms | FR-4, FR-7, NFR-P3, AC-8 |
 | G2 | Must | Feed is consumable by mailbox.org (OX iCal subscription) and by meetergo (read-only ICS calendar) | FR-7, FR-9, AC-0.1, AC-0.2, AC-11 |
-| G3 | Must | Private event content never leaves Nextcloud; if it must transit Milchglas it is held in memory only, never persisted or logged | FR-4, NFR-P1, AC-8 |
-| G4 | Must | Wrong intervals are prevented by design: recurrences, exceptions, DST and all-day events are handled correctly | FR-2, FR-3, FR-6, NFR-C1, AC-1 to AC-5 |
-| G5 | Must | Fail-safe: a source outage never silently turns into "free" slots | FR-8, FR-11, NFR-R1, AC-7 |
+| G3 | Must | Private event content never leaves Nextcloud; if it must transit Milchglas it is held in memory only, never persisted or logged. The service credential itself can read that content (D-2) | FR-4, NFR-P1, NFR-P4, AC-8 |
+| G4 | Must | Wrong intervals are prevented by design: recurrences, exceptions, DST and all-day events are handled correctly | FR-2, FR-3, FR-6, NFR-C1, AC-1 to AC-5, AC-22 |
+| G5 | Must | Fail-safe: a source outage never silently turns into "free" slots; residual: objects Nextcloud drops server-side (L5) | FR-8, FR-11, NFR-R1, Q-16, AC-7, AC-19 |
 | G6 | Must | Operable by one person in the evening without on-call: boring technology, one config file, one log | NFR-O1, NFR-O2, AC-14 |
-| G7 | Should | Maintenance without touching secrets: swap/enable/disable source calendars, rotate the feed URL, force a refresh (MVP via config file; UI later) | FR-12, AC-10; FR-17, FR-18 |
+| G7 | Should | Maintenance without touching secrets: swap/enable/disable source calendars, rotate the feed URL, force a refresh (MVP via config file and CLI; UI later) | FR-12, AC-10, AC-20; FR-17, FR-18 |
 | G8 | Should | Host-portable: the same core code runs under Options A, B and C (Section 9) | NFR-O3, Section 9 |
-| G9 | Should | Data minimisation of the busy pattern itself: short window, rounding, merging | NFR-P2, FR-5, FR-6 |
+| G9 | Should | Data minimisation of the busy pattern itself: short window, rounding, merging | NFR-P2, FR-5, FR-6, Q-22 |
 | G10 | Could | Content never transits Milchglas: busy times are acquired with `free-busy-query` | FR-19, V-3 |
 | G11 | Could | A prolonged source outage blocks bookings instead of leaving a stale feed (fail-closed) | FR-15, NFR-R3, Q-4 |
 | G12 | Could | Leaks are attributable and revocable per consumer | FR-16 |
@@ -82,10 +83,10 @@ What Milchglas cannot promise, by design or because of the platforms it connects
 | ID | Limitation | Consequence | Reference |
 |---|---|---|---|
 | L1 | Not real time. A change reaches the feed within one refresh interval (15 min) and each consumer after its own polling: meetergo usually shows changes within 5–10 min and re-checks the calendar before it confirms a booking [FACT]; Open-Xchange refreshes a feed calendar every 7 days by default, waits one hour after a failed fetch, and honours `REFRESH-INTERVAL` [FACT] — whether mailbox.org keeps that behaviour is V-1 | About 25 min until meetergo blocks a new private appointment; the mailbox.org view can lag longer (measured in AC-0.1) | FR-10, V-1, AC-0.1, AC-11 |
-| L2 | Blocks exist only from today 00:00 to today + `window_days`. meetergo starts every new meeting type with a 30-day booking window [FACT] | Days beyond the window are bookable unless every meeting type's window fits inside it | FR-5, D-6, Q-2, AC-0.4 |
+| L2 | Blocks exist only from today 00:00 to today + `window_days`. meetergo starts every new meeting type with a 30-day booking window [FACT] | The default of 33 days covers that window with a two-day buffer for refresher outages; days beyond the window are bookable unless every meeting type's window is at most `window_days` - 3 | FR-5, D-6, Q-2, AC-0.4 |
 | L3 | Blocks are rounded to the grid (15 min) and merged | Up to one grid step minus one minute of extra busy time at each block edge; adjacent appointments appear as one block | FR-6, G9 |
-| L4 | One shared feed token until FR-16 | A leak cannot be attributed to one consumer, and a rotation cuts off both consumers at once | NFR-S1, G12 |
-| L5 | Nextcloud skips objects it cannot parse and recurring series beyond 3500 iterations, and still answers `207 Multi-Status` [FACT] | Milchglas cannot see these drops; such an event yields no block | FR-1, Q-14, Q-16 |
+| L4 | One shared feed token until FR-16 | A leak cannot be attributed to one consumer, and a rotation cuts off both consumers at once | NFR-S1, G12, Q-21 |
+| L5 | Nextcloud skips objects it cannot parse and recurring series beyond 3500 iterations, and still answers `207 Multi-Status` [FACT] | Milchglas cannot see these drops; such an event yields no block. The Q-16 warnings and the runbook's server-log check reduce, not remove, the risk | FR-1, Q-14, Q-16, NFR-O2 |
 | L6 | The read-only service user never sees `CLASS:PRIVATE` events and receives `CLASS:CONFIDENTIAL` events without `STATUS`, `TRANSP` and `ATTENDEE` [FACT] | Private events yield no block (D-3); confidential events always block, even when cancelled, transparent or declined | D-3, FR-3 |
 | L7 | The service credential reads the full content of every `CLASS:PUBLIC` event in the shared calendars [FACT] | A leaked app password discloses content, not only busy times; D-2 bounds write access, not read access | D-2, NFR-S3 |
 | L8 | Event content transits refresher memory on every run | Only G10 removes the transit | G3, FR-19 |
@@ -100,11 +101,11 @@ What the operator provides and keeps running. Values are for Option B (Section 9
 |---|---|---|---|
 | OR1 | A container host with a persistent volume, Compose support and an edge proxy with automatic TLS; about 150 MB of free memory for the two services | Runs `web` and `refresher` and keeps the feed and state across deploys | Section 9 Option B, Section 3.3 |
 | OR2 | A DNS record for the feed host, ports 80/443 reachable at the proxy, a certificate from a public CA | Both consumers fetch the feed over HTTPS from the Internet | FR-9, Q-6 |
-| OR3 | The Nextcloud service user `svc-milchglas` with read-only shares only, quota `0 B` (the value `none` means unlimited), and an app password that can be revoked in one click | Least privilege on the source side | D-2, NFR-S3, AC-0.3 |
-| OR4 | `CALDAV_URL`, `CALDAV_USER` and `CALDAV_SECRET` set as platform environment variables. The platform host is trusted with them: Coolify, for example, writes them into a plaintext `.env` on the server at deploy time [FACT] | No secret in Git, image or `config.json` | D-11, NFR-S2 |
-| OR5 | Proxy and platform access logs never record the feed path. Traefik can drop the request path field or disable access logs per router, but cannot hash it [FACT] | The path carries the token | NFR-S5 |
-| OR6 | An external uptime monitor polls `/healthz` and alerts the operator by e-mail | A stale feed must not go unnoticed | NFR-R2, FR-11 |
-| OR7 | An accurate host clock (NTP) | The window starts at "today 00:00" in `tz` | FR-5 |
+| OR3 | The Nextcloud service user `svc-milchglas` with read-only shares only, quota `0 B` (the value `none` means unlimited), no system address book exposed to it, and an app password created with filesystem access disabled that can be revoked in one click | Least privilege on the source side | D-2, NFR-S3, AC-0.3 |
+| OR4 | `CALDAV_URL`, `CALDAV_USER` and `CALDAV_SECRET` set as platform environment variables for the `refresher` only (D-13). The platform host is trusted with them: Coolify, for example, writes them into a plaintext `.env` on the server at deploy time [FACT] | No secret in Git, image or `config.json` | D-11, NFR-S2 |
+| OR5 | Proxy and platform access logs never record the feed path. Traefik can drop the request path field or disable access logs per router, but cannot hash it [FACT] | The path carries the token | NFR-S5, AC-21 |
+| OR6 | An external uptime monitor polls `/healthz` at least every 5 minutes and alerts the operator by e-mail | A stale feed must not go unnoticed | NFR-R2, FR-11, AC-19 |
+| OR7 | An accurate host clock (NTP) | The window starts at "today 00:00" in `tz` | FR-5, NFR-O2 |
 | OR8 | Outbound HTTPS from the refresher to the Nextcloud host | Data source | FR-1, NFR-S4 |
 | OR9 | Backup of `config.json` and the state directory before a host migration | Losing the UID salt changes every UID, and consumers then replace all blocks | NFR-O2, Q-13 |
 | OR10 | The consumers are set up once: a feed subscription in mailbox.org, and an ICS calendar in meetergo for every meeting type in use | Both consumers must read the feed | AC-0.1, AC-0.2, AC-0.4 |
@@ -121,7 +122,7 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 | Event instances in the window after expansion | ≤ 1 000 | target; AC-0.3 records the instance count and the response size |
 | CalDAV response size | well below 1 MiB per calendar; hard limit 16 MiB | target; Q-15 |
 | Refresh runs | 96 per day (every 15 min) | derived, FR-10 |
-| Refresh run duration | a few seconds when healthy; at most about 47 s per unreachable calendar (4 attempts × 10 s timeout plus 1 + 2 + 4 s backoff) | derived, FR-1, Q-15 |
+| Refresh run duration | a few seconds when healthy; at most about 47 s per unreachable calendar (4 attempts × 10 s timeout plus 1 + 2 + 4 s backoff; `401`, `403` and `429` are not retried); every run ends at the 120 s total deadline | derived, FR-1, Q-15, NFR-S7 |
 | Feed requests | about 100–400 per day (≈ 0.005 req/s): mailbox.org at most 96 at `PT15M`, meetergo on its own sync cycle | derived, L1 |
 | Feed size | about 0.2 KB per block, about 200 KB at 1 000 blocks | derived from the skeleton in Section 8 |
 | Response time of `/f/<token>.ics` and `/healthz` | < 100 ms at the proxy; one synchronous worker then serves about 10 req/s, more than 1 000 times the expected load | target |
@@ -459,18 +460,17 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 
 | Idea | Value | Cost | Trigger to pull forward |
 |---|---|---|---|
-| **Free-busy-query acquisition** (FR-19) | Content never transits Milchglas — strongest privacy statement | 1 evening + V-3 | After MVP is stable |
+| **Free-busy-query acquisition** (FR-19) | Content never transits Milchglas — strongest privacy statement; but the free-busy path cannot exclude owner-declined events, loses `TRANSP`/`STATUS` on confidential events and never sees private ones, so FR-3 parity is impossible | 1 evening + V-3 | After MVP is stable |
 | **Fail-closed blockers** (FR-15) | Outage cannot become double bookings | 1 hour | First time the feed was stale > 1 day |
 | **Per-consumer tokens with rotation grace** (FR-16) | Attributable leaks, independent revocation | 2 hours | Third consumer or first suspected leak |
 | **Admin UI** (FR-17/18) | Maintenance without SSH | 1–2 evenings | Third manual `config.json` edit, or Option C |
 | **PROPFIND discovery + `missing` flag** | See withdrawn shares immediately | 1 hour | With admin UI |
 | **All-day / tentative modes** (FR-13/14) | Birthdays should not block bookings | 1 hour | First lost booking due to an all-day event [OPEN Q-1] |
 | **Per-source settings** | e.g. a vacation calendar's all-day events = busy, a family calendar's all-day events = ignore | 1 hour | With modes |
-| **Mobile token** (ICSx5 / iOS subscription) | Busy overlay on phone despite OX DAV limitation | 30 min | If wanted [OPEN Q-5] |
-| **Reverse WebCal** (Nextcloud subscribes mailbox.org `?ical=true`) | One private "everything" view — zero code | 5 min | Anytime |
+| **Mobile token** (ICSx5 / iOS subscription) | Busy overlay on phone if mailbox.org does not sync feed calendars over CalDAV (the OX default would; test on one phone, Q-5) | 30 min | If wanted [OPEN Q-5] |
+| **Reverse WebCal** (Nextcloud subscribes mailbox.org `?ical=true`) | One private view of all standard-visibility appointments (private-classified OX appointments show times only) — zero code; Nextcloud refreshes a subscription per its `REFRESH-INTERVAL`, else daily per the admin manual (the user manual says weekly) | 5 min | Anytime |
 | **CalDAV push into mailbox.org** (FR-20) | Independence from OX feed cache; works if V-1 fails | 1 evening | V-1 fails or cache interval unacceptable |
-| **Baïkal contract tests in CI** | Protects recurrence handling on upgrades | 2 hours | Before first Nextcloud major upgrade |
-| **Uptime monitor + e-mail alert** | Know about staleness before a client does | 15 min | With MVP deploy |
+| **Baïkal contract tests in CI**, then an official Nextcloud container in the contract suite | Protects recurrence handling on upgrades; the Nextcloud container makes the sharee semantics of NFR-C2 reproducible instead of captured | 2 hours, plus the Nextcloud image and share setup | Before first Nextcloud major upgrade |
 | **Option A unit files** | Post-migration landing spot | 30 min | Before moving off a PaaS host |
 | **Rewrite evaluation** (D-12) | Single static binary, smaller image and memory footprint; possibly one codebase for shared hosting instead of the Option D port | Open until evaluated; a rewrite reuses the golden fixtures (NFR-C1) as its parity check | MVP works and is deployed |
 
