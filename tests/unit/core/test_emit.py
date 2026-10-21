@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 
 from milchglas.core.emit import emit, uid
-from milchglas.core.model import Block, TimedBlock
+from milchglas.core.model import Block, TimedBlock, merge
 from milchglas.core.reduce import reduce_event
 from tests.support.blocks import BERLIN, at, day, timed
 from tests.support.feed import assert_feed_invariants, logical_lines, parse_feed, summaries
@@ -75,8 +75,8 @@ GOLDEN = _crlf(
 
 
 def test_feed_matches_the_golden_bytes() -> None:
-    # Timed block given first: day blocks still lead (EMIT-9). EMIT-2..5 and EMIT-8 in one.
-    feed = _emit([TIMED, DAY])
+    # EMIT-2..5 and EMIT-8 in one; emit writes the blocks in the order merge gives them.
+    feed = _emit([DAY, TIMED])
     assert feed == GOLDEN
     assert_feed_invariants(feed)
 
@@ -88,7 +88,8 @@ def test_feed_has_no_method_md_9() -> None:
 
 
 def test_unchanged_input_gives_byte_identical_feeds() -> None:
-    assert _emit([TIMED, DAY]) == _emit([DAY, TIMED]) == _emit([TIMED, DAY])
+    orders: list[list[Block]] = [[TIMED, DAY], [DAY, TIMED], [TIMED, DAY]]
+    assert {_emit(merge(blocks)) for blocks in orders} == {GOLDEN}
 
 
 def test_feed_reparses_to_the_same_blocks_emit_10() -> None:
@@ -110,7 +111,7 @@ def test_feed_orders_day_blocks_first_then_by_start_emit_9() -> None:
         timed("2026-10-01T08:00Z", "2026-10-01T09:00Z"),
         day("2026-10-03", "2026-10-04"),
     ]
-    assert parse_feed(_emit(blocks)) == [blocks[3], blocks[1], blocks[2], blocks[0]]
+    assert parse_feed(_emit(merge(blocks))) == [blocks[3], blocks[1], blocks[2], blocks[0]]
 
 
 # --- header (EMIT-2) ----------------------------------------------------------------------
@@ -243,7 +244,7 @@ def test_uid_changes_with_the_salt_det_5() -> None:
 
 def test_dtstamp_is_kept_for_known_blocks_and_now_for_new_ones() -> None:
     earlier = at("2026-09-01T06:00Z")
-    feed = _emit([TIMED, DAY], dtstamps={uid(SALT, TIMED): earlier})
+    feed = _emit([DAY, TIMED], dtstamps={uid(SALT, TIMED): earlier})
     lines = logical_lines(feed)
     stamps = [line for line in lines if line.startswith("DTSTAMP:")]
     assert stamps == ["DTSTAMP:20260914T120000Z", "DTSTAMP:20260901T060000Z"]  # day, timed

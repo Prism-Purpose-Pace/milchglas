@@ -11,7 +11,7 @@ import re
 from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime
 
-from milchglas.core.model import Block, DayBlock, TimedBlock
+from milchglas.core.model import Block, DayBlock
 
 CALNAME = "Privat (busy)"
 _LIMIT = 75  # octets per line, CRLF excluded (RFC 5545 §3.1)
@@ -41,6 +41,9 @@ def emit(  # noqa: PLR0913 - every argument is one field of the published feed
 ) -> bytes:
     """The feed for `blocks`, canonical bytes for canonical input.
 
+    `blocks` come from `merge`, which owns the order (day blocks first, then timed, each
+    by start); they are written as given.
+
     `dtstamps` maps UIDs of the previous feed to their DTSTAMP: a block that is still
     there keeps it, a new block gets `now`, so DTSTAMP is the last content change (D-7c).
     """
@@ -48,11 +51,6 @@ def emit(  # noqa: PLR0913 - every argument is one field of the published feed
         msg = "summary must not contain line breaks or control characters"
         raise ValueError(msg)
     ttl = _duration(ttl_seconds)
-    pending = list(blocks)
-    ordered: list[Block] = [
-        *sorted(b for b in pending if isinstance(b, DayBlock)),
-        *sorted(b for b in pending if isinstance(b, TimedBlock)),
-    ]
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
@@ -64,7 +62,7 @@ def emit(  # noqa: PLR0913 - every argument is one field of the published feed
         f"X-PUBLISHED-TTL:{ttl}",
     ]
     text = _escape(summary)
-    for block in ordered:
+    for block in blocks:
         key = uid(salt, block)
         kind = ";VALUE=DATE" if isinstance(block, DayBlock) else ""
         lines += [
