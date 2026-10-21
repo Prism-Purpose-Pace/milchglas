@@ -132,13 +132,14 @@ the expected-blocks oracle assumes until the spec changes.
 | CORE-RND-6 | 00:40Z–00:50Z (02:40 CEST, first pass) → 00:30Z–01:00Z | AC-3, FR-6 | unit | exists |
 | CORE-RND-7 | 2026-03-29 00:40Z–00:50Z (01:40 CET, before the gap) → 00:30Z–01:00Z; 01:05Z–01:10Z (03:05 CEST) → 01:00Z–01:15Z, and at grid 60 → 01:00Z–02:00Z (`-before-gap`, `-after-gap`, `-grid-60`) | AC-3, FR-6 | unit | exists |
 | CORE-RND-8 | `grid_minutes` must divide 1440 and every UTC-offset change of `tz` within 366 days after the run: 7, 25, 50 rejected; Europe/Berlin accepts 15, 30, 60 and rejects 45, 90, 120; Asia/Kolkata accepts 45, 90, 120; Australia/Lord_Howe rejects 60; grid 60 with Kolkata (+05:30) floors 10:07–10:52 IST to 10:00–11:00 IST (wall-time grid, not an epoch grid) | AC-22, FR-6 | unit | exists |
-| CORE-RND-9 | 2026-10-25 02:07–02:20 with `fold=1` (second pass) rounds to 01:00Z–01:30Z at grid 15, and 02:07 rounds to 01:00Z at grid 60; a local datetime is never rebuilt from components, which loses `fold` | AC-22, AC-3 | unit | planned |
+| CORE-RND-9 | 2026-10-25 02:07–02:20 with `fold=1` (second pass) rounds to 01:00Z–01:30Z at grid 15 and to 01:00Z–02:00Z at grid 60; at the grids the zone check rejects the block still widens by the offset in force at each instant (45 and 90 → 00:30Z–02:00Z, 120 → 01:00Z–03:00Z); a local datetime is never rebuilt from components, which loses `fold` | AC-22, AC-3 | unit | exists |
+| CORE-RND-10 | `grid_fits_zone(grid, tz, start)` counts the UTC-offset changes in the 366 days after `start` and no others (one 365 days away counts, one 367 days away or in the past does not), measured in minutes: Asia/Pyongyang's 30-minute change rejects 45 and accepts 30, Africa/Cairo's 60-minute change at midnight fits 60 and not 120, UTC fits every divisor of 1440; `start` must be timezone-aware; the grid it rejects is the one that leaves a rounded edge off the local grid (Berlin, 45, spring-forward day: the end lands on 03:15 CEST and rounding it again moves it) | FR-6, AC-22 | unit | exists |
 | CORE-MRG-1 | [9,12) + [10,11) + [11:30,12:30) → [9,12:30) | AC-1, FR-6 | unit | exists |
 | CORE-MRG-2 | Adjacent [9,10) + [10,11) → [9,11) | AC-1, FR-6 | unit | exists |
 | CORE-MRG-3 | [9,10) + [10:15,11) → two blocks | AC-1 | unit | exists |
 | CORE-MRG-4 | Tentative and confirmed overlapping → one block, tentative only if every contributor is tentative (`-mixed`, `-all-tentative`) | Q-10 | unit | exists |
 | CORE-MRG-5 | All-day 10-17→10-19 + 10-19→10-20 → 10-17→10-20; timed and all-day blocks never merge with each other (`-days`, `-kinds-apart`) | Q-9, AC-1 | unit | exists |
-| CORE-PIPE-1 | Demo calendars through reduce, clip, round and merge with the window pinned → exactly the oracle blocks | AC-1, AC-3 to AC-5 | unit | planned |
+| CORE-PIPE-1 | Demo calendars through reduce, clip, round and merge with the window pinned → exactly the oracle blocks | AC-1, AC-3 to AC-5 | unit | exists |
 | PROP-1 | Merge output is sorted and `a.end < b.start` strictly for consecutive blocks of the same kind | AC-1, FR-6 | property | exists |
 | PROP-2 | `merge(merge(x)) == merge(x)`; `round(round(x)) == round(x)` for every (zone, grid) pair the AC-22 check admits | FR-6, AC-22 | property | exists |
 | PROP-3 | Set-union semantics: a minute is covered by the output iff some rounded input covers it | D-7b | property | exists |

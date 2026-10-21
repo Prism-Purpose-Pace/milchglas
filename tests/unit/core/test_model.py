@@ -240,6 +240,7 @@ def test_round_floors_start_and_ceils_end_on_the_local_grid(
     ("grid", "expected"),
     [
         (15, timed("2026-10-25T01:00Z", "2026-10-25T01:30Z")),
+        (60, timed("2026-10-25T01:00Z", "2026-10-25T02:00Z")),
         # The zone check rejects 45, 90 and 120 for Berlin, but round_to_grid still reads the
         # offset in force at each instant, so direction and bound hold. At these grids the
         # one-hour offset error of a wall clock that loses the fold changes the result; at
@@ -247,6 +248,13 @@ def test_round_floors_start_and_ceils_end_on_the_local_grid(
         (45, timed("2026-10-25T00:30Z", "2026-10-25T02:00Z")),
         (90, timed("2026-10-25T00:30Z", "2026-10-25T02:00Z")),
         (120, timed("2026-10-25T01:00Z", "2026-10-25T03:00Z")),
+    ],
+    ids=[
+        "CORE-RND-9-grid-15",
+        "CORE-RND-9-grid-60",
+        "CORE-RND-9-grid-45",
+        "CORE-RND-9-grid-90",
+        "CORE-RND-9-grid-120",
     ],
 )
 def test_round_keeps_the_fold_of_the_second_pass(grid: int, expected: TimedBlock) -> None:
@@ -257,8 +265,8 @@ def test_round_keeps_the_fold_of_the_second_pass(grid: int, expected: TimedBlock
     assert round_to_grid([TimedBlock(start, end)], grid, BERLIN) == [expected]
 
 
-def test_round_uses_the_local_grid_of_a_half_hour_zone() -> None:
-    # Replaces catalogue CORE-RND-8 (reject grid 60 for +05:30): rounding reads the zone's
+def test_round_uses_the_local_grid_of_a_half_hour_zone_core_rnd_8() -> None:
+    # CORE-RND-8: the zone check accepts grid 60 for +05:30, and rounding reads the zone's
     # offset, so 10:07-10:52 IST rounds to whole local hours. UTC-epoch rounding would
     # give 09:30-11:30 IST here.
     kolkata = ZoneInfo("Asia/Kolkata")
@@ -280,13 +288,13 @@ def test_round_keeps_the_tentative_flag_and_day_blocks() -> None:
 
 
 @pytest.mark.parametrize("grid", [0, -15, 7, 25, 50, 1441])
-def test_round_rejects_a_grid_that_does_not_divide_the_day(grid: int) -> None:
+def test_round_rejects_a_grid_that_does_not_divide_the_day_core_rnd_8(grid: int) -> None:
     with pytest.raises(ValueError, match="grid"):
         round_to_grid([], grid, BERLIN)
 
 
 @pytest.mark.parametrize("grid", [1, 45, 90, 120, 1440])
-def test_round_accepts_every_divisor_of_the_day(grid: int) -> None:
+def test_round_accepts_every_divisor_of_the_day_core_rnd_8(grid: int) -> None:
     assert round_to_grid([], grid, BERLIN) == []
 
 
@@ -304,7 +312,9 @@ PYONGYANG_CHANGE = at("2018-05-04T15:00Z")
 
 @pytest.mark.parametrize("zone", [BERLIN, KOLKATA, LORD_HOWE, UTC_ZONE], ids=lambda z: z.key)
 @pytest.mark.parametrize("grid", [0, -15, 7, 25, 50, 1441])
-def test_grid_fits_no_zone_when_it_does_not_divide_the_day(grid: int, zone: ZoneInfo) -> None:
+def test_grid_fits_no_zone_when_it_does_not_divide_the_day_core_rnd_8(
+    grid: int, zone: ZoneInfo
+) -> None:
     assert not grid_fits_zone(grid, zone, JAN_2026)
 
 
@@ -327,7 +337,7 @@ def test_grid_fits_no_zone_when_it_does_not_divide_the_day(grid: int, zone: Zone
     ],
     ids=lambda v: v.key if isinstance(v, ZoneInfo) else str(v),
 )
-def test_grid_fits_the_zone_by_the_offset_changes_it_has(
+def test_grid_fits_the_zone_by_the_offset_changes_it_has_core_rnd_8(
     zone: ZoneInfo, grid: int, *, fits: bool
 ) -> None:
     assert grid_fits_zone(grid, zone, JAN_2026) is fits
@@ -343,7 +353,7 @@ def test_grid_fits_the_zone_by_the_offset_changes_it_has(
     ],
     ids=["beyond-366-days", "inside-365-days", "an-hour-before", "past"],
 )
-def test_grid_fits_counts_only_the_changes_in_the_366_days_after_start(
+def test_grid_fits_counts_only_the_changes_in_the_366_days_after_start_core_rnd_10(
     start: datetime, *, fits: bool
 ) -> None:
     # 45 does not divide the 30-minute change; 30 always does.
@@ -360,7 +370,7 @@ def test_grid_fits_counts_only_the_changes_in_the_366_days_after_start(
     ],
     ids=["rejected-grid-45", "accepted-grid-15"],
 )
-def test_the_grid_the_zone_check_rejects_is_the_one_that_leaves_an_edge_off_the_grid(
+def test_the_grid_the_zone_check_rejects_leaves_an_edge_off_the_grid_core_rnd_10(
     grid: int, expected: TimedBlock, *, on_grid: bool
 ) -> None:
     # 01:30-01:31 CET on the spring-forward day. The 60-minute change is a multiple of 15
@@ -376,7 +386,7 @@ def test_the_grid_the_zone_check_rejects_is_the_one_that_leaves_an_edge_off_the_
     assert grid_fits_zone(grid, BERLIN, JAN_2026) is on_grid
 
 
-def test_grid_fits_needs_an_aware_start() -> None:
+def test_grid_fits_needs_an_aware_start_core_rnd_10() -> None:
     with pytest.raises(ValueError, match="aware"):
         grid_fits_zone(15, BERLIN, datetime(2026, 1, 1))
 

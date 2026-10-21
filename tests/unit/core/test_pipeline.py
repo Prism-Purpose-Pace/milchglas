@@ -79,7 +79,7 @@ def test_window_matches_the_oracle() -> None:
     )
 
 
-def test_demo_calendars_reduce_to_the_oracle_blocks() -> None:
+def test_demo_calendars_reduce_to_the_oracle_blocks_core_pipe_1() -> None:
     blocks, recurring = _pipeline()
     assert recurring == {"BBX-D2-17", "BBX-D3-14"}  # the filter removes exactly these
     assert _spans(blocks) == _expected(recurring)
