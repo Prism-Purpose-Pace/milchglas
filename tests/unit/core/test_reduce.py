@@ -76,7 +76,7 @@ def test_excluded_events_yield_their_skip_reason(uid: str, expected: Skip) -> No
         # D-3: redaction is Milchglas's job, so CLASS never hides a block.
         ("CORE-FIL-8-private", timed("2026-10-06T06:00Z", "2026-10-06T07:00Z")),
         ("CORE-FIL-8-confidential", timed("2026-10-06T06:00Z", "2026-10-06T07:00Z")),
-        # D-3: what a read-only sharee receives of a CONFIDENTIAL event (SUMMARY rewritten,
+        # D-3, AC-4: what a read-only sharee receives of a CONFIDENTIAL event (SUMMARY rewritten,
         # no STATUS, TRANSP or ATTENDEE) still blocks; it can never be excluded.
         ("confidential-as-sharee", timed("2026-10-06T10:00Z", "2026-10-06T10:30Z")),
         ("CORE-FIL-9", timed("2026-10-02T13:00Z", "2026-10-02T14:00Z", tentative=True)),
