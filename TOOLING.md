@@ -65,7 +65,8 @@ permissions and grants per job only what it needs.
 
 `public-guard` reads the maintainer's private denylist from the `PUBLIC_DENYLIST`
 secret (stored as Actions secret and as Dependabot secret) and reports only file, line
-and pattern number — never the matched text. Without the secret the job fails, except
+and pattern number — never the matched text; a file-name hit prints the path, which
+holds the term, but CI runs after the push, so that path is already public. Without the secret the job fails, except
 on pull requests from forks, which check paths only; the full check runs again on the
 push to `main`. Commit messages and identities are scanned for the range a change adds
 (`base..head` on a pull request, `before..sha` on a push), never the whole history:
