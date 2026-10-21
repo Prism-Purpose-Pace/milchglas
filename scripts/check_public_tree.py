@@ -25,7 +25,9 @@ Checks over the tracked (or given) files:
   committer and every path and blob it adds or changes (path guard, file name, content), plus
   the pushed ref names. A term added in one commit and removed in a later one is found; a
   merge counts for the paths that match none of its parents. Content the remote already holds
-  is public and stays unscanned (stale remote-tracking refs only widen the scan). pre-commit
+  is public and stays unscanned. The remote's content is read from the local remote-tracking
+  refs: a ref left from another URL (`git remote set-url` without a prune) narrows the scan,
+  so fetch with `--prune` after changing a remote's URL. pre-commit
   exports the pushed ref (PRE_COMMIT_TO_REF, else PRE_COMMIT_LOCAL_BRANCH); outside a push it
   is HEAD. A push whose ref cannot be resolved, or a failing git, is refused. pre-commit hands
   hooks only the first ref of a multi-ref push, and none at all for a push whose refs carry no
