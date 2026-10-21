@@ -98,8 +98,14 @@ def _duration(seconds: int) -> str:
         raise ValueError(msg)
     hours, rest = divmod(seconds, 3600)
     minutes, secs = divmod(rest, 60)
-    parts = ((hours, "H"), (minutes, "M"), (secs, "S"))
-    return "PT" + "".join(f"{count}{unit}" for count, unit in parts if count)
+    # RFC 5545 §3.3.6: seconds follow hours only through a minutes part (`PT1H0M5S`).
+    return "PT" + "".join(
+        [
+            f"{hours}H" if hours else "",
+            f"{minutes}M" if minutes or (hours and secs) else "",
+            f"{secs}S" if secs else "",
+        ]
+    )
 
 
 def _escape(text: str) -> str:

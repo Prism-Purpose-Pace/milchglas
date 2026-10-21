@@ -10,7 +10,7 @@ from hypothesis import strategies as st
 from milchglas.core.emit import emit, uid
 from milchglas.core.model import Block, TimedBlock, Window, clip, merge, round_to_grid, window
 from tests.support.blocks import BERLIN
-from tests.support.feed import assert_feed_invariants, parse_feed, summaries
+from tests.support.feed import assert_feed_invariants, logical_lines, parse_feed, summaries
 from tests.support.strategies import GRIDS, YEAR_START, mixed_blocks
 
 WINDOW = window(YEAR_START, BERLIN, 365)
@@ -19,12 +19,12 @@ WINDOW = window(YEAR_START, BERLIN, 365)
 UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u2028\u2029]")
 
 
-def _feed(blocks: list[Block], summary: str = "Blocker Privat") -> bytes:
+def _feed(blocks: list[Block], summary: str = "Blocker Privat", ttl_seconds: int = 900) -> bytes:
     return emit(
         blocks,
         summary=summary,
         salt="prop-salt",
-        ttl_seconds=900,
+        ttl_seconds=ttl_seconds,
         version="0.1.2",
         now=YEAR_START,
         dtstamps={},
@@ -75,3 +75,23 @@ def test_any_summary_is_either_refused_or_survives_a_reparse(summary: str) -> No
     feed = _feed([TimedBlock(WINDOW.start, WINDOW.end)], summary)
     assert summaries(feed) == [summary]
     assert_feed_invariants(feed, forbidden=())
+
+
+# RFC 5545 §3.3.6 dur-value, written out from the ABNF.
+_TIME_PART = r"T(?:\d+H(?:\d+M(?:\d+S)?)?|\d+M(?:\d+S)?|\d+S)"
+DUR_VALUE = re.compile(rf"[+-]?P(?:\d+W|\d+D(?:{_TIME_PART})?|{_TIME_PART})")
+_SECONDS = {"H": 3600, "M": 60, "S": 1}
+
+
+@given(st.integers(min_value=1, max_value=10**7))
+def test_every_emitted_ttl_is_a_dur_value_of_the_configured_seconds(ttl_seconds: int) -> None:
+    hints = [
+        line.partition(":")[2]
+        for line in logical_lines(_feed([], ttl_seconds=ttl_seconds))
+        if line.startswith(("REFRESH-INTERVAL", "X-PUBLISHED-TTL"))
+    ]
+    assert len(hints) == 2  # the two refresh hints of FR-7
+    for hint in hints:
+        assert DUR_VALUE.fullmatch(hint), hint
+        said = sum(int(n) * _SECONDS[unit] for n, unit in re.findall(r"(\d+)([HMS])", hint))
+        assert said == ttl_seconds
