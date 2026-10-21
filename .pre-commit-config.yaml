@@ -140,6 +140,13 @@ repos:
         name: public-tree guard (staged files)
         language: system
         entry: uv run --script scripts/check_public_tree.py
+      # The message itself, at commit time: a private term in a message is caught before
+      # the commit exists, not first at push, when it already needs a reword.
+      - id: check-public-tree-message
+        name: public-tree guard (commit message)
+        language: system
+        entry: uv run --script scripts/check_public_tree.py
+        stages: [commit-msg]
       # One fact, one place: the spec owns the config keys and its thresholds; CLAUDE.md,
       # architecture and threat model must not drift from it. Scoped to the commits that
       # touch one of the four documents; `uv run --script scripts/check_spec_drift.py`

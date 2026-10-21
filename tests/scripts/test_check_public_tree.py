@@ -234,6 +234,27 @@ def test_local_push_hook_scans_only_unpushed_commits() -> None:
     assert all(line.rstrip().endswith("--commit-messages origin/main..HEAD") for line in entries)
 
 
+def test_commit_message_hook_runs_the_term_guard_on_the_message() -> None:
+    # A private ID in a commit message was caught only at push, when it already needed a
+    # reword of published-to-be history; the commit-msg stage catches it before it exists.
+    config = (REPO / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    block = config.split("- id: check-public-tree-message", 1)[-1].split("- id:", 1)[0]
+    assert "entry: uv run --script scripts/check_public_tree.py\n" in block
+    assert "stages: [commit-msg]" in block
+
+
+def test_commit_message_file_with_a_denylisted_term_is_reported(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git/COMMIT_EDITMSG").write_text("fix: cite secretproject\n", encoding="utf-8")
+    assert cpt.run([".git/COMMIT_EDITMSG"], PATTERNS, tmp_path)
+
+
+def test_clean_commit_message_file_passes(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git/COMMIT_EDITMSG").write_text("fix: cite Q-14\n", encoding="utf-8")
+    assert cpt.run([".git/COMMIT_EDITMSG"], PATTERNS, tmp_path) == []
+
+
 def _git(repo: Path, *args: str) -> str:
     env = {
         "PATH": os.environ["PATH"],
