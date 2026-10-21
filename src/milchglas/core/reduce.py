@@ -94,7 +94,7 @@ def _timed(event: Component, start: datetime, tz: ZoneInfo) -> TimedBlock | Skip
     if isinstance(end, datetime):
         stop = _zoned(end, tz)
     elif end is None and isinstance(duration, timedelta):
-        stop = _after(start, duration)
+        stop = _after(start, duration, tz)
     elif end is None and duration is None:
         stop = start
     else:
@@ -165,11 +165,16 @@ def _zoned(value: datetime, tz: ZoneInfo) -> datetime:
     return value.replace(tzinfo=tz) if value.tzinfo is None else value
 
 
-def _after(start: datetime, duration: timedelta) -> datetime:
-    """RFC 5545 §3.3.6: whole days are nominal (same wall time), the rest is exact.
+def _after(start: datetime, duration: timedelta, tz: ZoneInfo) -> datetime:
+    """OPEN Q-20 default: days and weeks are nominal in `tz`, the rest is exact.
 
-    shortcut: timedelta stores PT24H as one day, so PT24H counts as nominal; it differs
-    only for a zoned DTSTART across a DST change, the local-expansion path (CORE-DUR-4).
+    RFC 5545 §3.3.6 counts a day as the same wall time next day. The server expands an
+    instance to a UTC DTSTART and keeps DURATION, so the day is counted in the configured
+    zone, not in UTC: P1D from 2026-10-24 07:00Z ends 08:00Z, 25 real hours (CORE-DUR-6).
+
+    shortcut: timedelta stores PT24H as one day, so a PT24H instance also counts as
+    nominal and over-blocks by one hour on a DST change day; reading the raw DURATION
+    text in the source layer would tell the two apart.
     """
     days = timedelta(days=duration.days)
-    return (start + days).astimezone(UTC) + (duration - days)
+    return (start.astimezone(tz) + days).astimezone(UTC) + (duration - days)
