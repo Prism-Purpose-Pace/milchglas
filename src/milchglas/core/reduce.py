@@ -46,15 +46,13 @@ def reduce_event(
     tz: ZoneInfo,
     owner_emails: Collection[str],
     duration: str | None,
-    keep_transparent_allday: bool = True,
 ) -> Block | Skip:
     """The busy block of `event`, or why it has none (FR-3, FR-4).
 
     `CLASS` is never read: redaction is Milchglas's job (D-3). The filters run before the
     times, so an event that cannot block anyway cannot fail a refresh either. Floating
     times are read in `tz`. OPEN Q-12 default: all-day events ignore TRANSP, because most
-    clients write TRANSPARENT as their all-day default; `keep_transparent_allday=False`
-    drops them like timed transparent events.
+    clients write TRANSPARENT as their all-day default; only timed events are dropped.
 
     `duration` is the raw text of the DURATION property, `None` if the event has none.
     icalendar hands DURATION over as a timedelta, which loses what RFC 5545 §3.3.6
@@ -64,9 +62,7 @@ def reduce_event(
     status = _text(event, "STATUS")
     replies = _owner_replies(event, {_address(email) for email in owner_emails})
     transparent = _text(event, "TRANSP") == "TRANSPARENT"
-    skip = _excluded(
-        event, status, replies, transparent=transparent and not keep_transparent_allday
-    )
+    skip = _excluded(event, status, replies)
     if skip is not None:
         return skip
     block = _span(event, tz, duration)
@@ -79,9 +75,7 @@ def reduce_event(
     return replace(block, tentative=True) if tentative else block
 
 
-def _excluded(
-    event: Component, status: str, replies: list[str], *, transparent: bool
-) -> Skip | None:
+def _excluded(event: Component, status: str, replies: list[str]) -> Skip | None:
     if event.name != "VEVENT":
         return Skip.NOT_EVENT
     if status == "CANCELLED":
@@ -89,8 +83,6 @@ def _excluded(
     # Declined under one address but not under another still means attending.
     if replies and all(reply == "DECLINED" for reply in replies):
         return Skip.DECLINED
-    if transparent:
-        return Skip.TRANSPARENT
     return None
 
 

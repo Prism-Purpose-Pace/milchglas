@@ -28,15 +28,12 @@ def _reduce_event(
     name: str,
     event: Component,
     owner_emails: Collection[str] = OWNERS,
-    *,
-    keep_transparent_allday: bool = True,
 ) -> Block | Skip:
     return reduce_event(
         event,
         tz=BERLIN,
         owner_emails=owner_emails,
         duration=duration_text(name, event),
-        keep_transparent_allday=keep_transparent_allday,
     )
 
 
@@ -92,14 +89,6 @@ def test_excluded_events_yield_their_skip_reason(uid: str, expected: Skip) -> No
 )
 def test_busy_events_yield_a_block(uid: str, expected: Block) -> None:
     assert _reduce(FILTER, uid) == expected
-
-
-def test_transparent_all_day_events_can_be_dropped_open_q_12() -> None:
-    # The switch restores the RFC-literal reading for all-day events; timed transparent
-    # events are dropped either way (FR-3).
-    for uid in ("CORE-FIL-12", "CORE-FIL-3-transparent"):
-        event = component(FILTER, uid)
-        assert _reduce_event(FILTER, event, keep_transparent_allday=False) is Skip.TRANSPARENT
 
 
 def test_declines_count_only_for_configured_owners() -> None:
