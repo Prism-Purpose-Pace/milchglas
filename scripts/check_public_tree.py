@@ -18,14 +18,19 @@ Checks over the tracked (or given) files:
   Reports name file, line and pattern index only - never the matched text - so public CI
   logs cannot leak what is guarded. Denylist patterns must be ASCII (enforced: exit 2).
 - --message-files: the paths are commit-message files; only their content is term-scanned.
-- --pre-push: the pre-push hook. Scans the pushed commit, not HEAD or the working tree: its
-  tree as git holds it (path guard, file names, blob content), its commits not yet on
-  origin/main (message, author, committer) and the pushed ref names. pre-commit exports the
-  pushed ref (PRE_COMMIT_TO_REF, else PRE_COMMIT_LOCAL_BRANCH); outside a push it is HEAD.
-  A push whose ref cannot be resolved is refused. pre-commit hands hooks only the first
-  ref of a multi-ref push, so push one ref per `git push`. Without a denylist the push is
-  refused (exit 2) when PRE_COMMIT_REMOTE_URL names the canonical repository; to any other
-  remote, or in a manual run, the term scan is skipped with a notice.
+- --pre-push: the pre-push hook. Scans what the push transfers, not HEAD or the working tree:
+  every commit the pushed commit reaches that no remote-tracking ref of the remote holds
+  (`git rev-list <commit> --not --remotes=<remote>`, pre-commit's own rule for "new"; without
+  PRE_COMMIT_REMOTE_NAME, any remote-tracking ref), each with its message, author and
+  committer and every path and blob it adds or changes (path guard, file name, content), plus
+  the pushed ref names. A term added in one commit and removed in a later one is found; a
+  merge counts for the paths that match none of its parents. Content the remote already holds
+  is public and stays unscanned (stale remote-tracking refs only widen the scan). pre-commit
+  exports the pushed ref (PRE_COMMIT_TO_REF, else PRE_COMMIT_LOCAL_BRANCH); outside a push it
+  is HEAD. A push whose ref cannot be resolved, or a failing git, is refused. pre-commit hands
+  hooks only the first ref of a multi-ref push, so push one ref per `git push`. Without a
+  denylist the push is refused (exit 2) when PRE_COMMIT_REMOTE_URL names the canonical
+  repository; to any other remote, or in a manual run, the term scan is skipped with a notice.
 
 Residual: matching is per line, so a term split across lines, encoded (base64, UTF-16
 without BOM) or spelled with homoglyphs from another script is not detected.
@@ -44,7 +49,7 @@ import re
 import subprocess
 import sys
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -67,8 +72,9 @@ LOG_FORMAT = "%h%n%an <%ae>%n%cn <%ce>%n%B%x00"
 HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Co", "Cn", "Cs", "Zl", "Zp", "Mn", "Mc", "Me"})
 HANGUL_FILLERS = frozenset(map(chr, (0x115F, 0x1160, 0x3164, 0xFFA0)))
 KEPT_CONTROLS = frozenset("\n\t")
-# --pre-push: commits below this ref are published and cannot be rewritten.
-PUSH_BASE = "origin/main"
+# git's mode for a submodule entry (no content here) and for a path a commit removes.
+GITLINK_MODE = "160000"
+DELETED_MODE = "000000"
 # Only writers can push to this repository (contributors push to forks), so a --pre-push to
 # it without a denylist must refuse: the skip would publish unscanned, with no CI before it.
 CANONICAL_REPOSITORY = "Prism-Purpose-Pace/milchglas"
@@ -90,6 +96,10 @@ REF_VARIABLES = (
 
 class DenylistError(ValueError):
     """A denylist entry is not a valid regular expression."""
+
+
+class GitError(RuntimeError):
+    """A git command the scan depends on failed, so the scan cannot vouch for what it covers."""
 
 
 @dataclass(frozen=True)
@@ -258,74 +268,105 @@ def parse_log(out: str) -> list[tuple[str, str]]:
     return messages
 
 
-def commit_messages(rev: str) -> list[tuple[str, str]]:
-    out = subprocess.run(
-        ["git", "log", f"--format={LOG_FORMAT}", rev], check=True, capture_output=True, text=True
-    ).stdout
-    return parse_log(out)
+def git_out(*args: str, stdin: bytes | None = None) -> bytes:
+    try:
+        return subprocess.run(["git", *args], input=stdin, check=True, capture_output=True).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        # Names the subcommand only: git's own stderr can quote a ref name or a path.
+        msg = f"git {args[0]} failed"
+        raise GitError(msg) from exc
 
 
-def tree_entries(commit: str) -> list[tuple[str, str, str]]:
-    """(type, object id, path) of every blob and gitlink in the tree of `commit`."""
-    out = subprocess.run(
-        ["git", "ls-tree", "-r", "-z", "--full-tree", commit],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    entries = []
-    for record in out.split("\0"):
-        if record:
-            meta, _, path = record.partition("\t")  # "<mode> <type> <oid>" TAB path
-            _mode, kind, oid = meta.split(" ")
-            entries.append((kind, oid, path))
-    return entries
+def commit_messages(*revs: str) -> list[tuple[str, str]]:
+    out = git_out("log", f"--format={LOG_FORMAT}", *revs)
+    return parse_log(out.decode("utf-8", errors="replace"))
 
 
 def read_blobs(oids: Iterable[str]) -> dict[str, bytes]:
     """Content of each object from one `git cat-file --batch` ("<oid> <type> <size>" LF data LF)."""
     wanted = list(dict.fromkeys(oids))
-    out = subprocess.run(
-        ["git", "cat-file", "--batch"],
-        input="".join(f"{oid}\n" for oid in wanted).encode(),
-        check=True,
-        capture_output=True,
-    ).stdout
+    out = git_out("cat-file", "--batch", stdin="".join(f"{oid}\n" for oid in wanted).encode())
     blobs: dict[str, bytes] = {}
     pos = 0
-    for oid in wanted:
-        end = out.index(b"\n", pos)
-        size = int(out[pos:end].split()[2])  # a missing object has no size: fails closed
-        blobs[oid] = out[end + 1 : end + 1 + size]
-        pos = end + size + 2
+    try:
+        for oid in wanted:
+            end = out.index(b"\n", pos)
+            size = int(out[pos:end].split()[2])
+            blobs[oid] = out[end + 1 : end + 1 + size]
+            pos = end + size + 2
+    except (IndexError, ValueError) as exc:  # a missing object has no size: fails closed
+        msg = "git cat-file failed"
+        raise GitError(msg) from exc
     return blobs
 
 
-def tree_report(commit: str, patterns: Sequence[re.Pattern[str]] | None) -> list[str]:
-    """`run` over the tree of `commit` as git holds it, not over the working tree."""
-    entries = tree_entries(commit)
-    private = path_violations(path for _, _, path in entries)
-    report = [f"{p}: private path must not be tracked in the public repo" for p in private]
-    if patterns is None:
-        return report
-    blobs = read_blobs(oid for kind, oid, path in entries if kind == "blob" and path not in private)
-    for kind, oid, path in entries:
-        if path in private:
-            continue
-        report.extend(format_hit(hit) for hit in name_violations(path, patterns))
-        if kind == "blob":  # a symlink blob is its link text; a gitlink has no content here
-            text = decode(blobs[oid])
-            report.extend(format_hit(hit) for hit in term_violations(path, text, patterns))
-    return report
+def changes(commit: str) -> list[tuple[str, str, str]]:
+    """(mode, object id, path) of every path `commit` adds or changes against ALL its parents.
+
+    `-c` lists, for a merge, only the paths that match none of its parents: what the merge
+    itself adds. The rest comes from a parent, which is in the pushed range or public.
+    """
+    out = git_out("diff-tree", "-c", "-r", "-z", "--root", "--no-renames", "--no-commit-id", commit)
+    parts = out.decode("utf-8", errors="replace").split("\0")
+    entries = []
+    for meta, path in zip(parts[0::2], parts[1::2], strict=False):
+        # One ":" per parent, then each parent's mode, the result's mode, the same for the oids.
+        parents = len(meta) - len(meta.lstrip(":"))
+        fields = meta.lstrip(":").split(" ")
+        if parents == 0 or len(fields) < 2 * parents + 3:
+            msg = "git diff-tree failed"
+            raise GitError(msg)
+        if fields[parents] != DELETED_MODE:  # a removed path transfers nothing
+            entries.append((fields[parents], fields[2 * parents + 1], path))
+    return entries
 
 
-def ref_violations(env: Mapping[str, str], patterns: Sequence[re.Pattern[str]]) -> list[str]:
+def ref_violations(refs: Mapping[str, str], patterns: Sequence[re.Pattern[str]]) -> list[str]:
     return [
         f"ref {label}: matches denylist pattern #{hit.pattern + 1}"
-        for variable, label in REF_VARIABLES
-        if env.get(variable)
-        for hit in name_violations(env[variable], patterns)
+        for label, name in refs.items()
+        for hit in name_violations(name, patterns)
     ]
+
+
+def push_report(
+    remote: str | None,
+    commit: str,
+    refs: Mapping[str, str],
+    patterns: Sequence[re.Pattern[str]] | None,
+) -> list[str]:
+    """Findings in everything that pushing `commit` to `remote` transfers.
+
+    `refs` maps a role label ("local branch") to a ref name that is published too. Reads
+    no environment; the caller says which remote, which commit and which refs.
+    """
+    known = f"--remotes={remote}" if remote else "--remotes"
+    shas = git_out("rev-list", "--reverse", "--abbrev-commit", commit, "--not", known).split()
+    entries = [
+        (sha.decode(), mode, oid, path) for sha in shas for mode, oid, path in changes(sha.decode())
+    ]
+    blobs: dict[str, bytes] = {}
+    if patterns is not None:
+        blobs = read_blobs(
+            oid for _, mode, oid, path in entries if mode != GITLINK_MODE and not is_private(path)
+        )
+    report = []
+    for sha, mode, oid, path in entries:
+        where = f"{sha}:{path}"
+        if is_private(path):
+            report.append(f"{where}: private path must not be tracked in the public repo")
+        elif patterns is not None:
+            report.extend(
+                format_hit(replace(hit, where=where)) for hit in name_violations(path, patterns)
+            )
+            if mode != GITLINK_MODE:  # a symlink blob is its link text; a gitlink has no content
+                text = decode(blobs[oid])
+                report.extend(format_hit(hit) for hit in term_violations(where, text, patterns))
+    if patterns is not None:
+        messages = commit_messages(commit, "--not", known)
+        report.extend(format_hit(hit) for hit in message_violations(messages, patterns))
+        report.extend(ref_violations(refs, patterns))
+    return report
 
 
 def pre_push_report(
@@ -336,17 +377,25 @@ def pre_push_report(
         if any(variable in env for variable in PUSH_VARIABLES):
             return ["cannot determine the pushed ref, refusing"]  # HEAD would be another ref
         commit = "HEAD"  # a manual `pre-commit run --hook-stage pre-push`
-    report = tree_report(commit, patterns)
-    if patterns is not None:
-        messages = commit_messages(f"{PUSH_BASE}..{commit}")
-        report.extend(format_hit(hit) for hit in message_violations(messages, patterns))
-        report.extend(ref_violations(env, patterns))
-    return report
+    refs = {label: env[variable] for variable, label in REF_VARIABLES if env.get(variable)}
+    return push_report(env.get("PRE_COMMIT_REMOTE_NAME"), commit, refs, patterns)
 
 
 def pushes_to_canonical(env: Mapping[str, str]) -> bool:
     """Whether the remote pre-commit exports (PRE_COMMIT_REMOTE_URL) is the canonical repository."""
     return CANONICAL_URL.search(env.get("PRE_COMMIT_REMOTE_URL", "").strip()) is not None
+
+
+def scan(args: argparse.Namespace, patterns: Sequence[re.Pattern[str]] | None) -> list[str]:
+    if args.pre_push:
+        return pre_push_report(os.environ, patterns)
+    report = run(
+        args.paths or tracked_files(), patterns, Path.cwd(), message_files=args.message_files
+    )
+    if patterns is not None and args.commit_messages:
+        messages = commit_messages(args.commit_messages)
+        report.extend(format_hit(hit) for hit in message_violations(messages, patterns))
+    return report
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -369,7 +418,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--pre-push",
         action="store_true",
-        help="the pre-push hook: scan the pushed commit (tree, unpushed commits, ref names)",
+        help="the pre-push hook: scan what the push transfers (commits the remote lacks, ref names)",
     )
     args = parser.parse_args(argv)
     if args.pre_push and (args.paths or args.commit_messages or args.message_files):
@@ -398,15 +447,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 2
         print("check-public-tree: no denylist found, term scan skipped", file=sys.stderr)
-    if args.pre_push:
-        report = pre_push_report(os.environ, patterns)
-    else:
-        report = run(
-            args.paths or tracked_files(), patterns, Path.cwd(), message_files=args.message_files
-        )
-        if patterns is not None and args.commit_messages:
-            messages = commit_messages(args.commit_messages)
-            report.extend(format_hit(hit) for hit in message_violations(messages, patterns))
+    try:
+        report = scan(args, patterns)
+    except GitError as exc:
+        print(f"check-public-tree: {exc}, refusing", file=sys.stderr)
+        return 1
     for line in report:
         print(line, file=sys.stderr)
     if report:

@@ -145,9 +145,13 @@ Verifying a release asset: see [SECURITY.md](SECURITY.md).
   pre-commit evaluates only the first ref of a multi-ref push (`--all`, `--mirror`,
   `--tags`). The protection against publishing pre-public history is that maintainer
   clones hold none — this repository contains no other history to tag.
-- The pre-push public-tree guard scans the pushed ref (its tree, its commits not yet on
-  `origin/main`, its ref names), not HEAD; pre-commit hands hooks only the first ref of a
-  multi-ref push, so push one ref per `git push`.
+- The pre-push public-tree guard scans what the push transfers, not HEAD: every commit of
+  the pushed ref that no remote-tracking ref of the remote holds (`git rev-list <commit>
+  --not --remotes=<remote>`, pre-commit's rule for "new"), with its message, identities and
+  every path and blob it adds or changes, plus the ref names. A term added and removed
+  again inside the push is found; content the remote already holds is not rescanned.
+  pre-commit hands hooks only the first ref of a multi-ref push, so push one ref per
+  `git push`.
 - The `tags` ruleset freezes every tag: nobody moves or deletes one, and nobody holds
   a bypass (an admin disables the ruleset to repair a wrong tag). Creating a tag stays
   open to writers, because release-please tags with `GITHUB_TOKEN` and GitHub rejects
