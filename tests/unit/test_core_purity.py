@@ -24,8 +24,8 @@ from pathlib import Path
 import pytest
 
 CORE = Path(__file__).resolve().parents[2] / "src" / "milchglas" / "core"
-# Pure computation only. Extend deliberately, in review, when core needs a module
-# (icalendar / dateutil once reduce and emit land).
+# Pure computation only. Extend deliberately, in review, when core needs a module.
+# icalendar: reduce reads already-parsed components; parsing bytes stays in sources/.
 ALLOWED_MODULES = frozenset(
     {
         "__future__",
@@ -36,6 +36,7 @@ ALLOWED_MODULES = frozenset(
         "enum",
         "functools",
         "hashlib",
+        "icalendar",
         "itertools",
         "math",
         "milchglas.core",
