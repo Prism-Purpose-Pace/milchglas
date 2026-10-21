@@ -27,7 +27,10 @@ classifiers = [
     "Topic :: Office/Business :: Scheduling",
 ]
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "icalendar>=7",
+    "tzdata>=2026.5",
+]
 
 [project.urls]
 Homepage = "https://github.com/Prism-Purpose-Pace/milchglas"
