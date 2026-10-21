@@ -17,7 +17,7 @@ bumps `uv.lock` and the SHA-pinned GitHub Actions weekly.
 | Lock in sync with `pyproject.toml` | pre-commit + pre-push | `uv lock --check` |
 | Workflow schema validation | pre-commit | check-jsonschema 0.37.4 |
 | Fast secret scan (staged diff) | pre-commit | gitleaks v8.30.1 |
-| Public-tree guard (private paths; private terms in file names, content, commit messages and identities when a denylist is present) | pre-commit + pre-push | `scripts/check_public_tree.py` (stdlib) |
+| Public-tree guard (private paths; private terms in file names, content, commit messages and identities when a denylist is present; a push to the canonical repository requires it) | pre-commit + pre-push | `scripts/check_public_tree.py` (stdlib) |
 | Pushed ref descends from the public root commit | pre-push | `scripts/check_push_ancestry.py` (stdlib) |
 | Commit size (warn 5/100, block 20/800) | pre-commit | `scripts/check_commit_size.py` (stdlib) |
 | PEP 723 script-deps CVE audit | pre-commit (warn) + pre-push (block) | `scripts/audit_script_deps.py` (stdlib) |
