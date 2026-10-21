@@ -115,6 +115,24 @@ def load_denylist(file: Path, env: Mapping[str, str]) -> list[re.Pattern[str]] |
     return None
 
 
+def main_checkout_denylist() -> Path | None:
+    """The default denylist of the main checkout, also when run in a linked worktree.
+
+    The denylist is git-ignored, so a linked worktree has no copy; without this lookup
+    the term scan was skipped there behind a passing hook.
+    """
+    try:
+        common = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return Path(common).parent / DEFAULT_DENYLIST
+
+
 def decode(data: bytes) -> str:
     if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
         return data.decode("utf-16", errors="replace")
@@ -221,8 +239,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="also scan commit messages and identities reachable from REV",
     )
     args = parser.parse_args(argv)
+    denylist = args.denylist
+    if denylist == DEFAULT_DENYLIST and not denylist.is_file():
+        denylist = main_checkout_denylist() or denylist
     try:
-        patterns = load_denylist(args.denylist, os.environ)
+        patterns = load_denylist(denylist, os.environ)
     except DenylistError as exc:
         print(f"check-public-tree: {exc}", file=sys.stderr)
         return 2
