@@ -14,8 +14,7 @@ Known limits: the import rule reads the module graph, so deliberate obfuscation
 (`_imp = __import__`, `__builtins__["open"]`) passes. The clock rule matches calls, so a
 clock passed as a value (`field(default_factory=datetime.now)`) and ambient-timezone
 reads (`astimezone()` without an argument, `zoneinfo.reset_tzpath`) are not caught; it is
-also receiver-blind, so a pure `clock.now()` parameter method is flagged. Until core/
-holds code the tree scan is empty and the case table below carries the proof.
+also receiver-blind, so a pure `clock.now()` parameter method is flagged.
 """
 
 import ast
