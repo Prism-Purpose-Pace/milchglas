@@ -25,7 +25,7 @@ import pytest
 
 CORE = Path(__file__).resolve().parents[2] / "src" / "milchglas" / "core"
 # Pure computation only. Extend deliberately, in review, when core needs a module.
-# icalendar: reduce reads already-parsed components; parsing bytes stays in sources/.
+# Each entry admits the module and everything below it.
 ALLOWED_MODULES = frozenset(
     {
         "__future__",
@@ -36,7 +36,6 @@ ALLOWED_MODULES = frozenset(
         "enum",
         "functools",
         "hashlib",
-        "icalendar",
         "itertools",
         "math",
         "milchglas.core",
@@ -46,12 +45,18 @@ ALLOWED_MODULES = frozenset(
         "zoneinfo",
     }
 )
+# Third-party modules by exact name, with the names core may take from them: reduce reads
+# already-parsed components (parsing bytes stays in sources/), and icalendar.cli reads
+# files, so neither `import icalendar.cli` nor `from icalendar import cli` may pass.
+ALLOWED_NAMES = {"icalendar": frozenset({"Component"})}
 FORBIDDEN_CALLS = frozenset({"__import__", "compile", "eval", "exec", "open"})
 CLOCK_METHODS = frozenset({"now", "today", "utcnow"})
 
 
 def _allowed(module: str) -> bool:
-    return any(module == ok or module.startswith(f"{ok}.") for ok in ALLOWED_MODULES)
+    return module in ALLOWED_NAMES or any(
+        module == ok or module.startswith(f"{ok}.") for ok in ALLOWED_MODULES
+    )
 
 
 def _import_from_violations(node: ast.ImportFrom, depth: int) -> list[str]:
@@ -60,6 +65,12 @@ def _import_from_violations(node: ast.ImportFrom, depth: int) -> list[str]:
         return [f"from {'.' * node.level}{node.module or ''} import"]
     if node.level == 0 and not _allowed(node.module or ""):
         return [f"from {node.module} import"]
+    if node.level == 0 and node.module in ALLOWED_NAMES:
+        return [
+            f"from {node.module} import {alias.name}"
+            for alias in node.names
+            if alias.name not in ALLOWED_NAMES[node.module]
+        ]
     return []
 
 
@@ -93,12 +104,17 @@ def purity_violations(source: str, depth: int = 0) -> list[str]:
         ("import itertools\nfrom collections.abc import Iterable", 0, []),
         ("from . import model\nfrom milchglas.core.model import Interval", 0, []),
         ("from .. import model", 1, []),
+        ("import icalendar\nfrom icalendar import Component", 0, []),
         # Impure imports.
         ("import sqlite3", 0, ["import sqlite3"]),
         ("from gzip import open as gz_open", 0, ["from gzip import"]),
         ("import os.path", 0, ["import os.path"]),
         ("import tarfile, zipfile", 0, ["import tarfile", "import zipfile"]),
         ("import builtins", 0, ["import builtins"]),
+        # icalendar is allowed as itself, not as a tree: icalendar.cli reads files.
+        ("from icalendar.cli import main", 0, ["from icalendar.cli import"]),
+        ("import icalendar.cli", 0, ["import icalendar.cli"]),
+        ("from icalendar import cli", 0, ["from icalendar import cli"]),
         ("x = __import__('os')", 0, ["__import__()"]),
         ("open('feed.ics')", 0, ["open()"]),
         # Relative imports climbing out of core.
