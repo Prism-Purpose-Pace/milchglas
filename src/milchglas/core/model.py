@@ -8,6 +8,8 @@ blocks hold aware UTC instants, day blocks whole local dates; the two kinds neve
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
+from functools import lru_cache
+from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -97,8 +99,11 @@ def round_to_grid(blocks: Iterable[Block], grid_minutes: int, tz: ZoneInfo) -> l
     """Floor starts and ceil ends of timed blocks to the local grid of `tz` (FR-6).
 
     The grid is laid on local wall time with the UTC offset in force at each instant, so
-    the fold and the gap of a DST change round correctly in any zone. A grid that divides
-    the day keeps local midnight, and with it every window boundary, on the grid.
+    the fold and the gap of a DST change are read correctly. For any grid that divides
+    the day: a start only moves earlier and an end only later, each by less than one step,
+    and day blocks pass through. Every edge lands on the local grid, and a second rounding
+    changes nothing, only where `grid_fits_zone` is true; otherwise an edge on the far side
+    of a UTC-offset change that the grid does not divide can sit off the grid.
     """
     if grid_minutes < 1 or _DAY_MINUTES % grid_minutes:
         msg = "grid_minutes must be a positive divisor of 1440"
@@ -114,6 +119,23 @@ def round_to_grid(blocks: Iterable[Block], grid_minutes: int, tz: ZoneInfo) -> l
         else block
         for block in blocks
     ]
+
+
+def grid_fits_zone(grid_minutes: int, tz: ZoneInfo, start: datetime) -> bool:
+    """Whether rounding to `grid_minutes` lands every edge on the local grid of `tz` (FR-6).
+
+    True when the grid divides the day and every UTC-offset change of `tz` in the 366 days
+    after `start`, measured in minutes (AC-22). Only then are the edges of `round_to_grid`
+    on the grid and the rounding idempotent. `round_to_grid` itself needs only the day
+    rule, so a caller that takes the grid from configuration calls this one first.
+    """
+    if start.utcoffset() is None:
+        msg = "start must be timezone-aware"
+        raise ValueError(msg)
+    if grid_minutes < 1 or _DAY_MINUTES % grid_minutes:
+        return False
+    step = timedelta(minutes=grid_minutes)
+    return all(shift % step == timedelta(0) for shift in _offset_shifts(tz, start))
 
 
 def merge(blocks: Iterable[Block]) -> list[Block]:
@@ -150,3 +172,18 @@ def _wall(instant: datetime, tz: ZoneInfo) -> timedelta:
     """Local wall-clock time of `instant` in `tz`, as a duration since the epoch."""
     offset = instant.astimezone(tz).utcoffset() or timedelta(0)
     return instant - _EPOCH + offset
+
+
+@lru_cache(maxsize=1024)
+def _offset_shifts(tz: ZoneInfo, start: datetime) -> frozenset[timedelta]:
+    """The sizes of the UTC-offset changes of `tz` in the 366 days after `start`.
+
+    zoneinfo has no public transition list, so the offset is read once an hour. Shortcut:
+    two changes inside one hour would cancel, and tzdata has none. The cache keeps a scan
+    of all zones fast in tests; a refresher passes a new `start` every run, so it is bounded.
+    """
+    offsets = [
+        (start + timedelta(hours=hour)).astimezone(tz).utcoffset() or timedelta(0)
+        for hour in range(366 * 24 + 1)
+    ]
+    return frozenset(abs(after - before) for before, after in pairwise(offsets) if before != after)
