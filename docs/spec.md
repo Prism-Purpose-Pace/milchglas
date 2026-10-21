@@ -44,28 +44,90 @@ The operator's calendar landscape:
 
 ---
 
-## 2. Goals
+## 2. Goals and scope (MoSCoW)
 
-| ID | Goal | Priority |
+One list, prioritised with MoSCoW. **Must** goals are the MVP (Section 6, "MVP" column). **Should** goals are MVP where Section 6 says so and otherwise follow it. **Could** goals are backlog (Section 12) and need an explicit maintainer decision before they are pulled forward. **Won't** items are out of scope; they were the non-goals of earlier drafts.
+
+| ID | Priority | Goal | Specified in |
+|---|---|---|---|
+| G1 | Must | Publish an ICS feed that contains only busy intervals — no titles, descriptions, locations, attendees, categories, alarms | FR-4, FR-7, NFR-P3, AC-8 |
+| G2 | Must | Feed is consumable by mailbox.org (OX iCal subscription) and by meetergo (read-only ICS calendar) | FR-7, FR-9, AC-0.1, AC-0.2, AC-11 |
+| G3 | Must | Private event content never leaves Nextcloud; if it must transit Milchglas it is held in memory only, never persisted or logged | FR-4, NFR-P1, AC-8 |
+| G4 | Must | Wrong intervals are prevented by design: recurrences, exceptions, DST and all-day events are handled correctly | FR-2, FR-3, FR-6, NFR-C1, AC-1 to AC-5 |
+| G5 | Must | Fail-safe: a source outage never silently turns into "free" slots | FR-8, FR-11, NFR-R1, AC-7 |
+| G6 | Must | Operable by one person in the evening without on-call: boring technology, one config file, one log | NFR-O1, NFR-O2, AC-14 |
+| G7 | Should | Maintenance without touching secrets: swap/enable/disable source calendars, rotate the feed URL, force a refresh (MVP via config file; UI later) | FR-12, AC-10; FR-17, FR-18 |
+| G8 | Should | Host-portable: the same core code runs under Options A, B and C (Section 9) | NFR-O3, Section 9 |
+| G9 | Should | Data minimisation of the busy pattern itself: short window, rounding, merging | NFR-P2, FR-5, FR-6 |
+| G10 | Could | Content never transits Milchglas: busy times are acquired with `free-busy-query` | FR-19, V-3 |
+| G11 | Could | A prolonged source outage blocks bookings instead of leaving a stale feed (fail-closed) | FR-15, NFR-R3, Q-4 |
+| G12 | Could | Leaks are attributable and revocable per consumer | FR-16 |
+| G13 | Could | Maintenance without SSH: admin UI with calendar discovery | FR-17, FR-18, NFR-S6 |
+| G14 | Could | All-day and tentative handling per mode and per source calendar | FR-13, FR-14, Q-1 |
+| G15 | Could | Busy overlay on the operator's phone through a feed subscription | Q-5 |
+| G16 | Could | Independence from the mailbox.org feed cache by writing blocks via CalDAV | FR-20, V-1 |
+| W1 | Won't | Two-way sync or writing into any calendar (bookings continue to flow meetergo → mailbox.org) | |
+| W2 | Won't | Replacing meetergo, Nextcloud Appointments or OX scheduling | |
+| W3 | Won't | Multi-tenant or multi-user operation | |
+| W4 | Won't | Mobile push; phones may subscribe to the same feed (G15) | |
+| W5 | Won't | Encrypting the feed for consumers (meetergo requires public URLs [FACT]; OX credential support for feeds is unverified) | |
+| W6 | Won't | Protecting against the providers themselves (the Nextcloud host, the PaaS/hosting provider, mailbox.org, meetergo) seeing what they legitimately process | |
+
+## 3. Limits, operation and expected load
+
+### 3.1 Known limitations
+
+What Milchglas cannot promise, by design or because of the platforms it connects. Open questions in Section 13 may narrow some of these; none of them is a defect to be fixed in the MVP.
+
+| ID | Limitation | Consequence | Reference |
+|---|---|---|---|
+| L1 | Not real time. A change reaches the feed within one refresh interval (15 min) and each consumer after its own polling: meetergo usually shows changes within 5–10 min and re-checks the calendar before it confirms a booking [FACT]; Open-Xchange refreshes a feed calendar every 7 days by default, waits one hour after a failed fetch, and honours `REFRESH-INTERVAL` [FACT] — whether mailbox.org keeps that behaviour is V-1 | About 25 min until meetergo blocks a new private appointment; the mailbox.org view can lag longer (measured in AC-0.1) | FR-10, V-1, AC-0.1, AC-11 |
+| L2 | Blocks exist only from today 00:00 to today + `window_days`. meetergo starts every new meeting type with a 30-day booking window [FACT] | Days beyond the window are bookable unless every meeting type's window fits inside it | FR-5, D-6, Q-2, AC-0.4 |
+| L3 | Blocks are rounded to the grid (15 min) and merged | Up to one grid step minus one minute of extra busy time at each block edge; adjacent appointments appear as one block | FR-6, G9 |
+| L4 | One shared feed token until FR-16 | A leak cannot be attributed to one consumer, and a rotation cuts off both consumers at once | NFR-S1, G12 |
+| L5 | Nextcloud skips objects it cannot parse and recurring series beyond 3500 iterations, and still answers `207 Multi-Status` [FACT] | Milchglas cannot see these drops; such an event yields no block | FR-1, Q-14, Q-16 |
+| L6 | The read-only service user never sees `CLASS:PRIVATE` events and receives `CLASS:CONFIDENTIAL` events without `STATUS`, `TRANSP` and `ATTENDEE` [FACT] | Private events yield no block (D-3); confidential events always block, even when cancelled, transparent or declined | D-3, FR-3 |
+| L7 | The service credential reads the full content of every `CLASS:PUBLIC` event in the shared calendars [FACT] | A leaked app password discloses content, not only busy times; D-2 bounds write access, not read access | D-2, NFR-S3 |
+| L8 | Event content transits refresher memory on every run | Only G10 removes the transit | G3, FR-19 |
+| L9 | The capability URL is the only credential for the feed | Anyone holding the URL sees the busy pattern of the window | NFR-S1, W5 |
+| L10 | Python 3.12 receives security fixes until about October 2028 [FACT] | A move to a newer Python minor release is due before then | D-12, NFR-O3 |
+
+### 3.2 Operating requirements
+
+What the operator provides and keeps running. Values are for Option B (Section 9) unless stated.
+
+| ID | Requirement | Why | Reference |
+|---|---|---|---|
+| OR1 | A container host with a persistent volume, Compose support and an edge proxy with automatic TLS; about 150 MB of free memory for the two services | Runs `web` and `refresher` and keeps the feed and state across deploys | Section 9 Option B, Section 3.3 |
+| OR2 | A DNS record for the feed host, ports 80/443 reachable at the proxy, a certificate from a public CA | Both consumers fetch the feed over HTTPS from the Internet | FR-9, Q-6 |
+| OR3 | The Nextcloud service user `svc-milchglas` with read-only shares only, quota `0 B` (the value `none` means unlimited), and an app password that can be revoked in one click | Least privilege on the source side | D-2, NFR-S3, AC-0.3 |
+| OR4 | `CALDAV_URL`, `CALDAV_USER` and `CALDAV_SECRET` set as platform environment variables. The platform host is trusted with them: Coolify, for example, writes them into a plaintext `.env` on the server at deploy time [FACT] | No secret in Git, image or `config.json` | D-11, NFR-S2 |
+| OR5 | Proxy and platform access logs never record the feed path. Traefik can drop the request path field or disable access logs per router, but cannot hash it [FACT] | The path carries the token | NFR-S5 |
+| OR6 | An external uptime monitor polls `/healthz` and alerts the operator by e-mail | A stale feed must not go unnoticed | NFR-R2, FR-11 |
+| OR7 | An accurate host clock (NTP) | The window starts at "today 00:00" in `tz` | FR-5 |
+| OR8 | Outbound HTTPS from the refresher to the Nextcloud host | Data source | FR-1, NFR-S4 |
+| OR9 | Backup of `config.json` and the state directory before a host migration | Losing the UID salt changes every UID, and consumers then replace all blocks | NFR-O2, Q-13 |
+| OR10 | The consumers are set up once: a feed subscription in mailbox.org, and an ICS calendar in meetergo for every meeting type in use | Both consumers must read the feed | AC-0.1, AC-0.2, AC-0.4 |
+| OR11 | Operator time: about one evening for setup; no routine work; the runbook on an alert, a token rotation or a host move | One person, no on-call | G6, NFR-O2, Section 9 |
+
+### 3.3 Expected load and performance
+
+Milchglas serves one operator; scaling beyond these figures is not a goal (W3). *Derived* values follow from the parameters in this spec, *measured* values come from local probes or registries on 2026-10-21, and *target* values are design limits that AC-0.3 and the first week of operation confirm.
+
+| Quantity | Value | Basis |
 |---|---|---|
-| G1 | Publish an ICS feed that contains only busy intervals — no titles, descriptions, locations, attendees, categories, alarms | Must |
-| G2 | Feed is consumable by mailbox.org (OX iCal subscription) and by meetergo (read-only ICS calendar) | Must |
-| G3 | Private event content never leaves Nextcloud; if it must transit Milchglas it is held in memory only, never persisted or logged | Must |
-| G4 | Wrong intervals are prevented by design: recurrences, exceptions, DST and all-day events are handled correctly | Must |
-| G5 | Fail-safe: a source outage never silently turns into "free" slots | Must |
-| G6 | Operable by one person in the evening without on-call: boring technology, one config file, one log | Must |
-| G7 | Maintenance without touching secrets: swap/enable/disable source calendars, rotate the feed URL, force a refresh | Should (MVP via config file; UI later) |
-| G8 | Host-portable: the same core code runs under Options A, B and C (Section 9) | Should |
-| G9 | Data minimisation of the busy pattern itself: short window, rounding, merging | Should |
-
-## 3. Non-goals
-
-- Two-way sync or writing into any calendar (bookings continue to flow meetergo → mailbox.org).
-- Replacing meetergo, Nextcloud Appointments or OX scheduling.
-- Multi-tenant or multi-user operation.
-- Mobile push; phones may subscribe to the same feed (Section 12).
-- Encrypting the feed for consumers (meetergo requires public URLs [FACT]; OX credential support for feeds is unverified).
-- Protecting against the providers themselves (the Nextcloud host, the PaaS/hosting provider, mailbox.org, meetergo) seeing what they legitimately process.
+| Users | 1 operator; 2 consumers (mailbox.org, meetergo); optionally a third, a phone subscription (Q-5) | Section 1, W3 |
+| Enabled source calendars | ≤ 10 | target |
+| Event instances in the window after expansion | ≤ 1 000 | target; AC-0.3 records the instance count and the response size |
+| CalDAV response size | well below 1 MiB per calendar; hard limit 16 MiB | target; Q-15 |
+| Refresh runs | 96 per day (every 15 min) | derived, FR-10 |
+| Refresh run duration | a few seconds when healthy; at most about 47 s per unreachable calendar (4 attempts × 10 s timeout plus 1 + 2 + 4 s backoff) | derived, FR-1, Q-15 |
+| Feed requests | about 100–400 per day (≈ 0.005 req/s): mailbox.org at most 96 at `PT15M`, meetergo on its own sync cycle | derived, L1 |
+| Feed size | about 0.2 KB per block, about 200 KB at 1 000 blocks | derived from the skeleton in Section 8 |
+| Response time of `/f/<token>.ics` and `/healthz` | < 100 ms at the proxy; one synchronous worker then serves about 10 req/s, more than 1 000 times the expected load | target |
+| Memory | about 39 MB per Python process with the runtime libraries loaded (macOS arm64; Linux figures differ); about 80–120 MB for `web` and `refresher` together | measured; estimate |
+| Container base image | `python:3.12-slim`, about 43 MB compressed | measured (registry) |
+| Freshness | private change → feed ≤ 15 min; → meetergo ≈ 25 min; `/healthz` turns 503 after 60 min without a successful refresh | derived, FR-10, FR-11, L1 |
 
 ---
 
@@ -426,6 +488,17 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - Shared web hosting provider Helpcenter — Python via Phusion Passenger only, on higher tiers; community reports on `pip` unavailability, disable→enable quirk, control-panel session timeout; tariff overview (SSH + cron in all tariffs).
 - RFC 4791 (CalDAV: `calendar-query`, `expand`, `free-busy-query`), RFC 5545 (iCalendar).
 - Prior art: `ical-filter-proxy` (freebusy_mode fork), keeper.sh, zeitfenster.
+
+**Added 2026-10-21** (validation of the research claims; sources for Section 3):
+
+- meetergo Help — *Buchungen in der Zukunft begrenzen* (updated 2026-08-04; new meeting types start at 30 calendar days). https://help.meetergo.com/de/scheduling/meeting-types/limit-future-bookings/
+- meetergo Help — why calendar events do not block availability (changes sync within 5–10 min; re-check before a booking is confirmed). https://help.meetergo.com/de/scheduling/availability/why-are-events-in-my-calendar-not-blocking-my-availability/
+- Open-Xchange middleware configuration properties, version 8 (`refreshInterval` default 10080 min, `retryAfterErrorInterval` 3600 s). https://documentation.open-xchange.com/components/middleware/config/8/properties.json
+- Nextcloud server v35.0.1 — `apps/dav/lib/CalDAV/` (`CalDavBackend::calendarQuery` skips unparsable and over-limit objects; `CalendarObject` and `Calendar` redact or hide events for sharees) and `lib/private/User/User.php` (quota values). https://github.com/nextcloud/server/tree/v35.0.1/apps/dav/lib/CalDAV
+- sabre/vobject 4.5.6 — `Settings::$maxRecurrences` (3500). https://github.com/sabre-io/vobject/blob/4.5.6/lib/Settings.php
+- Coolify v4.4.6 — `ApplicationDeploymentJob` writes runtime variables into the application's `.env` on the server. https://github.com/coollabsio/coolify/blob/v4.4.6/app/Jobs/ApplicationDeploymentJob.php
+- Traefik — access logs (fields can be dropped, access logs disabled per router). https://doc.traefik.io/traefik/reference/install-configuration/observability/logs-and-accesslogs/
+- PEP 693 — Python 3.12 release schedule (security fixes until about October 2028). https://peps.python.org/pep-0693/
 
 ---
 
