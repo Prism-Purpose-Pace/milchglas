@@ -239,7 +239,9 @@ def test_commit_message_hook_runs_the_term_guard_on_the_message() -> None:
     # reword of published-to-be history; the commit-msg stage catches it before it exists.
     config = (REPO / ".pre-commit-config.yaml").read_text(encoding="utf-8")
     block = config.split("- id: check-public-tree-message", 1)[-1].split("- id:", 1)[0]
-    assert "entry: uv run --script scripts/check_public_tree.py\n" in block
+    # --message-files: git hands a linked worktree's message over as an absolute path inside
+    # the main checkout's .git; its directory names are not content to guard.
+    assert "entry: uv run --script scripts/check_public_tree.py --message-files\n" in block
     assert "stages: [commit-msg]" in block
 
 
@@ -253,6 +255,67 @@ def test_clean_commit_message_file_passes(tmp_path: Path) -> None:
     (tmp_path / ".git").mkdir()
     (tmp_path / ".git/COMMIT_EDITMSG").write_text("fix: cite Q-14\n", encoding="utf-8")
     assert cpt.run([".git/COMMIT_EDITMSG"], PATTERNS, tmp_path) == []
+
+
+# In a linked worktree git hands the hook an absolute path inside the main checkout's
+# .git (<main>/.git/worktrees/<n>/COMMIT_EDITMSG). Only the content of that file is the
+# commit; a directory name above it is the maintainer's own, and must not refuse a clean
+# message (the only way out would be --no-verify).
+GUARDED_DIRECTORIES = pytest.mark.parametrize(
+    "directory", ["acme.example", ".claude"], ids=["term-in-directory", "private-directory"]
+)
+
+
+def _message_file(tmp_path: Path, directory: str, text: str) -> Path:
+    message = tmp_path / directory / ".git/worktrees/wt1/COMMIT_EDITMSG"
+    message.parent.mkdir(parents=True)
+    message.write_text(text, encoding="utf-8")
+    return message
+
+
+def _denylist_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    monkeypatch.delenv("PUBLIC_DENYLIST", raising=False)
+    (tmp_path / "deny.txt").write_text("\n".join(p.pattern for p in PATTERNS), encoding="utf-8")
+    return str(tmp_path / "deny.txt")
+
+
+@GUARDED_DIRECTORIES
+def test_clean_message_file_under_a_guarded_directory_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, directory: str
+) -> None:
+    deny = _denylist_file(tmp_path, monkeypatch)
+    message = _message_file(tmp_path, directory, "fix: cite Q-14\n")
+    assert cpt.main(["--denylist", deny, "--message-files", str(message)]) == 0
+
+
+@GUARDED_DIRECTORIES
+def test_banned_message_file_under_a_guarded_directory_is_reported_by_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    directory: str,
+) -> None:
+    deny = _denylist_file(tmp_path, monkeypatch)
+    message = _message_file(tmp_path, directory, "fix: x\n\ncite secretproject\n")
+    assert cpt.main(["--denylist", deny, "--message-files", str(message)]) == 1
+    err = capsys.readouterr().err
+    # one finding: the content hit by line and pattern index, no path or name finding
+    assert err.splitlines() == [
+        f"{message}:3: matches denylist pattern #2",
+        "check-public-tree: 1 finding(s)",
+    ]
+    assert "secretproject" not in err.lower()
+
+
+def test_message_files_without_a_path_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Without a path the guard would fall back to every tracked file, path guard off.
+    deny = _denylist_file(tmp_path, monkeypatch)
+    with pytest.raises(SystemExit) as exit_info:
+        cpt.main(["--denylist", deny, "--message-files"])
+    assert exit_info.value.code == 2
+    assert "needs at least one path" in capsys.readouterr().err
 
 
 def _git(repo: Path, *args: str) -> str:
