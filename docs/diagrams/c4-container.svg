@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="c4" viewBox="0 0 1240 712" role="img" aria-label="Container view, Option B: event content exists only inside the refresher&#x27;s memory; web serves the reduced feed from the shared volume." font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z" fill="#4a5664"/></marker></defs>
+<rect class="bg" width="1240" height="712" fill="#ffffff"/>
+<rect class="zone" x="16" y="330" width="192" height="192" rx="10" fill="none" stroke="#6f7c89" stroke-width="1.4" stroke-dasharray="7 5"/>
+<rect class="zone" x="262" y="112" width="740" height="554" rx="10" fill="none" stroke="#6f7c89" stroke-width="1.4" stroke-dasharray="7 5"/>
+<rect class="zone" x="1084" y="262" width="152" height="322" rx="10" fill="none" stroke="#6f7c89" stroke-width="1.4" stroke-dasharray="7 5"/>
+<rect class="sysb" x="380" y="240" width="480" height="404" rx="12" fill="#f6fafc" stroke="#2f6f8f" stroke-width="1.6"/>
+<rect class="content" x="405" y="380" width="190" height="124" rx="10" fill="none" stroke="#b4532a" stroke-width="1.4" stroke-dasharray="7 5"/>
+<rect class="box ext" x="36" y="392" width="152" height="66" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box ext" x="290" y="150" width="180" height="60" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box container" x="550" y="272" width="140" height="60" rx="8" fill="#eef5f9" stroke="#2f6f8f" stroke-width="1.3"/>
+<rect class="box container" x="420" y="395" width="160" height="70" rx="8" fill="#eef5f9" stroke="#2f6f8f" stroke-width="1.3"/>
+<rect class="box container" x="660" y="395" width="160" height="70" rx="8" fill="#eef5f9" stroke="#2f6f8f" stroke-width="1.3"/>
+<rect class="box container" x="550" y="540" width="140" height="60" rx="8" fill="#eef5f9" stroke="#2f6f8f" stroke-width="1.3"/>
+<rect class="box ext" x="880" y="300" width="100" height="256" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box ext" x="1100" y="300" width="130" height="56" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box ext" x="1100" y="400" width="130" height="56" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box ext" x="1100" y="500" width="130" height="56" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box person" x="540" y="20" width="160" height="56" rx="8" fill="#f4f1fa" stroke="#6b5b95" stroke-width="1.3"/>
+<polyline class="edge" points="620,76 620,272" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="540,48 380,48 380,150" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="440,210 440,395" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="540,395 577,332" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="700,395 663,332" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="565,465 565,540" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="675,540 675,465" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="420,430 188,430" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="880,430 820,430" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="1100,328 980,328" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="1100,428 980,428" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="1100,528 980,528" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<text class="zone-lbl strong" x="28" y="350" font-size="11" font-weight="600" text-anchor="start" fill="#6f7c89">Owner&#x27;s calendar server</text>
+<text class="zone-lbl" x="28" y="364" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Class-A content</text>
+<text class="zone-lbl strong" x="274" y="132" font-size="11" font-weight="600" text-anchor="start" fill="#6f7c89">Coolify host</text>
+<text class="zone-lbl" x="274" y="146" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">owner-operated</text>
+<text class="zone-lbl strong" x="1096" y="282" font-size="11" font-weight="600" text-anchor="start" fill="#6f7c89">Third parties</text>
+<text class="zone-lbl" x="1096" y="296" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">anonymous data only</text>
+<text class="sysb-lbl strong" x="394" y="630" font-size="11.5" font-weight="600" text-anchor="start" fill="#2f6f8f">Milchglas, Option B: one image, two services</text>
+<text class="content-lbl strong" x="414" y="494" font-size="11" font-weight="600" text-anchor="start" fill="#b4532a">Class-A, memory only</text>
+<text class="name" x="112.0" y="414.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">Nextcloud</text>
+<text class="stereo" x="112.0" y="429.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[External system]</text>
+<text class="desc" x="112.0" y="444.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">CalDAV server</text>
+<text class="name" x="380.0" y="169.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">PaaS environment</text>
+<text class="stereo" x="380.0" y="184.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[Secret store]</text>
+<text class="desc" x="380.0" y="199.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">CALDAV_*, MILCHGLAS_*</text>
+<text class="name" x="620.0" y="298.5" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">config.json</text>
+<text class="stereo" x="620.0" y="313.5" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[File, non-secret]</text>
+<text class="name" x="500.0" y="419.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">refresher</text>
+<text class="stereo" x="500.0" y="434.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[Python 3.12]</text>
+<text class="desc" x="500.0" y="449.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">pipeline every 15 min</text>
+<text class="name" x="740.0" y="419.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">web</text>
+<text class="stereo" x="740.0" y="434.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[gunicorn, WSGI]</text>
+<text class="desc" x="740.0" y="449.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">serves feed, /healthz</text>
+<text class="name" x="620.0" y="559.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">Shared volume</text>
+<text class="stereo" x="620.0" y="574.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[Docker volume]</text>
+<text class="desc" x="620.0" y="589.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">feed + state only</text>
+<text class="name" x="930.0" y="417.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">Edge proxy</text>
+<text class="stereo" x="930.0" y="432.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[Platform]</text>
+<text class="desc" x="930.0" y="447.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">TLS</text>
+<text class="name" x="1165.0" y="324.5" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">mailbox.org</text>
+<text class="stereo" x="1165.0" y="339.5" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[External system]</text>
+<text class="name" x="1165.0" y="424.5" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">meetergo</text>
+<text class="stereo" x="1165.0" y="439.5" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[External system]</text>
+<text class="name" x="1165.0" y="524.5" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">Uptime monitor</text>
+<text class="stereo" x="1165.0" y="539.5" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[External system]</text>
+<text class="name" x="620.0" y="44.5" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">Owner</text>
+<text class="stereo" x="620.0" y="59.5" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[Person, operator]</text>
+<rect class="lbl-bg" x="624.0" y="157.5" width="96.9" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="628" y="168" font-size="10.5" font-weight="400" text-anchor="start" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">edits settings</text>
+<rect class="lbl-bg" x="417.9" y="29.5" width="84.2" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="460" y="40" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">sets secrets</text>
+<rect class="lbl-bg" x="320.1" y="311.5" width="115.9" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="432" y="322" font-size="10.5" font-weight="400" text-anchor="end" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">CALDAV_* injected</text>
+<rect class="lbl-bg" x="459.1" y="353.5" width="96.9" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="552" y="364" font-size="10.5" font-weight="400" text-anchor="end" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">reads settings</text>
+<rect class="lbl-bg" x="686.0" y="353.5" width="77.8" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="690" y="364" font-size="10.5" font-weight="400" text-anchor="start" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">reads token</text>
+<rect class="lbl-bg" x="464.1" y="517.5" width="96.9" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="557" y="528" font-size="10.5" font-weight="400" text-anchor="end" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">atomic replace</text>
+<rect class="lbl-bg" x="679.0" y="501.5" width="122.3" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="683" y="512" font-size="10.5" font-weight="400" text-anchor="start" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">reads feed + state</text>
+<rect class="lbl-bg" x="226.2" y="410.5" width="147.7" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="300" y="421" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">CalDAV REPORT + expand</text>
+<rect class="lbl-bg" x="223.0" y="436.5" width="154.0" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="300" y="447" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">read-only, app password</text>
+<rect class="lbl-bg" x="817.4" y="411.5" width="65.2" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="850" y="422" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">TLS ended</text>
+<rect class="lbl-bg" x="985.2" y="308.5" width="109.6" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="1040" y="319" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">GET /f/TOKEN.ics</text>
+<rect class="lbl-bg" x="985.2" y="408.5" width="109.6" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="1040" y="419" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">GET /f/TOKEN.ics</text>
+<rect class="lbl-bg" x="997.9" y="508.5" width="84.2" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="1040" y="519" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">GET /healthz</text>
+<rect class="box scope" x="24" y="684" width="22" height="13" rx="3" fill="#d7e8f1" stroke="#2f6f8f" stroke-width="1.2"/>
+<text class="legend" x="54" y="694" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Milchglas (in scope)</text>
+<rect class="box ext" x="208.0" y="684" width="22" height="13" rx="3" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.2"/>
+<text class="legend" x="238.0" y="694" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">External system</text>
+<rect class="box person" x="360.0" y="684" width="22" height="13" rx="3" fill="#f4f1fa" stroke="#6b5b95" stroke-width="1.2"/>
+<text class="legend" x="390.0" y="694" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Person</text>
+<rect class="zone" x="454.4" y="684" width="22" height="13" rx="3" fill="none" stroke="#6f7c89" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text class="legend" x="484.4" y="694" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Trust zone</text>
+<line class="edge" x1="574.4" y1="690" x2="600.4" y2="690" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<text class="legend" x="608.4" y="694" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Caller to callee</text>
+</svg>

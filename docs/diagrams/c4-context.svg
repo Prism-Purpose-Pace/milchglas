@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="c4" viewBox="0 0 1240 640" role="img" aria-label="System context: Milchglas sits between the owner&#x27;s calendar server, which holds private content, and third-party consumers, which receive busy blocks only." font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z" fill="#4a5664"/></marker></defs>
+<rect class="bg" width="1240" height="640" fill="#ffffff"/>
+<rect class="zone" x="20" y="196" width="232" height="228" rx="10" fill="none" stroke="#6f7c89" stroke-width="1.4" stroke-dasharray="7 5"/>
+<rect class="zone" x="448" y="196" width="344" height="228" rx="10" fill="none" stroke="#6f7c89" stroke-width="1.4" stroke-dasharray="7 5"/>
+<rect class="zone" x="990" y="112" width="232" height="452" rx="10" fill="none" stroke="#6f7c89" stroke-width="1.4" stroke-dasharray="7 5"/>
+<rect class="box ext" x="50" y="272" width="172" height="66" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box scope" x="500" y="250" width="240" height="110" rx="8" fill="#d7e8f1" stroke="#2f6f8f" stroke-width="2.2"/>
+<rect class="box ext" x="1020" y="140" width="172" height="66" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box ext" x="1020" y="272" width="172" height="66" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box ext" x="1020" y="440" width="172" height="66" rx="8" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.3"/>
+<rect class="box person" x="1020" y="18" width="172" height="56" rx="8" fill="#f4f1fa" stroke="#6b5b95" stroke-width="1.3"/>
+<rect class="box person" x="540" y="528" width="160" height="56" rx="8" fill="#f4f1fa" stroke="#6b5b95" stroke-width="1.3"/>
+<polyline class="edge" points="500,305 222,305" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="1020,305 740,305" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="1020,180 740,268" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="1020,466 740,342" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="1106,74 1106,140" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="1106,206 1106,272" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="620,528 620,360" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<polyline class="edge" points="540,556 136,556 136,338" fill="none" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<text class="zone-lbl strong" x="32" y="216" font-size="11" font-weight="600" text-anchor="start" fill="#6f7c89">Owner&#x27;s calendar server</text>
+<text class="zone-lbl" x="32" y="230" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Class-A content</text>
+<text class="zone-lbl strong" x="460" y="216" font-size="11" font-weight="600" text-anchor="start" fill="#6f7c89">Milchglas host</text>
+<text class="zone-lbl" x="460" y="230" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">owner-operated</text>
+<text class="zone-lbl strong" x="1002" y="528" font-size="11" font-weight="600" text-anchor="start" fill="#6f7c89">Third parties</text>
+<text class="zone-lbl" x="1002" y="542" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">anonymous data only</text>
+<text class="name" x="136.0" y="294.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">Nextcloud</text>
+<text class="stereo" x="136.0" y="309.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[External system]</text>
+<text class="desc" x="136.0" y="324.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">CalDAV server</text>
+<text class="name" x="620.0" y="286.5" font-size="16" font-weight="700" text-anchor="middle" fill="#1b2430">Milchglas</text>
+<text class="stereo" x="620.0" y="301.5" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[Software system]</text>
+<text class="desc" x="620.0" y="316.5" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">reduces events to anonymous</text>
+<text class="desc" x="620.0" y="330.5" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">busy blocks; redacts here only</text>
+<text class="name" x="1106.0" y="162.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">meetergo</text>
+<text class="stereo" x="1106.0" y="177.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[External system]</text>
+<text class="desc" x="1106.0" y="192.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">booking tool</text>
+<text class="name" x="1106.0" y="294.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">mailbox.org</text>
+<text class="stereo" x="1106.0" y="309.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[External system]</text>
+<text class="desc" x="1106.0" y="324.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">OX calendar suite</text>
+<text class="name" x="1106.0" y="462.0" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">Uptime monitor</text>
+<text class="stereo" x="1106.0" y="477.0" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[External system]</text>
+<text class="desc" x="1106.0" y="492.0" font-size="11" font-weight="400" text-anchor="middle" fill="#56636f">optional</text>
+<text class="name" x="1106.0" y="42.5" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">Booking person</text>
+<text class="stereo" x="1106.0" y="57.5" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[Person]</text>
+<text class="name" x="620.0" y="552.5" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2430">Owner</text>
+<text class="stereo" x="620.0" y="567.5" font-size="10.5" font-weight="400" text-anchor="middle" fill="#56636f">[Person, operator]</text>
+<rect class="lbl-bg" x="276.1" y="285.5" width="147.7" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="350" y="296" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">CalDAV REPORT + expand</text>
+<rect class="lbl-bg" x="273.0" y="311.5" width="154.0" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="350" y="322" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">read-only, app password</text>
+<rect class="lbl-bg" x="825.2" y="285.5" width="109.6" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="880" y="296" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">GET /f/TOKEN.ics</text>
+<rect class="lbl-bg" x="822.0" y="311.5" width="115.9" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="880" y="322" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">iCal subscription</text>
+<rect class="lbl-bg" x="825.2" y="203.5" width="109.6" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="880" y="214" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">GET /f/TOKEN.ics</text>
+<rect class="lbl-bg" x="837.9" y="407.5" width="84.2" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="880" y="418" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">GET /healthz</text>
+<rect class="lbl-bg" x="1110.0" y="100.5" width="84.2" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="1114" y="111" font-size="10.5" font-weight="400" text-anchor="start" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">books a slot</text>
+<rect class="lbl-bg" x="1110.0" y="225.5" width="103.2" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="1114" y="236" font-size="10.5" font-weight="400" text-anchor="start" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">writes bookings</text>
+<rect class="lbl-bg" x="1110.0" y="239.5" width="46.1" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="1114" y="250" font-size="10.5" font-weight="400" text-anchor="start" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">CalDAV</text>
+<rect class="lbl-bg" x="624.0" y="459.5" width="185.8" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="628" y="470" font-size="10.5" font-weight="400" text-anchor="start" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">config.json, secrets, deploy</text>
+<rect class="lbl-bg" x="219.7" y="537.5" width="236.6" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="338" y="548" font-size="10.5" font-weight="400" text-anchor="middle" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">keeps appointments, shares read-only</text>
+<rect class="box scope" x="24" y="612" width="22" height="13" rx="3" fill="#d7e8f1" stroke="#2f6f8f" stroke-width="1.2"/>
+<text class="legend" x="54" y="622" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Milchglas (in scope)</text>
+<rect class="box ext" x="208.0" y="612" width="22" height="13" rx="3" fill="#eef0f2" stroke="#8a96a3" stroke-width="1.2"/>
+<text class="legend" x="238.0" y="622" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">External system</text>
+<rect class="box person" x="360.0" y="612" width="22" height="13" rx="3" fill="#f4f1fa" stroke="#6b5b95" stroke-width="1.2"/>
+<text class="legend" x="390.0" y="622" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Person</text>
+<rect class="zone" x="454.4" y="612" width="22" height="13" rx="3" fill="none" stroke="#6f7c89" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text class="legend" x="484.4" y="622" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Trust zone</text>
+<line class="edge" x1="574.4" y1="618" x2="600.4" y2="618" stroke="#4a5664" stroke-width="1.4" marker-end="url(#arr)"/>
+<text class="legend" x="608.4" y="622" font-size="11" font-weight="400" text-anchor="start" fill="#56636f">Caller to callee</text>
+</svg>
