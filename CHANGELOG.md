@@ -4,6 +4,94 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.2.0](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.1.2...v0.2.0) (2026-10-21)
+
+
+### Features
+
+* **core:** Add busy blocks with window, clip, round and merge ([7e0e154](https://github.com/Prism-Purpose-Pace/milchglas/commit/7e0e15486c4fd94897d4f4f4607ee5cdf027632c))
+* **core:** Emit the busy-only feed with stable UIDs ([5ff33f8](https://github.com/Prism-Purpose-Pace/milchglas/commit/5ff33f85e6c3be999f9d8f93921d1e2ff705d3b9))
+* **core:** Filter cancelled, transparent and declined events ([fb13fa5](https://github.com/Prism-Purpose-Pace/milchglas/commit/fb13fa564b28e45edb76f04e27901c4f4086c4e1))
+* **core:** Reduce event times to a block or a skip reason ([1d1f70c](https://github.com/Prism-Purpose-Pace/milchglas/commit/1d1f70cb8a3b37f20ad68b09194dbca3e1146013))
+
+
+### Bug Fixes
+
+* **core:** Add grid_fits_zone and narrow the rounding contract ([3a4da6d](https://github.com/Prism-Purpose-Pace/milchglas/commit/3a4da6df9c2b289d4bb882c876fdc51109b87c6d))
+* **core:** Close four silent or crashing paths in reduce_event ([25f8967](https://github.com/Prism-Purpose-Pace/milchglas/commit/25f89674ef94113e207648fd2dbe85a91a115264))
+* **core:** Compare the instants of a timed event, not its wall times ([3c1b1df](https://github.com/Prism-Purpose-Pace/milchglas/commit/3c1b1df4efdd446cf3e82e9a34657bfd1ab1a7d0))
+* **core:** Count DURATION days in the configured zone ([1f12c3b](https://github.com/Prism-Purpose-Pace/milchglas/commit/1f12c3b5c987ea746918240fffe8f1e5d78d876c))
+* **core:** Drop METHOD:PUBLISH from the feed header ([4251a0e](https://github.com/Prism-Purpose-Pace/milchglas/commit/4251a0eecb822202175604c04680c5a6b23c7bc7))
+* **core:** Emit a minutes part when seconds follow hours in a TTL ([fd5a589](https://github.com/Prism-Purpose-Pace/milchglas/commit/fd5a589eaef95a3994066a035cada85ef187ed54))
+* **core:** Keep the UTC instant for a DURATION without a day part ([8d4bdd9](https://github.com/Prism-Purpose-Pace/milchglas/commit/8d4bdd9d0130c3bf52401349f86f9cb020168690))
+* **core:** Let all-day events block whatever their TRANSP says ([551d01f](https://github.com/Prism-Purpose-Pace/milchglas/commit/551d01f2c8960511f028165e3f8479d2926a3080))
+* **core:** Read the DURATION text, not icalendar's timedelta ([2b7ce08](https://github.com/Prism-Purpose-Pace/milchglas/commit/2b7ce084c3a2bac681816b7d8e21228010ca7c56))
+* **core:** Refuse a lone surrogate in the summary; derive the oracle ([fc54cb7](https://github.com/Prism-Purpose-Pace/milchglas/commit/fc54cb75f1338df778bb9f33adccb7b353f603c2))
+* **docs:** name the hashed feed token in C4 and threat model ([54db30f](https://github.com/Prism-Purpose-Pace/milchglas/commit/54db30f0e286f77c70669708e88ba4bfdebbff3e))
+* **guard:** Gate the push-guard preflight on --hook-dir, not git 2.54 ([d48a0e0](https://github.com/Prism-Purpose-Pace/milchglas/commit/d48a0e00a615bbd77d84f6e874d371092316a446))
+* **guard:** Normalise the push URL before the canonical-repo match ([9254f87](https://github.com/Prism-Purpose-Pace/milchglas/commit/9254f87f5a1309ddf637e0abcbbb4e1ea7d4c2b4))
+* **guard:** Read the main checkout's denylist from a linked worktree ([50d8d4e](https://github.com/Prism-Purpose-Pace/milchglas/commit/50d8d4ece07d9fdd42055961df8ed8782d1c9aba))
+* **guard:** Refuse a push to the canonical repo without a denylist ([9f3a890](https://github.com/Prism-Purpose-Pace/milchglas/commit/9f3a890a18c44d78bf286581776b9941b433a706))
+* **guard:** Scan commit-message files by content, not by path ([a4ab5b0](https://github.com/Prism-Purpose-Pace/milchglas/commit/a4ab5b015f2874d7e35eeb585d16b5a1a4e5c288))
+* **guard:** Scan every commit a push transfers, not only its tip tree ([f153926](https://github.com/Prism-Purpose-Pace/milchglas/commit/f1539263d56abaa73862fb2b33e3ab1b1df7013f))
+* **guard:** Scan every pushed ref through a pre-push.legacy entry ([2b0ef2b](https://github.com/Prism-Purpose-Pace/milchglas/commit/2b0ef2b57ecfc9cf42b2e308d00fbb70a8845980))
+* **guard:** Scan the pushed ref at pre-push, not HEAD ([5c9d51f](https://github.com/Prism-Purpose-Pace/milchglas/commit/5c9d51f6c1cbb92c4161947254a7e7569fb2f7a1))
+* **hooks:** Point osv-scanner at uv.lock instead of a recursive walk ([19289ab](https://github.com/Prism-Purpose-Pace/milchglas/commit/19289ab7b243c5967a05a6d8d4b78c8bc58ffb8b))
+
+
+### Documentation
+
+* Add a STRIDE and LINDDUN threat model of the MVP ([b9fa2e7](https://github.com/Prism-Purpose-Pace/milchglas/commit/b9fa2e7162d72f3f82768c6dbf794094470dcba2))
+* Add C4 context and container views of the MVP ([cf27fc4](https://github.com/Prism-Purpose-Pace/milchglas/commit/cf27fc47203fd852bdea3e179ebf1d97663fb9b1))
+* Add the maintainer's gh commands to TOOLING.md ([a0e719b](https://github.com/Prism-Purpose-Pace/milchglas/commit/a0e719b50eb4becb228c77864783df3b2d0668a8))
+* Align the agent guide with the hashed token and all-day rule ([f2f8ea5](https://github.com/Prism-Purpose-Pace/milchglas/commit/f2f8ea5255e718d2de8329e43f390bc571943059))
+* **architecture:** align the C4 views with spec v0.5 ([23bb693](https://github.com/Prism-Purpose-Pace/milchglas/commit/23bb6933c2213a49fd16f8e7e993bf448ce780dd))
+* **claude:** Point the stack line at pyproject, not a package list ([2f917f9](https://github.com/Prism-Purpose-Pace/milchglas/commit/2f917f9d284e367df8f753ea20df55a73a434efc))
+* **claude:** Shorten the maintainer-space line ([df8aca9](https://github.com/Prism-Purpose-Pace/milchglas/commit/df8aca9e4ca402cb59b8cd7febf92cd1a6be01d5))
+* **core:** Cite public spec IDs in the core test comments ([f4ea2ee](https://github.com/Prism-Purpose-Pace/milchglas/commit/f4ea2ee0eed83f44c7d1ed83deb766a660108c45))
+* **core:** Cite public spec IDs in the emit and reduce comments ([f3a986b](https://github.com/Prism-Purpose-Pace/milchglas/commit/f3a986b51b7f732a119b72bd50c4ffdec975ce36))
+* **core:** Drop the stale tree-scan sentence from the purity test ([db904dd](https://github.com/Prism-Purpose-Pace/milchglas/commit/db904ddc33cedaef332fc934da2354f751bdb795))
+* **core:** Say that reduce_event does not decide Q-14 ([b9bca6b](https://github.com/Prism-Purpose-Pace/milchglas/commit/b9bca6b8a02b4e46d811d8b128802414de678320))
+* **diagrams:** relabel the C4 edges per spec v0.5 ([d37138f](https://github.com/Prism-Purpose-Pace/milchglas/commit/d37138f192117b6d523a66dfc849edb45466305b))
+* Draw the C4 views as SVG with trust zones ([070b0fc](https://github.com/Prism-Purpose-Pace/milchglas/commit/070b0fc84356155e17b7ad083e67b24a07e67ea0))
+* **guard:** Correct how remote-tracking refs and the scan base work ([d0b7d31](https://github.com/Prism-Purpose-Pace/milchglas/commit/d0b7d31c84df7d193d2ef8a2853d1a29d97a044b))
+* **guard:** Say that a file-name hit prints the path ([e5c0002](https://github.com/Prism-Purpose-Pace/milchglas/commit/e5c0002f67992ced89446eeb34c7da4491dbdc6c))
+* **guard:** State when the every-ref push scan does not run ([9121910](https://github.com/Prism-Purpose-Pace/milchglas/commit/9121910ea163ac3722da7ad2c904a65b8f0af0d7))
+* Mark the pure core as built in the agent guide ([b348057](https://github.com/Prism-Purpose-Pace/milchglas/commit/b348057a31fb39398aaa70e93003bf58390bc3c7))
+* Point the out-of-scope references at the Won't IDs ([9aee96d](https://github.com/Prism-Purpose-Pace/milchglas/commit/9aee96df347662e27c6fad8eadc9d337bab291c2))
+* **spec:** Add acceptance criteria AC-19 to AC-22 and gate V-9 ([addbbbb](https://github.com/Prism-Purpose-Pace/milchglas/commit/addbbbb2720a2c437bb05da25063f86e5fd6be3b))
+* **spec:** Add open questions Q-19 to Q-22 and revise their defaults ([d706441](https://github.com/Prism-Purpose-Pace/milchglas/commit/d70644159a537ca6b3118f815ac346cb2a5a2c9f))
+* **spec:** Align the deployment options with the validated platforms ([0407b15](https://github.com/Prism-Purpose-Pace/milchglas/commit/0407b1531f5588a88c392a2744ef7684bac9533a))
+* **spec:** Bound what a leaked app password can send ([bd31615](https://github.com/Prism-Purpose-Pace/milchglas/commit/bd31615f757ff16673c3aa4f745a75206ec0a879))
+* **spec:** Bump the spec to v0.4 and align Sections 2, 3 and 12 ([30cbaf5](https://github.com/Prism-Purpose-Pace/milchglas/commit/30cbaf5af08d333fa91dcb685d1227fe41f8bdd6))
+* **spec:** Bump the spec to v0.5 ([b1bf873](https://github.com/Prism-Purpose-Pace/milchglas/commit/b1bf873df5c10d40d59996ac7cb26a0eb5b2bbf4))
+* **spec:** Check each calendar's type and privileges per refresh ([25a3991](https://github.com/Prism-Purpose-Pace/milchglas/commit/25a3991bb355380c9e82c4ae25185d4a7156974c))
+* **spec:** Correct research findings and sources against 2026-10-21 ([f4298af](https://github.com/Prism-Purpose-Pace/milchglas/commit/f4298af09bf42deb48267d8ea54506d76be65e95))
+* **spec:** Correct the Nextcloud request and service-user facts ([64af5a9](https://github.com/Prism-Purpose-Pace/milchglas/commit/64af5a9fe1ee1d3381c237e526381116264cbc2b))
+* **spec:** Drop the timing median and the digest prefix from web ([c8abaf4](https://github.com/Prism-Purpose-Pace/milchglas/commit/c8abaf464cca629f5dc64631abe63d2505882bbf))
+* **spec:** Keep platform secrets runtime-only, check deployed image ([28ed483](https://github.com/Prism-Purpose-Pace/milchglas/commit/28ed48352e56138137311194a93966ce4f260080))
+* **spec:** Keep the calendar name a constant ([d54c953](https://github.com/Prism-Purpose-Pace/milchglas/commit/d54c953991e90a4da89433a1f113db63cddb2d5b))
+* **spec:** Keep the last valid digest when web's re-read fails ([c1420a8](https://github.com/Prism-Purpose-Pace/milchglas/commit/c1420a8e34cb97ac1d26bac510e64af4cfe44990))
+* **spec:** Keep the Option A unit files in the backlog ([efd11cd](https://github.com/Prism-Purpose-Pace/milchglas/commit/efd11cd7a0f636b9fdfabaec60df443e40c5d0fb))
+* **spec:** Make init and rotate-token print instead of write ([4e4b57a](https://github.com/Prism-Purpose-Pace/milchglas/commit/4e4b57a8e10f427c11c37c95c8ba801eb89471ae))
+* **spec:** Merge goals and non-goals into one MoSCoW list ([cd441cd](https://github.com/Prism-Purpose-Pace/milchglas/commit/cd441cd4bc92a1ec7da69b72e027cd5d5c49da49))
+* **spec:** Move the Microsoft busy hint to the backlog ([e373e15](https://github.com/Prism-Purpose-Pace/milchglas/commit/e373e15d47ceca9aa1c5f4d19e011d42d91fa5c2))
+* **spec:** Pin the server-side expand drops in L5, AC-0.3 and V-4 ([1c2c9c5](https://github.com/Prism-Purpose-Pace/milchglas/commit/1c2c9c5285e3d50fb86231efb5c30f638a5f5c1c))
+* **spec:** Record decisions D-13 to D-15 and correct D-2 to D-8 ([821439c](https://github.com/Prism-Purpose-Pace/milchglas/commit/821439c1bcb9c06ff854d13c6465e64976dce51a))
+* **spec:** Record Python as the MVP language and when to revisit it ([c345a2f](https://github.com/Prism-Purpose-Pace/milchglas/commit/c345a2f515031e2f956704439792a11530237802))
+* **spec:** Record ten open questions with their defaults ([5bd0a71](https://github.com/Prism-Purpose-Pace/milchglas/commit/5bd0a71c497d79cbf51970a13bc4cfd9d653d4ed))
+* **spec:** Require only a divisor of 1440 for the rounding grid ([75e171b](https://github.com/Prism-Purpose-Pace/milchglas/commit/75e171b7ad6d0a3a1909b5a08268bd392d3dc44f))
+* **spec:** Require the grid to divide every UTC-offset change ([67b3f60](https://github.com/Prism-Purpose-Pace/milchglas/commit/67b3f609b7a8c65e1d50e7606817d72456e9733f))
+* **spec:** Tighten requirements from the 2026-10-21 re-validation ([e7c7e8d](https://github.com/Prism-Purpose-Pace/milchglas/commit/e7c7e8da0b4505565c56fdfb9489bb973ce5f476))
+* **spec:** Tighten the pipeline sketch, examples and criteria ([bc1121c](https://github.com/Prism-Purpose-Pace/milchglas/commit/bc1121c77b009bc87b609d9365b0558826a3f417))
+* **spec:** Use the container health check for liveness only ([fdcd624](https://github.com/Prism-Purpose-Pace/milchglas/commit/fdcd624d1e8e09276886b8951eb765e33121aceb))
+* **status:** Name the built core in README, C4 and threat model ([f1a3867](https://github.com/Prism-Purpose-Pace/milchglas/commit/f1a3867a886047cd401a793002794e4cf68d3780))
+* **test:** Publish the test catalogue and point CONTRIBUTING at it ([7eb34e7](https://github.com/Prism-Purpose-Pace/milchglas/commit/7eb34e78dc333f48760ff707c72f4842ded5e15a))
+* **threat-model:** add threats from the spec v0.5 review ([aa37f00](https://github.com/Prism-Purpose-Pace/milchglas/commit/aa37f007212e23df2c2de48f78b08bd321b73b9e))
+* **threat-model:** cite spec v0.5 controls in sections 1 to 3.6 ([1f13c0b](https://github.com/Prism-Purpose-Pace/milchglas/commit/1f13c0bc6b9602b30a52ef00e602e206ec803344))
+* **threat-model:** cite spec v0.5 controls in sections 3.7 to 4 ([c3e3446](https://github.com/Prism-Purpose-Pace/milchglas/commit/c3e3446f3ff0e0f955fb0227db9ca8cfe9ea08c8))
+* **threat-model:** map the proposed spec changes to spec v0.5 ([4ea9039](https://github.com/Prism-Purpose-Pace/milchglas/commit/4ea90395a3aff832cf08be93597f95275df5f8fa))
+
 ## [0.1.2](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.1.1...v0.1.2) (2026-10-20)
 
 
