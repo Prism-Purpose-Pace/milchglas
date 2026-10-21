@@ -203,6 +203,9 @@ repos:
     hooks:
       - id: osv-scanner
         stages: [pre-push]
+        # The lockfile by path, not a recursive walk: the walk honours the enclosing
+        # repository's .gitignore, so in a worktree under .claude/ it found no sources.
+        args: [scan, source, --format=vertical, --verbosity=error, --lockfile=uv.lock]
 
   # ---------------------------------------------------------------------------
   # Commit-message convention (conventional commits: title <=72, body <=80/line)
