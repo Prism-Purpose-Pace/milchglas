@@ -73,8 +73,8 @@
 <text class="lbl mono" x="432" y="322" font-size="10.5" font-weight="400" text-anchor="end" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">CALDAV_* injected</text>
 <rect class="lbl-bg" x="459.1" y="353.5" width="96.9" height="14" rx="3" fill="#ffffff"/>
 <text class="lbl mono" x="552" y="364" font-size="10.5" font-weight="400" text-anchor="end" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">reads settings</text>
-<rect class="lbl-bg" x="686.0" y="353.5" width="77.8" height="14" rx="3" fill="#ffffff"/>
-<text class="lbl mono" x="690" y="364" font-size="10.5" font-weight="400" text-anchor="start" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">reads token</text>
+<rect class="lbl-bg" x="686.0" y="353.5" width="122.3" height="14" rx="3" fill="#ffffff"/>
+<text class="lbl mono" x="690" y="364" font-size="10.5" font-weight="400" text-anchor="start" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">reads token_sha256</text>
 <rect class="lbl-bg" x="464.1" y="517.5" width="96.9" height="14" rx="3" fill="#ffffff"/>
 <text class="lbl mono" x="557" y="528" font-size="10.5" font-weight="400" text-anchor="end" fill="#1b2430" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">atomic replace</text>
 <rect class="lbl-bg" x="679.0" y="501.5" width="122.3" height="14" rx="3" fill="#ffffff"/>
