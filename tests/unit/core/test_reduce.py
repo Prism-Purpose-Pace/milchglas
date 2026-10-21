@@ -54,11 +54,17 @@ def test_excluded_events_yield_their_skip_reason(uid: str, expected: Skip) -> No
         ("CORE-FIL-5", timed("2026-10-05T08:00Z", "2026-10-05T09:00Z")),
         ("CORE-FIL-6", timed("2026-10-05T08:00Z", "2026-10-05T09:00Z")),
         ("CORE-FIL-7", timed("2026-10-05T08:00Z", "2026-10-05T09:00Z")),
+        # OPEN Q-19 default: an unanswered invitation blocks; a block too many costs
+        # a slot, a block too few a double booking.
+        ("CORE-FIL-7-needs-action", timed("2026-10-05T08:00Z", "2026-10-05T09:00Z")),
         # Declined under one address, accepted under the other: still attending.
         ("owner-twice-one-accepted", timed("2026-10-05T08:00Z", "2026-10-05T09:00Z")),
         # D-3: redaction is Milchglas's job, so CLASS never hides a block.
         ("CORE-FIL-8-private", timed("2026-10-06T06:00Z", "2026-10-06T07:00Z")),
         ("CORE-FIL-8-confidential", timed("2026-10-06T06:00Z", "2026-10-06T07:00Z")),
+        # D-3: what a read-only sharee receives of a CONFIDENTIAL event (SUMMARY rewritten,
+        # no STATUS, TRANSP or ATTENDEE) still blocks; it can never be excluded.
+        ("confidential-as-sharee", timed("2026-10-06T10:00Z", "2026-10-06T10:30Z")),
         ("CORE-FIL-9", timed("2026-10-02T13:00Z", "2026-10-02T14:00Z", tentative=True)),
         # OPEN Q-11 default: the owner's own TENTATIVE reply marks the block tentative.
         ("CORE-FIL-10", timed("2026-10-02T13:00Z", "2026-10-02T14:00Z", tentative=True)),

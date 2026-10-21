@@ -227,6 +227,17 @@ def test_round_floors_start_and_ceils_end_on_the_local_grid(
     assert round_to_grid([block], grid, BERLIN) == [expected]
 
 
+def test_round_keeps_the_fold_of_the_second_pass() -> None:
+    # 02:07 occurs twice on 2026-10-25; the second pass (fold=1, CET) is 01:07Z and must
+    # floor to 01:00Z. Rebuilding the local time from its fields would lose the fold and
+    # give 00:00Z, an hour early.
+    start = datetime(2026, 10, 25, 2, 7, fold=1, tzinfo=BERLIN).astimezone(UTC)
+    end = datetime(2026, 10, 25, 2, 20, fold=1, tzinfo=BERLIN).astimezone(UTC)
+    assert round_to_grid([TimedBlock(start, end)], 15, BERLIN) == [
+        timed("2026-10-25T01:00Z", "2026-10-25T01:30Z")
+    ]
+
+
 def test_round_uses_the_local_grid_of_a_half_hour_zone() -> None:
     # Replaces catalogue CORE-RND-8 (reject grid 60 for +05:30): rounding reads the zone's
     # offset, so 10:07-10:52 IST rounds to whole local hours. UTC-epoch rounding would

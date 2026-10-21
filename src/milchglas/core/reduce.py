@@ -142,7 +142,11 @@ def _owner_replies(event: Component, owners: set[str]) -> list[str]:
 
 
 def _address(value: str) -> str:
-    """`MAILTO:Owner@Example.ORG` and `owner@example.org` compare equal."""
+    """`MAILTO:Owner@Example.ORG` and `owner@example.org` compare equal.
+
+    Folding the whole address is pragmatic: RFC 5321 local parts are case-sensitive,
+    but no mail provider in use treats them so.
+    """
     value = value.strip()
     if value[:7].lower() == "mailto:":
         value = value[7:]
