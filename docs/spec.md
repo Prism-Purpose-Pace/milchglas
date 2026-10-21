@@ -129,6 +129,7 @@ The operator's calendar landscape:
 | D-9 | Deployment target | **Open — see Section 9**; recommendation: Option B now | |
 | D-10 | Documentation language English; runbook may be German | Proposed [OPEN Q-7] | Maintainer defaults |
 | D-11 | Secrets only via environment (or `0600` file); never entered or shown in any UI | Proposed | Avoids crypto dependency; standard on self-hosted PaaS platforms |
+| D-12 | Implementation language for the MVP: Python 3.12 (NFR-O3); a rewrite (e.g. Go) is evaluated only after the MVP works and is deployed (Section 12) | Decided 2026-10-21 | Toolchain, gates and test plan exist in Python; an evaluation of Go for testability, scalability, extensibility and security found no gain for the MVP that outweighs switching now |
 
 ---
 
@@ -384,6 +385,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | **Baïkal contract tests in CI** | Protects recurrence handling on upgrades | 2 hours | Before first Nextcloud major upgrade |
 | **Uptime monitor + e-mail alert** | Know about staleness before a client does | 15 min | With MVP deploy |
 | **Option A unit files** | Post-migration landing spot | 30 min | Before moving off a PaaS host |
+| **Rewrite evaluation** (D-12) | Single static binary, smaller image and memory footprint; possibly one codebase for shared hosting instead of the Option D port | Open until evaluated; a rewrite reuses the golden fixtures (NFR-C1) as its parity check | MVP works and is deployed |
 
 ---
 
