@@ -118,7 +118,13 @@ def test_feed_orders_day_blocks_first_then_by_start_emit_9() -> None:
 
 @pytest.mark.parametrize(
     ("ttl_seconds", "duration"),
-    [(900, "PT15M"), (3600, "PT1H"), (5400, "PT1H30M"), (86461, "PT24H1M1S")],
+    [
+        (900, "PT15M"),
+        (3600, "PT1H"),
+        (5400, "PT1H30M"),
+        (3605, "PT1H0M5S"),
+        (86461, "PT24H1M1S"),
+    ],
 )
 def test_ttl_sets_both_refresh_hints(ttl_seconds: int, duration: str) -> None:
     lines = logical_lines(_emit([], ttl_seconds=ttl_seconds))
