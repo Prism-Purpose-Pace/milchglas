@@ -28,9 +28,19 @@ Checks over the tracked (or given) files:
   is public and stays unscanned (stale remote-tracking refs only widen the scan). pre-commit
   exports the pushed ref (PRE_COMMIT_TO_REF, else PRE_COMMIT_LOCAL_BRANCH); outside a push it
   is HEAD. A push whose ref cannot be resolved, or a failing git, is refused. pre-commit hands
-  hooks only the first ref of a multi-ref push, so push one ref per `git push`. Without a
-  denylist the push is refused (exit 2) when PRE_COMMIT_REMOTE_URL names the canonical
+  hooks only the first ref of a multi-ref push, and none at all for a push whose refs carry no
+  new commit, so this entry is the first-ref fallback; --pre-push-refs covers the rest. Without
+  a denylist the push is refused (exit 2) when PRE_COMMIT_REMOTE_URL names the canonical
   repository; to any other remote, or in a manual run, the term scan is skipped with a notice.
+- --pre-push-refs REMOTE_NAME REMOTE_URL: the pre-push entry that reads git's own list. It
+  takes the lines git writes to a pre-push hook's stdin (`<local ref> <local sha> <remote ref>
+  <remote sha>`) and scans every one, none skipped: both ref names, the message and tagger of
+  an annotated tag (each tag of a chain), and what pushing the peeled commit transfers (as
+  --pre-push). A deletion line (all-zero local sha) publishes nothing new, so its ref names
+  are not scanned. A tag on a tree or blob, an unparsable line or an object the clone lacks is
+  refused. REMOTE_URL decides the canonical-repository refusal like PRE_COMMIT_REMOTE_URL does.
+  scripts/install_push_guard.py installs it as .git/hooks/pre-push.legacy, which pre-commit's
+  generated hook runs first with git's argv and stdin; a push it refuses stops there.
 
 Residual: matching is per line, so a term split across lines, encoded (base64, UTF-16
 without BOM) or spelled with homoglyphs from another script is not detected.
@@ -72,6 +82,8 @@ LOG_FORMAT = "%h%n%an <%ae>%n%cn <%ce>%n%B%x00"
 HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Co", "Cn", "Cs", "Zl", "Zp", "Mn", "Mc", "Me"})
 HANGUL_FILLERS = frozenset(map(chr, (0x115F, 0x1160, 0x3164, 0xFFA0)))
 KEPT_CONTROLS = frozenset("\n\t")
+# `<local ref> <local sha> <remote ref> <remote sha>`: one line git writes to a pre-push hook per ref.
+PUSH_LINE_FIELDS = 4
 # git's mode for a submodule entry (no content here) and for a path a commit removes.
 GITLINK_MODE = "160000"
 DELETED_MODE = "000000"
@@ -369,6 +381,54 @@ def push_report(
     return report
 
 
+def peel_tags(sha: str, patterns: Sequence[re.Pattern[str]] | None) -> tuple[str, list[str]]:
+    """Follow annotated tags from `sha` to the first object that is no tag, scanning each.
+
+    A tag's own message and tagger are published with it; push_report reads commits only.
+    """
+    report: list[str] = []
+    while git_out("cat-file", "-t", sha).strip() == b"tag":
+        text = git_out("cat-file", "tag", sha).decode("utf-8", errors="replace")
+        if patterns is not None:
+            report.extend(
+                format_hit(hit) for hit in term_violations(f"tag {sha[:12]}", text, patterns)
+            )
+        header = text.partition("\n")[0]
+        sha = header.removeprefix("object ")
+        if sha == header or not sha:  # the first header of a tag object is "object <id>"
+            msg = "git cat-file failed"
+            raise GitError(msg)
+    return sha, report
+
+
+def pre_push_refs_report(
+    remote: str, stdin: str, patterns: Sequence[re.Pattern[str]] | None
+) -> list[str]:
+    """Findings in everything the push lines git hands a pre-push hook transfer, none skipped."""
+    report: list[str] = []
+    for number, line in enumerate(stdin.split("\n"), start=1):
+        if not line:
+            continue
+        # Git separates the fields by single spaces and a ref name holds none.
+        fields = line.split(" ")
+        if len(fields) != PUSH_LINE_FIELDS:
+            report.append(f"push line {number}: cannot be parsed, refusing")
+            continue
+        local_ref, local_sha, remote_ref, _remote_sha = fields
+        if not local_sha.strip("0"):
+            continue  # a deletion publishes nothing new
+        commit, tag_report = peel_tags(local_sha, patterns)
+        report.extend(tag_report)
+        kind = git_out("cat-file", "-t", commit).decode().strip()
+        if kind != "commit":
+            # shortcut: a tag on a tree or blob is refused, not scanned; scan it if one is needed.
+            report.append(f"push line {number}: pushes a {kind}, which cannot be scanned, refusing")
+            continue
+        refs = {f"local ref {number}": local_ref, f"remote ref {number}": remote_ref}
+        report.extend(push_report(remote, commit, refs, patterns))
+    return list(dict.fromkeys(report))  # two lines at one commit would report it twice
+
+
 def pre_push_report(
     env: Mapping[str, str], patterns: Sequence[re.Pattern[str]] | None
 ) -> list[str]:
@@ -381,14 +441,17 @@ def pre_push_report(
     return push_report(env.get("PRE_COMMIT_REMOTE_NAME"), commit, refs, patterns)
 
 
-def pushes_to_canonical(env: Mapping[str, str]) -> bool:
-    """Whether the remote pre-commit exports (PRE_COMMIT_REMOTE_URL) is the canonical repository."""
-    return CANONICAL_URL.search(env.get("PRE_COMMIT_REMOTE_URL", "").strip()) is not None
+def pushes_to_canonical(url: str) -> bool:
+    """Whether the push URL (PRE_COMMIT_REMOTE_URL, or git's argv) is the canonical repository."""
+    return CANONICAL_URL.search(url.strip()) is not None
 
 
 def scan(args: argparse.Namespace, patterns: Sequence[re.Pattern[str]] | None) -> list[str]:
     if args.pre_push:
         return pre_push_report(os.environ, patterns)
+    if args.pre_push_refs:
+        stdin = sys.stdin.buffer.read().decode("utf-8", errors="replace")
+        return pre_push_refs_report(args.pre_push_refs[0], stdin, patterns)
     report = run(
         args.paths or tracked_files(), patterns, Path.cwd(), message_files=args.message_files
     )
@@ -420,7 +483,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="the pre-push hook: scan what the push transfers (commits the remote lacks, ref names)",
     )
+    parser.add_argument(
+        "--pre-push-refs",
+        nargs=2,
+        metavar=("REMOTE_NAME", "REMOTE_URL"),
+        help="the legacy pre-push entry: scan every ref git lists on stdin (git's hook argv)",
+    )
     args = parser.parse_args(argv)
+    if args.pre_push_refs and (
+        args.pre_push or args.paths or args.commit_messages or args.message_files
+    ):
+        parser.error(
+            "--pre-push-refs reads git's push lines and takes no paths or other scan flags"
+        )
     if args.pre_push and (args.paths or args.commit_messages or args.message_files):
         # Else they would be ignored silently, and the run would look like it checked them.
         parser.error("--pre-push scans the pushed ref and takes no paths or other scan flags")
@@ -439,7 +514,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.require_denylist:
             print("check-public-tree: no denylist (PUBLIC_DENYLIST or --denylist)", file=sys.stderr)
             return 2
-        if args.pre_push and pushes_to_canonical(os.environ):
+        pushed_to = (
+            args.pre_push_refs[1]
+            if args.pre_push_refs
+            else os.environ.get("PRE_COMMIT_REMOTE_URL", "")
+        )
+        if (args.pre_push or args.pre_push_refs) and pushes_to_canonical(pushed_to):
             print(
                 "check-public-tree: a push to the canonical repository needs the denylist: "
                 f"provide PUBLIC_DENYLIST or the main checkout's {DEFAULT_DENYLIST}",

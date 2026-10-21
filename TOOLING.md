@@ -17,7 +17,8 @@ bumps `uv.lock` and the SHA-pinned GitHub Actions weekly.
 | Lock in sync with `pyproject.toml` | pre-commit + pre-push | `uv lock --check` |
 | Workflow schema validation | pre-commit | check-jsonschema 0.37.4 |
 | Fast secret scan (staged diff) | pre-commit | gitleaks v8.30.1 |
-| Public-tree guard (private paths; private terms in file names, content, commit messages and identities when a denylist is present; a push to the canonical repository requires it) | pre-commit + pre-push | `scripts/check_public_tree.py` (stdlib) |
+| Public-tree guard (private paths; private terms in file names, content, commit messages and identities when a denylist is present; a push to the canonical repository requires it; every pushed ref through `pre-push.legacy`) | pre-commit + pre-push | `scripts/check_public_tree.py` (stdlib) |
+| Push guard installed (maintainer clone: `.git/hooks/pre-push.legacy` present and current, git < 2.54) | pre-commit | `scripts/install_push_guard.py --check` (stdlib) |
 | Pushed ref descends from the public root commit | pre-push | `scripts/check_push_ancestry.py` (stdlib) |
 | Commit size (warn 5/100, block 20/800) | pre-commit | `scripts/check_commit_size.py` (stdlib) |
 | PEP 723 script-deps CVE audit | pre-commit (warn) + pre-push (block) | `scripts/audit_script_deps.py` (stdlib) |
@@ -150,8 +151,18 @@ Verifying a release asset: see [SECURITY.md](SECURITY.md).
   --not --remotes=<remote>`, pre-commit's rule for "new"), with its message, identities and
   every path and blob it adds or changes, plus the ref names. A term added and removed
   again inside the push is found; content the remote already holds is not rescanned.
-  pre-commit hands hooks only the first ref of a multi-ref push, so push one ref per
-  `git push`.
+  pre-commit hands hooks only the first ref of a multi-ref push and none for a push whose
+  refs carry no new commit (a branch or tag name, or an annotated tag's own message, would
+  be published unscanned). So every pushed ref is also scanned through the legacy entry:
+  `scripts/install_push_guard.py` writes `.git/hooks/pre-push.legacy`, which pre-commit's
+  generated hook runs first with git's argv and its full stdin, and
+  `check_public_tree.py --pre-push-refs` reads each line (ref names, each tag object,
+  what the peeled commit transfers); a non-zero exit stops the push. The shim is per clone
+  and unversioned, so a commit-stage preflight (`install_push_guard.py --check`) fails in a
+  maintainer clone that lacks it, and on git 2.54 or later, where pre-commit skips the
+  legacy hook (`hook_impl._run_legacy`, `# git 2.54+ hooks`) and the route would go silent.
+  The `--pre-push` hook stays as the first-ref fallback. The ancestry hook above still sees
+  one ref: push one ref per `git push` there.
 - The `tags` ruleset freezes every tag: nobody moves or deletes one, and nobody holds
   a bypass (an admin disables the ruleset to repair a wrong tag). Creating a tag stays
   open to writers, because release-please tags with `GITHUB_TOKEN` and GitHub rejects

@@ -1,7 +1,10 @@
 """check_public_tree.py: private paths and denylisted terms never reach the public tree."""
 
+import io
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -986,3 +989,399 @@ def test_main_requires_denylist_when_asked(tmp_path: Path, monkeypatch: pytest.M
     (tmp_path / "ok.md").write_text("fine\n", encoding="utf-8")
     assert cpt.main(["--require-denylist", "--denylist", "absent.txt", "ok.md"]) == 2
     assert cpt.main(["--denylist", "absent.txt", "ok.md"]) == 0
+
+
+# --pre-push-refs: the legacy pre-push entry (scripts/install_push_guard.py). pre-commit reads
+# git's pre-push stdin itself and hands hooks at most the first ref with new commits; a push
+# whose refs carry no new commit runs no hook at all, so a ref name, refs 2..n and an annotated
+# tag's own message were published unscanned. This mode reads git's own list, every line.
+# A deletion line (all-zero local sha) publishes nothing new: neither ref name is scanned.
+NULL_OBJECT = "0" * 40
+REMOTE_URL = "/srv/git/elsewhere.git"  # not the canonical repository
+
+
+def _line(local_ref: str, sha: str, remote_ref: str | None = None) -> str:
+    return f"{local_ref} {sha} {remote_ref or local_ref} {NULL_OBJECT}\n"
+
+
+def _pre_push_refs(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, *lines: str, url: str = REMOTE_URL
+) -> int:
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO("".join(lines).encode())))
+    deny = str(repo.parent / "deny.txt")
+    return cpt.main(["--denylist", deny, "--pre-push-refs", "origin", url])
+
+
+def _new_branch(repo: Path, name: str, files: dict[str, bytes], message: str) -> str:
+    """Commit on a new branch off main, then back on main; return the commit."""
+    _git(repo, "checkout", "-q", "-b", name, "main")
+    sha = _commit_files(repo, files, message)
+    _git(repo, "checkout", "-q", "main")
+    return sha
+
+
+@pytest.fixture
+def remote_repo(push_repo: Path) -> Path:
+    """push_repo whose commit the bare remote `origin` already holds."""
+    _remote(push_repo, "origin")
+    return push_repo
+
+
+def test_pre_push_refs_reads_a_ref_name_that_carries_no_new_commit(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    head = _git(remote_repo, "rev-parse", "HEAD")
+    _git(remote_repo, "branch", "secretproject-x")  # the remote already has this commit
+    assert _pre_push_refs(remote_repo, monkeypatch, _line("refs/heads/secretproject-x", head)) == 1
+    err = capsys.readouterr().err
+    assert err.splitlines() == [
+        "ref local ref 1: matches denylist pattern #2",
+        "ref remote ref 1: matches denylist pattern #2",
+        "check-public-tree: 2 finding(s)",
+    ]
+    assert "secretproject" not in err.lower()
+
+
+def test_pre_push_refs_passes_a_clean_ref_name_that_carries_no_new_commit(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    head = _git(remote_repo, "rev-parse", "HEAD")
+    _git(remote_repo, "branch", "feature-x")
+    assert _pre_push_refs(remote_repo, monkeypatch, _line("refs/heads/feature-x", head)) == 0
+    assert capsys.readouterr().err == ""
+
+
+@pytest.mark.parametrize("second", ["ref-name", "new-commit"])
+def test_pre_push_refs_reads_every_line_not_only_the_first(
+    remote_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    second: str,
+) -> None:
+    first = _new_branch(remote_repo, "a", {"a.md": b"fine\n"}, "feat: add a")
+    if second == "ref-name":
+        branch = "secretproject-b"
+        _git(remote_repo, "branch", branch)
+        pushed = _git(remote_repo, "rev-parse", "HEAD")
+        expected = [
+            "ref local ref 2: matches denylist pattern #2",
+            "ref remote ref 2: matches denylist pattern #2",
+            "check-public-tree: 2 finding(s)",
+        ]
+    else:
+        branch = "b"
+        pushed = _new_branch(remote_repo, "b", {"b.md": b"fine\n"}, TERM_MESSAGE)
+        short = _git(remote_repo, "rev-parse", "--short", pushed)
+        expected = [
+            f"commit {short}:3: matches denylist pattern #2",
+            "check-public-tree: 1 finding(s)",
+        ]
+    lines = (_line("refs/heads/a", first), _line(f"refs/heads/{branch}", pushed))
+    assert _pre_push_refs(remote_repo, monkeypatch, *lines) == 1
+    err = capsys.readouterr().err
+    assert err.splitlines() == expected
+    assert "secretproject" not in err.lower()
+
+
+def test_pre_push_refs_passes_two_clean_lines(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = _new_branch(remote_repo, "a", {"a.md": b"fine\n"}, "feat: add a")
+    second = _new_branch(remote_repo, "b", {"b.md": b"fine\n"}, "feat: add b")
+    lines = (_line("refs/heads/a", first), _line("refs/heads/b", second))
+    assert _pre_push_refs(remote_repo, monkeypatch, *lines) == 0
+
+
+def _tag(repo: Path, name: str, message: str, target: str = "HEAD") -> str:
+    _git(repo, "tag", "-a", name, "-m", message, target)
+    return _git(repo, "rev-parse", f"refs/tags/{name}")  # the tag object, not the commit
+
+
+def test_pre_push_refs_reads_an_annotated_tags_own_message(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tag = _tag(remote_repo, "v1", "about secretproject")  # the commit is on the remote
+    assert _pre_push_refs(remote_repo, monkeypatch, _line("refs/tags/v1", tag)) == 1
+    err = capsys.readouterr().err
+    assert err.splitlines() == [
+        f"tag {tag[:12]}:6: matches denylist pattern #2",
+        "check-public-tree: 1 finding(s)",
+    ]
+    assert "secretproject" not in err.lower()
+
+
+def test_pre_push_refs_passes_an_annotated_tag_with_a_clean_message(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tag = _tag(remote_repo, "v1", "release one")
+    assert _pre_push_refs(remote_repo, monkeypatch, _line("refs/tags/v1", tag)) == 0
+
+
+def test_pre_push_refs_reads_each_tag_of_a_chain(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _tag(remote_repo, "inner", "about secretproject")
+    outer = _tag(remote_repo, "outer", "release one", "refs/tags/inner")
+    assert "type tag" in _git(remote_repo, "cat-file", "-p", outer)  # a tag of a tag
+    assert _pre_push_refs(remote_repo, monkeypatch, _line("refs/tags/outer", outer)) == 1
+
+
+def test_pre_push_refs_reads_the_commit_a_tag_peels_to(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pushed = _new_branch(remote_repo, "x", {"notes.md": TERM_TEXT}, "feat: add notes")
+    tag = _tag(remote_repo, "v2", "release two", pushed)
+    assert _pre_push_refs(remote_repo, monkeypatch, _line("refs/tags/v2", tag)) == 1
+    assert f"{pushed[:7]}:notes.md:1: matches denylist pattern #2" in capsys.readouterr().err
+
+
+def test_pre_push_refs_refuses_a_tag_on_a_tree_it_cannot_scan(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tag = _tag(remote_repo, "t", "release one", "HEAD^{tree}")
+    assert _pre_push_refs(remote_repo, monkeypatch, _line("refs/tags/t", tag)) == 1
+    assert "pushes a tree, which cannot be scanned" in capsys.readouterr().err
+
+
+def test_pre_push_refs_ignores_a_deletion_line(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    head = _git(remote_repo, "rev-parse", "HEAD")
+    gone = f"(delete) {NULL_OBJECT} refs/heads/secretproject-x {head}\n"
+    assert _pre_push_refs(remote_repo, monkeypatch, gone) == 0
+    assert capsys.readouterr().err == ""
+
+
+def test_pre_push_refs_with_no_line_has_nothing_to_scan(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _pre_push_refs(remote_repo, monkeypatch) == 0
+
+
+@pytest.mark.parametrize("line", ["refs/heads/x\n", "a b c d e\n"], ids=["short", "long"])
+def test_pre_push_refs_refuses_a_line_it_cannot_parse(
+    remote_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    line: str,
+) -> None:
+    assert _pre_push_refs(remote_repo, monkeypatch, line) == 1
+    assert "push line 1: cannot be parsed, refusing" in capsys.readouterr().err
+
+
+def test_pre_push_refs_refuses_an_object_the_clone_does_not_hold(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _pre_push_refs(remote_repo, monkeypatch, _line("refs/heads/x", "1" * 40)) == 1
+    assert "git cat-file failed, refusing" in capsys.readouterr().err
+
+
+def test_pre_push_refs_refuses_a_tag_object_without_an_object_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    outputs = {"-t": b"tag\n", "tag": b"tagger Dev <dev@example.org> 0 +0000\n\nmessage\n"}
+    monkeypatch.setattr(cpt, "git_out", lambda *args, **_kw: outputs[args[1]])
+    with pytest.raises(cpt.GitError, match="cat-file"):
+        cpt.peel_tags("a" * 40, PATTERNS)
+
+
+def test_pre_push_refs_without_a_denylist_skips_the_tag_scan_and_keeps_the_path_guard(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tag = _tag(remote_repo, "v1", "about secretproject")
+    monkeypatch.setattr(
+        sys, "stdin", io.TextIOWrapper(io.BytesIO(_line("refs/tags/v1", tag).encode()))
+    )
+    absent = str(remote_repo.parent / "absent.txt")
+    assert cpt.main(["--denylist", absent, "--pre-push-refs", "origin", REMOTE_URL]) == 0
+    assert "term scan skipped" in capsys.readouterr().err
+    pushed = _new_branch(remote_repo, "x", {".claude/x": b"fine\n"}, "feat: add x")
+    monkeypatch.setattr(
+        sys, "stdin", io.TextIOWrapper(io.BytesIO(_line("refs/heads/x", pushed).encode()))
+    )
+    assert cpt.main(["--denylist", absent, "--pre-push-refs", "origin", REMOTE_URL]) == 1
+    assert PRIVATE_PATH_FINDING in capsys.readouterr().err
+
+
+def test_pre_push_refs_reports_a_finding_once_when_two_lines_share_it(
+    remote_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pushed = _new_branch(remote_repo, "x", {"notes.md": TERM_TEXT}, "feat: add notes")
+    lines = (_line("refs/heads/x", pushed), _line("refs/heads/y", pushed))
+    assert _pre_push_refs(remote_repo, monkeypatch, *lines) == 1
+    assert capsys.readouterr().err.count("notes.md:1:") == 1
+
+
+@pytest.mark.parametrize("url", CANONICAL_URLS)
+def test_pre_push_refs_to_the_canonical_repository_refuses_without_a_denylist(
+    push_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    url: str,
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"")))
+    args = ["--denylist", str(push_repo.parent / "absent.txt"), "--pre-push-refs", "origin", url]
+    assert cpt.main(args) == 2
+    err = capsys.readouterr().err
+    assert "PUBLIC_DENYLIST" in err
+    assert "term scan skipped" not in err
+
+
+@pytest.mark.parametrize("url", NOT_CANONICAL_URLS, ids=NOT_CANONICAL_IDS)
+def test_pre_push_refs_to_another_remote_keeps_the_skip_without_a_denylist(
+    push_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    url: str,
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"")))
+    args = ["--denylist", str(push_repo.parent / "absent.txt"), "--pre-push-refs", "origin", url]
+    assert cpt.main(args) == 0
+    assert "term scan skipped" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [["a.md"], ["--pre-push"], ["--commit-messages", "HEAD"], ["--message-files", "m.txt"]],
+)
+def test_pre_push_refs_refuses_inputs_it_would_ignore(
+    push_repo: Path, capsys: pytest.CaptureFixture[str], extra: list[str]
+) -> None:
+    deny = str(push_repo.parent / "deny.txt")
+    with pytest.raises(SystemExit) as exit_info:
+        cpt.main(["--denylist", deny, "--pre-push-refs", "origin", REMOTE_URL, *extra])
+    assert exit_info.value.code == 2
+    # the mode's own refusal, not argparse failing on an unknown flag
+    assert "--pre-push-refs reads git's push lines and takes no paths" in capsys.readouterr().err
+
+
+def test_pre_push_refs_needs_a_remote_name_and_url(
+    push_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        cpt.main(["--denylist", str(push_repo.parent / "deny.txt"), "--pre-push-refs", "origin"])
+    assert exit_info.value.code == 2
+    assert "expected 2 arguments" in capsys.readouterr().err
+
+
+# End to end: the installer writes the shim, a stand-in for pre-commit's generated hook runs
+# it as pre-push.legacy (pre-commit's `_run_legacy` runs it first with git's argv and stdin
+# and stops the push on a non-zero exit), and a real `git push` is refused or lands.
+STAND_IN = """#!/usr/bin/env python3
+# File generated by pre-commit: https://pre-commit.com
+# Stand-in for the one step of pre-commit's hook that matters here (hook_impl._run_legacy).
+import os
+import subprocess
+import sys
+
+legacy = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pre-push.legacy")
+sys.exit(subprocess.run([legacy, *sys.argv[1:]], check=False).returncode)
+"""
+TEST_ENV = {
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_SYSTEM": os.devnull,
+    "PUBLIC_DENYLIST": "\n".join(p.pattern for p in PATTERNS),
+}
+
+
+def _install_guard(repo: Path) -> None:
+    """The versioned scripts into the tmp repo, the stand-in hook, then the real installer."""
+    (repo / "scripts").mkdir()
+    for name in ("check_public_tree.py", "check_push_ancestry.py"):
+        shutil.copy(REPO / "scripts" / name, repo / "scripts" / name)
+    hook = repo / ".git/hooks/pre-push"
+    hook.write_text(STAND_IN, encoding="utf-8")
+    hook.chmod(0o755)
+    installer = REPO / "scripts/install_push_guard.py"
+    subprocess.run(
+        [sys.executable, str(installer)], cwd=repo, env={**os.environ, **TEST_ENV}, check=True
+    )
+
+
+def _git_push(repo: Path, *refs: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo), "push", "-q", "origin", *refs],
+        capture_output=True,
+        text=True,
+        env={**os.environ, **TEST_ENV},
+        check=False,
+    )
+
+
+def _remote_has(repo: Path, ref: str) -> bool:
+    bare = repo.parent / "origin.git"
+    result = subprocess.run(
+        ["git", "-C", str(bare), "rev-parse", "--verify", "--quiet", ref],
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def test_a_real_push_of_a_term_named_branch_without_a_new_commit_is_refused(
+    remote_repo: Path,
+) -> None:
+    _install_guard(remote_repo)
+    _git(remote_repo, "branch", "secretproject-x")  # a commit the remote already has
+    result = _git_push(remote_repo, "secretproject-x")
+    assert result.returncode == 1
+    assert "matches denylist pattern #2" in result.stderr
+    assert "secretproject" not in result.stderr.lower()
+    assert not _remote_has(remote_repo, "refs/heads/secretproject-x")
+
+
+def test_a_real_push_of_a_clean_branch_without_a_new_commit_lands(remote_repo: Path) -> None:
+    _install_guard(remote_repo)
+    _git(remote_repo, "branch", "feature-x")
+    assert _git_push(remote_repo, "feature-x").returncode == 0
+    assert _remote_has(remote_repo, "refs/heads/feature-x")
+
+
+def test_a_real_multi_ref_push_is_refused_for_a_term_in_the_second_ref(
+    remote_repo: Path,
+) -> None:
+    _install_guard(remote_repo)
+    _new_branch(remote_repo, "a", {"a.md": b"fine\n"}, "feat: add a")
+    _new_branch(remote_repo, "b", {"b.md": b"fine\n"}, TERM_MESSAGE)
+    result = _git_push(remote_repo, "a", "b")
+    assert result.returncode == 1
+    assert not _remote_has(remote_repo, "refs/heads/a")
+    assert not _remote_has(remote_repo, "refs/heads/b")
+
+
+def test_a_real_push_of_an_annotated_tag_with_a_term_is_refused(remote_repo: Path) -> None:
+    _install_guard(remote_repo)
+    _tag(remote_repo, "v1", "about secretproject")
+    assert _git_push(remote_repo, "v1").returncode == 1
+    assert not _remote_has(remote_repo, "refs/tags/v1")
+
+
+@pytest.mark.parametrize("missing", ["uv", "script"])
+def test_the_shim_refuses_in_one_line_when_uv_or_the_script_is_missing(
+    remote_repo: Path, tmp_path: Path, missing: str
+) -> None:
+    _install_guard(remote_repo)
+    if missing == "script":
+        (remote_repo / "scripts/check_public_tree.py").unlink()
+    git = shutil.which("git")
+    assert git is not None
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "git").symlink_to(git)
+    if missing == "script":
+        uv = shutil.which("uv")
+        assert uv is not None
+        (bin_dir / "uv").symlink_to(uv)
+    shim = remote_repo / ".git/hooks/pre-push.legacy"
+    result = subprocess.run(
+        [sys.executable, str(shim), "origin", REMOTE_URL],
+        cwd=remote_repo,
+        capture_output=True,
+        text=True,
+        env={"PATH": str(bin_dir)},
+        input="",
+        check=False,
+    )
+    assert result.returncode == 1
+    assert len(result.stderr.splitlines()) == 1
+    assert "refusing the push" in result.stderr
