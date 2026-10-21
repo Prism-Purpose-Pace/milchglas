@@ -96,7 +96,7 @@ def _reduce(drawn: tuple[str, str | None], zone: str) -> object:
 
 
 @given(events(), st.sampled_from(ZONES))
-def test_reduce_returns_a_block_or_a_skip_or_raises_malformed(
+def test_reduce_returns_a_block_or_a_skip_or_raises_malformed_prop_13(
     drawn: tuple[str, str | None], zone: str
 ) -> None:
     # Any other exception propagates out of `_reduce` and fails the test.
@@ -107,7 +107,7 @@ def _is(kind: type, drawn: tuple[tuple[str, str | None], str]) -> bool:
     return isinstance(_reduce(*drawn), kind)
 
 
-def test_generated_events_reach_every_kind_of_outcome() -> None:
+def test_generated_events_reach_every_kind_of_outcome_prop_13() -> None:
     # Without this the property above could hold only because nothing ever succeeds.
     for kind in (TimedBlock, DayBlock, Skip, MalformedEventError):
         find(st.tuples(events(), st.sampled_from(ZONES)), partial(_is, kind))
