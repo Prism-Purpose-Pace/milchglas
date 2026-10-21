@@ -1,5 +1,7 @@
 """src/milchglas/core must stay pure: no I/O, no clock, no imports from outside core.
 
+Catalogue GATE-14.
+
 The feed has to be byte-identical for unchanged source, so the pipeline core computes and
 never observes: no filesystem, network or environment access, and no reading of the
 current time (DTSTAMP is the last content change, which the caller passes in).

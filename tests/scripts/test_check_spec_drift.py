@@ -1,5 +1,7 @@
 """check_spec_drift.py: one fact in one place - config keys and placeholder thresholds.
 
+Catalogue GATE-13.
+
 Fixtures are the real docs/spec.md and CLAUDE.md of this checkout, mutated in place, plus
 the config.json row of docs/architecture.md copied verbatim from branch
 docs/c4-architecture (spec v0.3 era, the row that still names `token`).

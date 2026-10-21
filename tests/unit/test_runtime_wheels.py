@@ -1,4 +1,4 @@
-"""Every wheel in the runtime closure is pure Python (spec NFR-O3, AC-12).
+"""Every wheel in the runtime closure is pure Python (spec NFR-O3, AC-12; catalogue GATE-2).
 
 Options A to C share one codebase only while no runtime dependency ships native code.
 The closure is walked from `importlib.metadata.requires("milchglas")`: a requirement
