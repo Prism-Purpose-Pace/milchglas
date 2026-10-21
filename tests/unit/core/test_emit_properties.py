@@ -3,16 +3,17 @@
 import re
 import unicodedata
 from dataclasses import replace
+from zoneinfo import ZoneInfo
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from milchglas.core.emit import emit, uid
-from milchglas.core.model import Block, TimedBlock, Window, clip, merge, round_to_grid, window
+from milchglas.core.model import Block, TimedBlock, clip, merge, round_to_grid, window
 from tests.support.blocks import BERLIN
 from tests.support.feed import assert_feed_invariants, logical_lines, parse_feed, summaries
-from tests.support.strategies import GRIDS, YEAR_START, mixed_blocks
+from tests.support.strategies import GRID_ZONES, YEAR_START, mixed_blocks
 
 WINDOW = window(YEAR_START, BERLIN, 365)
 # What emit must refuse in a summary, decided from the Unicode database and not from the
@@ -47,17 +48,19 @@ def _feed(blocks: list[Block], summary: str = "Blocker Privat", ttl_seconds: int
     )
 
 
-def _pipeline(blocks: list[Block], win: Window, grid: int) -> bytes:
-    return _feed(merge(round_to_grid(clip(blocks, win), grid, BERLIN)))
+def _pipeline(blocks: list[Block], pair: tuple[int, ZoneInfo]) -> bytes:
+    grid, zone = pair
+    win = window(YEAR_START, zone, 365)
+    return _feed(merge(round_to_grid(clip(blocks, win), grid, zone)))
 
 
-@given(st.data(), mixed_blocks(), GRIDS)
+@given(st.data(), mixed_blocks(), GRID_ZONES)
 def test_the_pure_pipeline_is_deterministic_prop_7(
-    data: st.DataObject, blocks: list[Block], grid: int
+    data: st.DataObject, blocks: list[Block], pair: tuple[int, ZoneInfo]
 ) -> None:
-    feed = _pipeline(blocks, WINDOW, grid)
-    assert _pipeline(blocks, WINDOW, grid) == feed
-    assert _pipeline(data.draw(st.permutations(blocks)), WINDOW, grid) == feed
+    feed = _pipeline(blocks, pair)
+    assert _pipeline(blocks, pair) == feed
+    assert _pipeline(data.draw(st.permutations(blocks)), pair) == feed
 
 
 @given(mixed_blocks())
@@ -77,9 +80,11 @@ def test_uid_identifies_kind_and_span_prop_9(pair: list[Block]) -> None:
         assert (uid("s", a) == uid("s", b)) is same
 
 
-@given(mixed_blocks(), GRIDS)
-def test_every_generated_feed_holds_the_invariants_prop_10(blocks: list[Block], grid: int) -> None:
-    assert_feed_invariants(_pipeline(blocks, WINDOW, grid))
+@given(mixed_blocks(), GRID_ZONES)
+def test_every_generated_feed_holds_the_invariants_prop_10(
+    blocks: list[Block], pair: tuple[int, ZoneInfo]
+) -> None:
+    assert_feed_invariants(_pipeline(blocks, pair))
 
 
 @given(SUMMARIES)

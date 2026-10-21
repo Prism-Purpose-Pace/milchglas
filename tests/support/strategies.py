@@ -1,18 +1,30 @@
-"""Hypothesis strategies for busy blocks in 2026, a year holding both Berlin DST days.
+"""Hypothesis strategies for busy blocks in 2026, a year holding the DST days of most zones.
 
 Timed blocks have second resolution so rounding has work to do; durations run up to
 72 hours so blocks cross midnight and the DST transitions.
 """
 
+import zoneinfo
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from hypothesis import strategies as st
 
-from milchglas.core.model import Block, DayBlock, TimedBlock
+from milchglas.core.model import Block, DayBlock, TimedBlock, grid_fits_zone
 
 YEAR_START = datetime(2026, 1, 1, tzinfo=UTC)
 YEAR_SECONDS = 365 * 86400
-GRIDS = st.sampled_from([5, 15, 30, 60])
+# Every (grid, zone) the zone check accepts at YEAR_START, over all zones of the tz database
+# and every divisor of the day: a property over these pairs holds for each valid config, and
+# no hand-picked list narrows it. The meta test compares this list with an enumeration of
+# its own. Building it reads each zone's offsets for a year, about 6 s for 600 zones.
+GRID_ZONE_PAIRS: list[tuple[int, ZoneInfo]] = [
+    (grid, zone)
+    for zone in map(ZoneInfo, sorted(zoneinfo.available_timezones()))
+    for grid in range(1, 24 * 60 + 1)
+    if 24 * 60 % grid == 0 and grid_fits_zone(grid, zone, YEAR_START)
+]
+GRID_ZONES = st.sampled_from(GRID_ZONE_PAIRS)
 
 
 @st.composite
