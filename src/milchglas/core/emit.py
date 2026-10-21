@@ -56,7 +56,8 @@ def emit(  # noqa: PLR0913 - every argument is one field of the published feed
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         f"PRODID:-//Milchglas//{version}//DE",
-        "METHOD:PUBLISH",
+        # No METHOD: without it RFC 5545 §3.8.7.2 reads DTSTAMP as the last
+        # revision of the component, which is what D-7c keeps.
         f"X-WR-CALNAME:{CALNAME}",
         f"REFRESH-INTERVAL;VALUE=DURATION:{ttl}",
         f"X-PUBLISHED-TTL:{ttl}",

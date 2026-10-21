@@ -18,7 +18,6 @@ _HEADER = [
     r"BEGIN:VCALENDAR",
     r"VERSION:2\.0",
     r"PRODID:-//Milchglas//[0-9A-Za-z.+-]+//DE",
-    r"METHOD:PUBLISH",
     r"X-WR-CALNAME:Privat \(busy\)",
     r"REFRESH-INTERVAL;VALUE=DURATION:(?P<ttl>PT\w+)",
     r"X-PUBLISHED-TTL:(?P=ttl)",
