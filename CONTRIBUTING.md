@@ -64,6 +64,8 @@ docstring. Gate details: [TOOLING.md](TOOLING.md).
   without the fix.
 - Write the failing test first. Each gating assertion needs a case that must pass and
   one that must fail.
+- Test IDs live in `docs/test-catalogue.md`: a new behaviour gets its row there first,
+  and its test cites the ID.
 - Core behaviour gets golden tests: overlap and adjacency merge, grid rounding, DST
   transitions in Europe/Berlin, all-day, multi-day, tentative, cancelled, declined,
   RRULE with EXDATE and overridden instances, window clipping, UID determinism, line
