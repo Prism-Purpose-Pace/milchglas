@@ -225,13 +225,16 @@ def test_ci_scans_only_the_commits_a_change_adds() -> None:
     assert "github.event.before" in ci
 
 
-def test_local_push_hook_scans_only_unpushed_commits() -> None:
-    # Same defect as in CI, one level down: the pre-push hook scanned all of HEAD's
-    # history, so the published a995e8f blocked every local push before CI ever ran.
+def test_local_push_hook_scans_the_pushed_ref() -> None:
+    # pre-commit hands a pre-push hook the pushed ref in its environment. A fixed
+    # `<base>..HEAD` range scanned the checked-out branch instead, so `git push origin X`
+    # with another branch checked out published X unscanned.
     config = (REPO / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-    entries = [line for line in config.splitlines() if "--commit-messages" in line]
-    assert entries
-    assert all(line.rstrip().endswith("--commit-messages origin/main..HEAD") for line in entries)
+    block = config.split("- id: check-public-tree-history", 1)[-1].split("- id:", 1)[0]
+    assert "entry: uv run --script scripts/check_public_tree.py --pre-push\n" in block
+    assert "stages: [pre-push]" in block
+    assert "always_run: true" in block
+    assert "pass_filenames: false" in block
 
 
 def test_commit_message_hook_runs_the_term_guard_on_the_message() -> None:
@@ -345,6 +348,233 @@ def test_a_range_leaves_published_history_below_its_base_unscanned(
     assert cpt.message_violations(cpt.commit_messages(f"{base}..{head}"), PATTERNS) == []
     # the guard still guards: the same commit inside the scanned range is reported
     assert cpt.message_violations(cpt.commit_messages(head), PATTERNS)
+
+
+# --pre-push: pre-commit exports the pushed ref (PRE_COMMIT_TO_REF, or the local branch when
+# the push has no new-commits range) and the guard scans THAT commit, not HEAD or the
+# working tree. Every test runs in a tmp repo with HEAD = main = origin/main and a clean
+# README; branch x is never checked out.
+PUSH_ENV = (
+    "PRE_COMMIT_FROM_REF",
+    "PRE_COMMIT_TO_REF",
+    "PRE_COMMIT_LOCAL_BRANCH",
+    "PRE_COMMIT_REMOTE_BRANCH",
+    "PRE_COMMIT_REMOTE_NAME",
+    "PRE_COMMIT_REMOTE_URL",
+)
+TERM_MESSAGE = "feat: cite secretproject"
+TERM_TEXT = b"about secretproject\n"
+
+
+def _commit_files(repo: Path, files: dict[str, bytes], message: str) -> str:
+    for name, data in files.items():
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo / name).write_bytes(data)
+        _git(repo, "add", name)
+    _git(repo, "commit", "-q", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _branch_x(repo: Path, files: dict[str, bytes], message: str) -> str:
+    """Commit on branch x, one ahead of main, then back on main; return the commit."""
+    _git(repo, "checkout", "-q", "-b", "x")
+    sha = _commit_files(repo, files, message)
+    _git(repo, "checkout", "-q", "main")
+    return sha
+
+
+@pytest.fixture
+def push_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    # the hooks run pytest inside a push: a leaked PRE_COMMIT_* would steer these tests
+    for name in PUSH_ENV:
+        monkeypatch.delenv(name, raising=False)
+    _denylist_file(tmp_path, monkeypatch)  # outside the repo, so it is no working-tree file
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _commit_files(repo, {"README.md": b"clean\n"}, "chore: root")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    monkeypatch.chdir(repo)
+    return repo
+
+
+def _pre_push(repo: Path) -> int:
+    return cpt.main(["--denylist", str(repo.parent / "deny.txt"), "--pre-push"])
+
+
+def test_pre_push_scans_the_pushed_branch_not_head(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pushed = _branch_x(push_repo, {"notes.md": TERM_TEXT}, TERM_MESSAGE)
+    monkeypatch.setenv("PRE_COMMIT_TO_REF", pushed)
+    assert _pre_push(push_repo) == 1
+    short = _git(push_repo, "rev-parse", "--short", pushed)
+    err = capsys.readouterr().err
+    # the file at the pushed commit, then its message (author and committer are lines 1-2)
+    assert err.splitlines() == [
+        "notes.md:1: matches denylist pattern #2",
+        f"commit {short}:3: matches denylist pattern #2",
+        "check-public-tree: 2 finding(s)",
+    ]
+    assert "secretproject" not in err.lower()
+
+
+def test_pre_push_passes_a_clean_pushed_branch(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pushed = _branch_x(push_repo, {"notes.md": b"fine\n"}, "feat: add notes")
+    monkeypatch.setenv("PRE_COMMIT_TO_REF", pushed)
+    assert _pre_push(push_repo) == 0
+
+
+def test_pre_push_resolves_the_local_branch_when_pre_commit_sets_no_to_ref(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A push that includes a root commit gets no FROM/TO ref, only the branch names.
+    _branch_x(push_repo, {"notes.md": TERM_TEXT}, TERM_MESSAGE)
+    monkeypatch.setenv("PRE_COMMIT_REMOTE_NAME", "origin")
+    monkeypatch.setenv("PRE_COMMIT_LOCAL_BRANCH", "refs/heads/x")
+    assert _pre_push(push_repo) == 1
+
+
+def test_pre_push_refuses_a_push_whose_ref_cannot_be_resolved(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Falling back to HEAD here would reopen the defect: it scans another ref than the pushed one.
+    _branch_x(push_repo, {"notes.md": TERM_TEXT}, TERM_MESSAGE)
+    monkeypatch.setenv("PRE_COMMIT_REMOTE_NAME", "origin")
+    assert _pre_push(push_repo) == 1
+    assert "cannot determine the pushed ref" in capsys.readouterr().err
+
+
+def test_pre_push_without_a_push_environment_scans_head_not_other_branches(
+    push_repo: Path,
+) -> None:
+    _branch_x(push_repo, {"notes.md": TERM_TEXT}, TERM_MESSAGE)
+    assert _pre_push(push_repo) == 0
+
+
+def test_pre_push_without_a_push_environment_reports_a_term_in_head(push_repo: Path) -> None:
+    _commit_files(push_repo, {"head.md": TERM_TEXT}, TERM_MESSAGE)
+    assert _pre_push(push_repo) == 1
+
+
+@pytest.mark.parametrize(
+    ("variable", "label"),
+    [
+        ("PRE_COMMIT_LOCAL_BRANCH", "ref local branch"),
+        ("PRE_COMMIT_REMOTE_BRANCH", "ref remote branch"),
+    ],
+)
+def test_pre_push_reports_a_denylisted_ref_name_without_echoing_it(
+    push_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    variable: str,
+    label: str,
+) -> None:
+    monkeypatch.setenv("PRE_COMMIT_TO_REF", _git(push_repo, "rev-parse", "HEAD"))
+    monkeypatch.setenv(variable, "refs/heads/secretproject")
+    assert _pre_push(push_repo) == 1
+    err = capsys.readouterr().err
+    assert err.splitlines() == [
+        f"{label}: matches denylist pattern #2",
+        "check-public-tree: 1 finding(s)",
+    ]
+    assert "secretproject" not in err.lower()
+
+
+@pytest.mark.parametrize("variable", ["PRE_COMMIT_LOCAL_BRANCH", "PRE_COMMIT_REMOTE_BRANCH"])
+def test_pre_push_passes_a_clean_ref_name(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, variable: str
+) -> None:
+    monkeypatch.setenv("PRE_COMMIT_TO_REF", _git(push_repo, "rev-parse", "HEAD"))
+    monkeypatch.setenv(variable, "refs/heads/feature")
+    assert _pre_push(push_repo) == 0
+
+
+def test_pre_push_ignores_a_term_only_the_working_tree_holds(push_repo: Path) -> None:
+    (push_repo / "scratch.md").write_bytes(TERM_TEXT)  # untracked
+    (push_repo / "README.md").write_bytes(TERM_TEXT)  # tracked, modified, not committed
+    assert _pre_push(push_repo) == 0
+    # the guard does see such a file when it is named: the pass above is not blindness
+    assert cpt.main(["--denylist", str(push_repo.parent / "deny.txt"), "README.md"]) == 1
+
+
+@pytest.mark.parametrize("published", [True, False], ids=["published", "unpublished"])
+def test_pre_push_scans_only_commits_not_yet_on_origin_main(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, *, published: bool
+) -> None:
+    # Same defect class as the CI range: a published commit (a995e8f) must not block a push.
+    _commit_files(push_repo, {"p.md": b"fine\n"}, TERM_MESSAGE)
+    if published:
+        _git(push_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    pushed = _branch_x(push_repo, {"notes.md": b"fine\n"}, "feat: add notes")
+    monkeypatch.setenv("PRE_COMMIT_TO_REF", pushed)
+    assert _pre_push(push_repo) == (0 if published else 1)
+
+
+@pytest.mark.parametrize(
+    "case",  # (path, content, first finding)
+    [
+        (
+            "docs/plans/p.md",
+            b"fine\n",
+            "docs/plans/p.md: private path must not be tracked in the public repo",
+        ),
+        (
+            "secretproject-notes.md",
+            b"fine\n",
+            "secretproject-notes.md: file name matches denylist pattern #2",
+        ),
+        ("u.md", "about secretproject\n".encode("utf-16"), "u.md:1: matches denylist pattern #2"),
+    ],
+    ids=["private-path", "term-in-file-name", "utf-16-content"],
+)
+def test_pre_push_reports_what_the_pushed_tree_holds(
+    push_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    case: tuple[str, bytes, str],
+) -> None:
+    path, data, finding = case
+    pushed = _branch_x(push_repo, {path: data}, "feat: add file")
+    monkeypatch.setenv("PRE_COMMIT_TO_REF", pushed)
+    assert _pre_push(push_repo) == 1
+    assert capsys.readouterr().err.splitlines()[0] == finding
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [("/srv/secretproject/n", 1), ("docs/readme.md", 0)],
+    ids=["term", "clean"],
+)
+def test_pre_push_scans_a_symlink_text_in_the_pushed_tree(
+    push_repo: Path, target: str, expected: int
+) -> None:
+    (push_repo / "link").symlink_to(target)
+    _git(push_repo, "add", "link")
+    _git(push_repo, "commit", "-q", "-m", "feat: add link")
+    assert _pre_push(push_repo) == expected
+
+
+def test_pre_push_skips_a_gitlink_entry(push_repo: Path) -> None:
+    # A gitlink names a commit of another repository; reading that object as a file would
+    # scan its message. Here it points at a commit holding a term that is NOT in the pushed
+    # history, so only a skipped gitlink passes.
+    elsewhere = _branch_x(push_repo, {"n.md": b"fine\n"}, TERM_MESSAGE)
+    _git(push_repo, "update-index", "--add", "--cacheinfo", f"160000,{elsewhere},sub")
+    _git(push_repo, "commit", "-q", "-m", "chore: add pointer")
+    assert _pre_push(push_repo) == 0
+
+
+@pytest.mark.parametrize(
+    "extra", [["a.md"], ["--commit-messages", "origin/main..HEAD"], ["--message-files", "m.txt"]]
+)
+def test_pre_push_refuses_inputs_it_would_ignore(push_repo: Path, extra: list[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        cpt.main(["--denylist", str(push_repo.parent / "deny.txt"), "--pre-push", *extra])
+    assert exit_info.value.code == 2
 
 
 def test_denylist_from_env_takes_precedence_over_file(tmp_path: Path) -> None:

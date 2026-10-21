@@ -18,6 +18,12 @@ Checks over the tracked (or given) files:
   Reports name file, line and pattern index only - never the matched text - so public CI
   logs cannot leak what is guarded. Denylist patterns must be ASCII (enforced: exit 2).
 - --message-files: the paths are commit-message files; only their content is term-scanned.
+- --pre-push: the pre-push hook. Scans the pushed commit, not HEAD or the working tree: its
+  tree as git holds it (path guard, file names, blob content), its commits not yet on
+  origin/main (message, author, committer) and the pushed ref names. pre-commit exports the
+  pushed ref (PRE_COMMIT_TO_REF, else PRE_COMMIT_LOCAL_BRANCH); outside a push it is HEAD.
+  A push whose ref cannot be resolved is refused. pre-commit hands hooks only the first
+  ref of a multi-ref push, so push one ref per `git push`.
 
 Residual: matching is per line, so a term split across lines, encoded (base64, UTF-16
 without BOM) or spelled with homoglyphs from another script is not detected.
@@ -40,6 +46,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+# Sibling script (this directory is sys.path[0] when run as a script): one rule for
+# "which commit is being pushed" in both pre-push hooks.
+from check_push_ancestry import git_resolve, pushed_commit
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
@@ -55,6 +65,16 @@ LOG_FORMAT = "%h%n%an <%ae>%n%cn <%ce>%n%B%x00"
 HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Co", "Cn", "Cs", "Zl", "Zp", "Mn", "Mc", "Me"})
 HANGUL_FILLERS = frozenset(map(chr, (0x115F, 0x1160, 0x3164, 0xFFA0)))
 KEPT_CONTROLS = frozenset("\n\t")
+# --pre-push: commits below this ref are published and cannot be rewritten.
+PUSH_BASE = "origin/main"
+# What pre-commit exports about a push (pre-commit commands/hook_impl.py); any of these
+# marks a push, so an unresolvable pushed ref there is refused rather than read as HEAD.
+PUSH_VARIABLES = ("PRE_COMMIT_REMOTE_NAME", "PRE_COMMIT_TO_REF", "PRE_COMMIT_LOCAL_BRANCH")
+# Ref names are published too; reports name the variable's role, never the ref itself.
+REF_VARIABLES = (
+    ("PRE_COMMIT_LOCAL_BRANCH", "local branch"),
+    ("PRE_COMMIT_REMOTE_BRANCH", "remote branch"),
+)
 
 
 class DenylistError(ValueError):
@@ -234,6 +254,85 @@ def commit_messages(rev: str) -> list[tuple[str, str]]:
     return parse_log(out)
 
 
+def tree_entries(commit: str) -> list[tuple[str, str, str]]:
+    """(type, object id, path) of every blob and gitlink in the tree of `commit`."""
+    out = subprocess.run(
+        ["git", "ls-tree", "-r", "-z", "--full-tree", commit],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    entries = []
+    for record in out.split("\0"):
+        if record:
+            meta, _, path = record.partition("\t")  # "<mode> <type> <oid>" TAB path
+            _mode, kind, oid = meta.split(" ")
+            entries.append((kind, oid, path))
+    return entries
+
+
+def read_blobs(oids: Iterable[str]) -> dict[str, bytes]:
+    """Content of each object from one `git cat-file --batch` ("<oid> <type> <size>" LF data LF)."""
+    wanted = list(dict.fromkeys(oids))
+    out = subprocess.run(
+        ["git", "cat-file", "--batch"],
+        input="".join(f"{oid}\n" for oid in wanted).encode(),
+        check=True,
+        capture_output=True,
+    ).stdout
+    blobs: dict[str, bytes] = {}
+    pos = 0
+    for oid in wanted:
+        end = out.index(b"\n", pos)
+        size = int(out[pos:end].split()[2])  # a missing object has no size: fails closed
+        blobs[oid] = out[end + 1 : end + 1 + size]
+        pos = end + size + 2
+    return blobs
+
+
+def tree_report(commit: str, patterns: Sequence[re.Pattern[str]] | None) -> list[str]:
+    """`run` over the tree of `commit` as git holds it, not over the working tree."""
+    entries = tree_entries(commit)
+    private = path_violations(path for _, _, path in entries)
+    report = [f"{p}: private path must not be tracked in the public repo" for p in private]
+    if patterns is None:
+        return report
+    blobs = read_blobs(oid for kind, oid, path in entries if kind == "blob" and path not in private)
+    for kind, oid, path in entries:
+        if path in private:
+            continue
+        report.extend(format_hit(hit) for hit in name_violations(path, patterns))
+        if kind == "blob":  # a symlink blob is its link text; a gitlink has no content here
+            text = decode(blobs[oid])
+            report.extend(format_hit(hit) for hit in term_violations(path, text, patterns))
+    return report
+
+
+def ref_violations(env: Mapping[str, str], patterns: Sequence[re.Pattern[str]]) -> list[str]:
+    return [
+        f"ref {label}: matches denylist pattern #{hit.pattern + 1}"
+        for variable, label in REF_VARIABLES
+        if env.get(variable)
+        for hit in name_violations(env[variable], patterns)
+    ]
+
+
+def pre_push_report(
+    env: Mapping[str, str], patterns: Sequence[re.Pattern[str]] | None
+) -> list[str]:
+    commit = pushed_commit(env, git_resolve)
+    if commit is None:
+        if any(variable in env for variable in PUSH_VARIABLES):
+            return ["cannot determine the pushed ref, refusing"]  # HEAD would be another ref
+        commit = "HEAD"  # a manual `pre-commit run --hook-stage pre-push`
+    report = tree_report(commit, patterns)
+    if patterns is not None:
+        messages = commit_messages(f"{PUSH_BASE}..{commit}")
+        report.extend(format_hit(hit) for hit in message_violations(messages, patterns))
+        report.extend(ref_violations(env, patterns))
+    return report
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Keep private material out of the public tree.")
     parser.add_argument("paths", nargs="*", help="files to check (default: git ls-files)")
@@ -251,7 +350,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="the paths are commit-message files: scan their content only (no path or name check)",
     )
+    parser.add_argument(
+        "--pre-push",
+        action="store_true",
+        help="the pre-push hook: scan the pushed commit (tree, unpushed commits, ref names)",
+    )
     args = parser.parse_args(argv)
+    if args.pre_push and (args.paths or args.commit_messages or args.message_files):
+        # Else they would be ignored silently, and the run would look like it checked them.
+        parser.error("--pre-push scans the pushed ref and takes no paths or other scan flags")
     if args.message_files and not args.paths:
         # Else the tracked-files default would run with the path guard off.
         parser.error("--message-files needs at least one path")
@@ -268,12 +375,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("check-public-tree: no denylist (PUBLIC_DENYLIST or --denylist)", file=sys.stderr)
             return 2
         print("check-public-tree: no denylist found, term scan skipped", file=sys.stderr)
-    report = run(
-        args.paths or tracked_files(), patterns, Path.cwd(), message_files=args.message_files
-    )
-    if patterns is not None and args.commit_messages:
-        messages = commit_messages(args.commit_messages)
-        report.extend(format_hit(hit) for hit in message_violations(messages, patterns))
+    if args.pre_push:
+        report = pre_push_report(os.environ, patterns)
+    else:
+        report = run(
+            args.paths or tracked_files(), patterns, Path.cwd(), message_files=args.message_files
+        )
+        if patterns is not None and args.commit_messages:
+            messages = commit_messages(args.commit_messages)
+            report.extend(format_hit(hit) for hit in message_violations(messages, patterns))
     for line in report:
         print(line, file=sys.stderr)
     if report:
