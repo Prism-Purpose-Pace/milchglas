@@ -459,9 +459,9 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | ID | Question | Default until answered |
 |---|---|---|
 | Q-1 | All-day events: block bookings (`busy`) or ignore? Should a dedicated out-of-office calendar be the only all-day source? | `busy` |
-| Q-2 | meetergo booking horizon — is it ≤ 28 days? If not, what `window_days`? | 28 |
+| Q-2 | meetergo booking window per meeting type: at most `window_days` - 3 calendar days? | `window_days` 33 |
 | Q-3 | Feed summary text and whether tentative appointments appear as a distinct "Vorläufig" | `Blocker Privat`, tentative = busy |
-| Q-4 | Fail-closed threshold (when the feed is stale, how long until booking is blocked?) | 48 h (backlog) |
+| Q-4 | Fail-closed threshold (when the feed is stale, how long until booking is blocked?) | 48 h (backlog). meetergo keeps its last loaded busy times on a failed update and blocks the host without data, so fail-closed covers only the stale-data case |
 | Q-5 | Mobile subscription wanted in v1? | no |
 | Q-6 | Hostname (operator-chosen subdomain?) and DNS location | an operator-chosen subdomain, e.g. `feed.example.org` |
 | Q-7 | Runbook / consumer docs in German? | German |
@@ -469,13 +469,17 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | Q-9 | A timed busy block overlaps an all-day busy block: merge them into one, or keep both? | Keep both; the no-overlap, no-touch rule of AC-1 applies per kind |
 | Q-10 | Tentative flag of a merged block when tentative and confirmed events overlap | Tentative only if every merged interval is tentative (the MVP emits tentative as plain busy, FR-14) |
 | Q-11 | Does the owner's own `PARTSTAT=TENTATIVE` mark a block as tentative? | Yes, same as `STATUS:TENTATIVE` |
-| Q-12 | Is an all-day event with `TRANSP:TRANSPARENT` excluded (FR-3 names no all-day exception)? | Excluded |
-| Q-13 | Source and lifetime of the UID salt (ICS skeleton, Section 8) | A non-secret value generated once and stored in `config.json`; changing it changes every UID, so consumers see all blocks as new |
-| Q-14 | One unparsable calendar object among valid ones: skip it or fail the refresh? | Fail the refresh and keep the last good feed (D-7d); skipping it would silently create a free slot |
-| Q-15 | Retry backoff steps for FR-1 and the maximum response size | 1 s, 2 s, 4 s between the three retries; 16 MiB |
-| Q-16 | Every enabled calendar answers successfully but holds no events: publish an empty feed? | Yes: publish a valid feed without events and record the success. Any failure (transport error, non-success status, unparsable body, unknown calendar) keeps the previous feed and never yields an empty one (D-7d, NFR-R1) |
+| Q-12 | Does `TRANSP` decide whether an all-day event blocks? | No: for all-day events `TRANSP` is ignored and `allday_mode` (Q-1) decides, because most clients default all-day events to free (`TRANSPARENT`); timed events keep the FR-3 rule. The all-day default of the operator's own clients is an assumption until one all-day event per client is captured |
+| Q-13 | Source and lifetime of the UID salt (ICS skeleton, Section 8) | A non-secret value (`uid_salt`) generated once by `milchglas init` and stored in `config.json`; `refresh` never generates one and fails without it; changing it changes every UID, so consumers delete and re-add every block once |
+| Q-14 | One unparsable calendar object among valid ones: skip it or fail the refresh? | Fail the refresh and keep the last good feed (D-7d); skipping it would silently create a free slot. An object is unparsable when the parser reports any error for it, including errors collected in lenient mode (a non-empty `errors` list), or when an expanded answer still carries `RRULE` or `RDATE` while local expansion is off. A multistatus body with a DOCTYPE is rejected before parsing (an expat handler that raises on a DOCTYPE or entity declaration; stdlib only, NFR-O3). Objects that Nextcloud drops server-side never reach Milchglas (L5) |
+| Q-15 | Retry backoff steps for FR-1 and the maximum response size | 1 s, 2 s, 4 s between the three retries; 16 MiB. Only timeouts and 5xx are retried (FR-1): Nextcloud's brute-force protection delays failures up to 25 s and answers `429` after 10 failures in 30 minutes, so retrying turns a wrong password into a lockout. A wrong or revoked password can also surface as a timeout; the error text says so |
+| Q-16 | Every enabled calendar answers successfully but holds no events: publish an empty feed? | Yes: publish a valid feed without events and record the success. Zero calendars with `enabled: true` is a configuration error (the refresh fails, the last feed stays). Per calendar, the returned object count is recorded in state; a calendar whose count drops from non-zero to zero, and a feed that drops from non-empty to zero blocks, record a warning (counts only) in state and log. Any failure (transport error, non-success status, unparsable body, unknown calendar) keeps the previous feed and never yields an empty one (D-7d, NFR-R1) |
 | Q-17 | Response headers beyond NFR-S1: `X-Content-Type-Options: nosniff` and `Cache-Control: private, max-age=0` | Send both |
-| Q-18 | What triggers local recurrence expansion (the FR-2 fallback)? | An explicit configuration setting, off by default; no automatic switch on a server error |
+| Q-18 | What triggers local recurrence expansion (the FR-2 fallback)? | An explicit configuration setting, off by default; no automatic switch on a server error. Before it can be enabled, local expansion has a per-run time budget and a maximum instance count per object, and treats sub-hourly `FREQ` (`SECONDLY`, `MINUTELY`) as unparsable. Floating times: local expansion reads them in `tz`, sabre in the calendar's `calendar-timezone`, else UTC, so both paths agree only where these match |
+| Q-19 | Does an event whose owner attendee has `PARTSTAT=NEEDS-ACTION` (or no `PARTSTAT`, which RFC 5545 defaults to NEEDS-ACTION) block? | Yes (busy); a mode switch is LATER, like FR-13 and FR-14. A block too many costs a slot, a block too few a double booking |
+| Q-20 | Expanded instances of a `DURATION`-based event keep `DURATION` with a UTC `DTSTART` (sabre/vobject 4.5.6). How is the end computed? | Day and week components are added as a nominal duration in `tz`, time components as exact time (RFC 5545 section 3.3.6): a `P1D` instance starting 2026-10-24 07:00Z ends 2026-10-25 08:00Z. An event created in a zone with other DST dates can be off by one hour |
+| Q-21 | Token rotation cadence? | Yearly and after any provider breach notice; until FR-16 both consumers are re-subscribed together |
+| Q-22 | Should the busy pattern be minimised beyond NFR-P2 (a coarser default grid, merging blocks separated by less than a gap, per-source all-day handling)? | No: the NFR-P2 defaults stay until real data shows the trade-off, because merging lowers the block count only for overlapping or touching appointments. The runbook advises a feed host name that names neither the person nor the purpose (Q-6) |
 
 ---
 
