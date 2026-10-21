@@ -256,7 +256,7 @@ def test_dtstamp_drops_fractional_seconds() -> None:
 
 
 def test_naive_instants_are_rejected() -> None:
-    naive = datetime(2026, 9, 14, 12)  # noqa: DTZ001 - the input under test
+    naive = datetime(2026, 9, 14, 12)
     with pytest.raises(ValueError, match="aware"):
         _emit([TIMED], now=naive)
     with pytest.raises(ValueError, match="aware"):
