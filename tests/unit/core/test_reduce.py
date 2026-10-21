@@ -135,6 +135,11 @@ def test_no_event_content_survives_reduction_core_fil_14() -> None:
         ("dur-negative", Skip.NEGATIVE),
         ("allday-zero", Skip.EMPTY),
         ("allday-negative", Skip.NEGATIVE),
+        # RFC 5545 §3.3.5: a local time in the spring gap takes the offset before the gap,
+        # so 02:30 and 03:30 are the same instant and the event has no length.
+        ("floating-gap-empty", Skip.EMPTY),
+        # Both times are 03:xx CEST by wall clock but 01:30Z and 01:10Z as instants.
+        ("zoned-gap-instants-reversed", Skip.NEGATIVE),
     ],
 )
 def test_events_without_positive_length_yield_no_block(uid: str, expected: Skip) -> None:
@@ -166,6 +171,12 @@ def test_events_without_positive_length_yield_no_block(uid: str, expected: Skip)
         ("utc", timed("2026-10-07T16:00Z", "2026-10-07T17:00Z")),
         # Floating time is read in the configured zone.
         ("floating", timed("2026-10-01T09:00+02:00", "2026-10-01T10:00+02:00")),
+        # NFR-C1: 02:30 does not exist on 2026-03-29 and reads as 01:30Z.
+        ("floating-gap-start", timed("2026-03-29T01:30Z", "2026-03-29T02:00Z")),
+        # 02:30 happens twice on 2026-10-25; the first pass (CEST) is the one that counts.
+        ("floating-fold-first-pass", timed("2026-10-25T00:30Z", "2026-10-25T02:00Z")),
+        # Wall clock says 03:10 -> 02:50 is backwards; as instants it is 40 real minutes.
+        ("zoned-gap-wall-reversed", timed("2026-03-29T01:10Z", "2026-03-29T01:50Z")),
     ],
 )
 def test_event_times_reduce_to_one_block(uid: str, expected: Block) -> None:
