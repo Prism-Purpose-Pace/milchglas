@@ -5,6 +5,8 @@ carry a title, a description, a location or an attendee. Errors carry the proper
 only, never a value, because the library quotes raw values in its messages.
 """
 
+from collections.abc import Collection
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
@@ -17,6 +19,10 @@ from milchglas.core.model import Block, DayBlock, TimedBlock
 class Skip(Enum):
     """Why an event yields no block; carries no event content."""
 
+    NOT_EVENT = "not-event"  # VTODO, VJOURNAL, VFREEBUSY (CORE-FIL-11)
+    CANCELLED = "cancelled"  # STATUS:CANCELLED, any case (FR-3)
+    TRANSPARENT = "transparent"  # TRANSP:TRANSPARENT (FR-3)
+    DECLINED = "declined"  # every owner ATTENDEE entry has PARTSTAT=DECLINED (FR-3)
     EMPTY = "empty"  # zero length, decided before rounding (CORE-ZERO-1, RFC 5545 §3.6.1)
     NEGATIVE = "negative"  # ends before it starts: dropped, the caller warns
 
@@ -25,8 +31,54 @@ class MalformedEventError(ValueError):
     """The event's times cannot be read; the refresh fails and keeps the last feed (Q-14)."""
 
 
-def reduce_event(event: Component, *, tz: ZoneInfo) -> Block | Skip:
-    """The busy block of `event`; floating times are read in `tz`."""
+def reduce_event(
+    event: Component,
+    *,
+    tz: ZoneInfo,
+    owner_emails: Collection[str],
+    keep_transparent_allday: bool = False,
+) -> Block | Skip:
+    """The busy block of `event`, or why it has none (FR-3, FR-4).
+
+    `CLASS` is never read: redaction is Milchglas's job (D-3). The filters run before the
+    times, so an event that cannot block anyway cannot fail a refresh either. Floating
+    times are read in `tz`. `keep_transparent_allday` flips the OPEN Q-12 default, which
+    drops transparent all-day events like any transparent event.
+    """
+    status = _text(event, "STATUS")
+    replies = _owner_replies(event, {_address(email) for email in owner_emails})
+    transparent = _text(event, "TRANSP") == "TRANSPARENT"
+    skip = _excluded(
+        event, status, replies, transparent=transparent and not keep_transparent_allday
+    )
+    if skip is not None:
+        return skip
+    block = _span(event, tz)
+    if isinstance(block, Skip):
+        return block
+    if transparent and isinstance(block, TimedBlock):
+        return Skip.TRANSPARENT
+    # OPEN Q-11 default: the owner's own TENTATIVE reply counts like STATUS:TENTATIVE.
+    tentative = status == "TENTATIVE" or "TENTATIVE" in replies
+    return replace(block, tentative=True) if tentative else block
+
+
+def _excluded(
+    event: Component, status: str, replies: list[str], *, transparent: bool
+) -> Skip | None:
+    if event.name != "VEVENT":
+        return Skip.NOT_EVENT
+    if status == "CANCELLED":
+        return Skip.CANCELLED
+    # Declined under one address but not under another still means attending.
+    if replies and all(reply == "DECLINED" for reply in replies):
+        return Skip.DECLINED
+    if transparent:
+        return Skip.TRANSPARENT
+    return None
+
+
+def _span(event: Component, tz: ZoneInfo) -> Block | Skip:
     start = _read(event, "DTSTART")
     if isinstance(start, datetime):
         return _timed(event, _zoned(start, tz), tz)
@@ -70,6 +122,30 @@ def _allday(event: Component, start: date) -> DayBlock | Skip:
     if stop < start:
         return Skip.NEGATIVE
     return DayBlock(start, stop)
+
+
+def _text(event: Component, name: str) -> str:
+    return str(event.get(name, "")).strip().upper()
+
+
+def _owner_replies(event: Component, owners: set[str]) -> list[str]:
+    """PARTSTAT of every ATTENDEE entry that is one of `owners` (NEEDS-ACTION if unset)."""
+    attendees = event.get("ATTENDEE", [])
+    if not isinstance(attendees, list):
+        attendees = [attendees]
+    return [
+        str(attendee.params.get("PARTSTAT", "NEEDS-ACTION")).upper()
+        for attendee in attendees
+        if _address(str(attendee)) in owners
+    ]
+
+
+def _address(value: str) -> str:
+    """`MAILTO:Owner@Example.ORG` and `owner@example.org` compare equal."""
+    value = value.strip()
+    if value[:7].lower() == "mailto:":
+        value = value[7:]
+    return value.casefold()
 
 
 def _read(event: Component, name: str) -> object:

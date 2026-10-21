@@ -8,6 +8,7 @@ that neither prefix reaches a block, the feed or any error text.
 | File | Origin | Cases |
 |---|---|---|
 | `objects/core-times.ics` | synthetic, RFC 5545 §3.6.1 (DTSTART alone, DTEND/DURATION), §3.3.6 (DURATION nominal days, exact time) and §3.3.5 (floating time); written in the dialect of a CalDAV object as stored, with a VTIMEZONE block | CORE-ZERO-1..3, CORE-DUR-1..5, all-day spans, malformed times |
+| `objects/core-filter.ics` | synthetic, RFC 5545 §3.8.1.11 (STATUS), §3.8.2.7 (TRANSP), §3.8.4.1 and §3.2.12 (ATTENDEE, PARTSTAT), §3.8.1.3 (CLASS); other components per §3.6.2–§3.6.4 | CORE-FIL-1..12, CORE-FIL-14 |
 
 No fixture is captured from a CalDAV server yet. Synthetic files are replaced by
 captured ones (sabre/dav via a Baïkal container) as the contract suite lands; a captured
