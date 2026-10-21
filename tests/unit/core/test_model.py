@@ -5,12 +5,21 @@ a case says otherwise. EU DST 2026: 03-29 (02:00 CET -> 03:00 CEST), 10-25 (03:0
 02:00 CET).
 """
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from milchglas.core.model import Block, DayBlock, TimedBlock, clip, merge, round_to_grid, window
+from milchglas.core.model import (
+    Block,
+    DayBlock,
+    TimedBlock,
+    clip,
+    grid_fits_zone,
+    merge,
+    round_to_grid,
+    window,
+)
 from tests.support.blocks import BERLIN, at, day, timed
 
 # Monday 2026-09-28, the window the e2e oracle pins: 28 days, ending in CET.
@@ -227,15 +236,25 @@ def test_round_floors_start_and_ceils_end_on_the_local_grid(
     assert round_to_grid([block], grid, BERLIN) == [expected]
 
 
-def test_round_keeps_the_fold_of_the_second_pass() -> None:
-    # 02:07 occurs twice on 2026-10-25; the second pass (fold=1, CET) is 01:07Z and must
-    # floor to 01:00Z. Rebuilding the local time from its fields would lose the fold and
-    # give 00:00Z, an hour early.
+@pytest.mark.parametrize(
+    ("grid", "expected"),
+    [
+        (15, timed("2026-10-25T01:00Z", "2026-10-25T01:30Z")),
+        # The zone check rejects 45, 90 and 120 for Berlin, but round_to_grid still reads the
+        # offset in force at each instant, so direction and bound hold. At these grids the
+        # one-hour offset error of a wall clock that loses the fold changes the result; at
+        # 15 it cancels, because 60 is a multiple of 15.
+        (45, timed("2026-10-25T00:30Z", "2026-10-25T02:00Z")),
+        (90, timed("2026-10-25T00:30Z", "2026-10-25T02:00Z")),
+        (120, timed("2026-10-25T01:00Z", "2026-10-25T03:00Z")),
+    ],
+)
+def test_round_keeps_the_fold_of_the_second_pass(grid: int, expected: TimedBlock) -> None:
+    # 02:07 occurs twice on 2026-10-25; the second pass (fold=1, CET) is 01:07Z. Rebuilding
+    # the local time from its fields would lose the fold and read it an hour early.
     start = datetime(2026, 10, 25, 2, 7, fold=1, tzinfo=BERLIN).astimezone(UTC)
     end = datetime(2026, 10, 25, 2, 20, fold=1, tzinfo=BERLIN).astimezone(UTC)
-    assert round_to_grid([TimedBlock(start, end)], 15, BERLIN) == [
-        timed("2026-10-25T01:00Z", "2026-10-25T01:30Z")
-    ]
+    assert round_to_grid([TimedBlock(start, end)], grid, BERLIN) == [expected]
 
 
 def test_round_uses_the_local_grid_of_a_half_hour_zone() -> None:
@@ -260,10 +279,81 @@ def test_round_keeps_the_tentative_flag_and_day_blocks() -> None:
     ]
 
 
-@pytest.mark.parametrize("grid", [0, -15, 7, 25])
+@pytest.mark.parametrize("grid", [0, -15, 7, 25, 50, 1441])
 def test_round_rejects_a_grid_that_does_not_divide_the_day(grid: int) -> None:
     with pytest.raises(ValueError, match="grid"):
         round_to_grid([], grid, BERLIN)
+
+
+@pytest.mark.parametrize("grid", [1, 45, 90, 120, 1440])
+def test_round_accepts_every_divisor_of_the_day(grid: int) -> None:
+    assert round_to_grid([], grid, BERLIN) == []
+
+
+# --- grid and zone (FR-6, AC-22) -----------------------------------------------------------
+
+KOLKATA = ZoneInfo("Asia/Kolkata")
+LORD_HOWE = ZoneInfo("Australia/Lord_Howe")
+CAIRO = ZoneInfo("Africa/Cairo")
+UTC_ZONE = ZoneInfo("UTC")
+JAN_2026 = at("2026-01-01T00:00Z")
+# Pyongyang moved from +08:30 to +09:00 here, a 30-minute change and the only one near it.
+PYONGYANG = ZoneInfo("Asia/Pyongyang")
+PYONGYANG_CHANGE = at("2018-05-04T15:00Z")
+
+
+@pytest.mark.parametrize("zone", [BERLIN, KOLKATA, LORD_HOWE, UTC_ZONE], ids=lambda z: z.key)
+@pytest.mark.parametrize("grid", [0, -15, 7, 25, 50, 1441])
+def test_grid_fits_no_zone_when_it_does_not_divide_the_day(grid: int, zone: ZoneInfo) -> None:
+    assert not grid_fits_zone(grid, zone, JAN_2026)
+
+
+@pytest.mark.parametrize(
+    ("zone", "grid", "fits"),
+    [
+        # AC-22: 15, 30 and 60 pass for Berlin, where 45, 90 and 120 are rejected.
+        *((BERLIN, grid, True) for grid in (15, 30, 60)),
+        *((BERLIN, grid, False) for grid in (45, 90, 120, 1440)),
+        # No DST in Kolkata, so every divisor of the day fits, 45, 90 and 120 included.
+        *((KOLKATA, grid, True) for grid in (15, 45, 60, 90, 120, 1440)),
+        *((UTC_ZONE, grid, True) for grid in (45, 1440)),
+        # AC-22: Lord Howe shifts by 30 minutes, so 60 is rejected and 30 passes.
+        (LORD_HOWE, 60, False),
+        (LORD_HOWE, 30, True),
+        (LORD_HOWE, 15, True),
+        # Cairo changes at midnight; a 60-minute shift fits 60 and not 120.
+        (CAIRO, 60, True),
+        (CAIRO, 120, False),
+    ],
+    ids=lambda v: v.key if isinstance(v, ZoneInfo) else str(v),
+)
+def test_grid_fits_the_zone_by_the_offset_changes_it_has(
+    zone: ZoneInfo, grid: int, *, fits: bool
+) -> None:
+    assert grid_fits_zone(grid, zone, JAN_2026) is fits
+
+
+@pytest.mark.parametrize(
+    ("start", "fits"),
+    [
+        (PYONGYANG_CHANGE - timedelta(days=367), True),  # the change is beyond 366 days
+        (PYONGYANG_CHANGE - timedelta(days=365), False),
+        (PYONGYANG_CHANGE - timedelta(hours=1), False),
+        (PYONGYANG_CHANGE + timedelta(days=1), True),  # the change is in the past
+    ],
+    ids=["beyond-366-days", "inside-365-days", "an-hour-before", "past"],
+)
+def test_grid_fits_counts_only_the_changes_in_the_366_days_after_start(
+    start: datetime, *, fits: bool
+) -> None:
+    # 45 does not divide the 30-minute change; 30 always does.
+    assert grid_fits_zone(45, PYONGYANG, start) is fits
+    assert grid_fits_zone(30, PYONGYANG, start)
+
+
+def test_grid_fits_needs_an_aware_start() -> None:
+    with pytest.raises(ValueError, match="aware"):
+        grid_fits_zone(15, BERLIN, datetime(2026, 1, 1))
 
 
 # --- merge (FR-6, D-7b) -------------------------------------------------------------------
