@@ -88,7 +88,7 @@ def test_every_generated_feed_holds_the_invariants_prop_10(
 
 
 @given(SUMMARIES)
-def test_any_summary_is_either_refused_or_survives_a_reparse(summary: str) -> None:
+def test_any_summary_is_either_refused_or_survives_a_reparse_emit_6(summary: str) -> None:
     if _unsafe(summary):
         with pytest.raises(ValueError, match="summary"):
             _feed([], summary)
@@ -105,7 +105,9 @@ _SECONDS = {"H": 3600, "M": 60, "S": 1}
 
 
 @given(st.integers(min_value=1, max_value=10**7))
-def test_every_emitted_ttl_is_a_dur_value_of_the_configured_seconds(ttl_seconds: int) -> None:
+def test_every_emitted_ttl_is_a_dur_value_of_the_configured_seconds_emit_2(
+    ttl_seconds: int,
+) -> None:
     hints = [
         line.partition(":")[2]
         for line in logical_lines(_feed([], ttl_seconds=ttl_seconds))
