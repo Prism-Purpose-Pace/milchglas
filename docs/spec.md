@@ -399,6 +399,16 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | Q-6 | Hostname (operator-chosen subdomain?) and DNS location | an operator-chosen subdomain, e.g. `feed.example.org` |
 | Q-7 | Runbook / consumer docs in German? | German |
 | Q-8 | Deployment decision D-9: B now, A later? Or D because shared hosting must host it? | B |
+| Q-9 | A timed busy block overlaps an all-day busy block: merge them into one, or keep both? | Keep both; the no-overlap, no-touch rule of AC-1 applies per kind |
+| Q-10 | Tentative flag of a merged block when tentative and confirmed events overlap | Tentative only if every merged interval is tentative (the MVP emits tentative as plain busy, FR-14) |
+| Q-11 | Does the owner's own `PARTSTAT=TENTATIVE` mark a block as tentative? | Yes, same as `STATUS:TENTATIVE` |
+| Q-12 | Is an all-day event with `TRANSP:TRANSPARENT` excluded (FR-3 names no all-day exception)? | Excluded |
+| Q-13 | Source and lifetime of the UID salt (ICS skeleton, Section 8) | A non-secret value generated once and stored in `config.json`; changing it changes every UID, so consumers see all blocks as new |
+| Q-14 | One unparsable calendar object among valid ones: skip it or fail the refresh? | Fail the refresh and keep the last good feed (D-7d); skipping it would silently create a free slot |
+| Q-15 | Retry backoff steps for FR-1 and the maximum response size | 1 s, 2 s, 4 s between the three retries; 16 MiB |
+| Q-16 | Every enabled calendar answers successfully but holds no events: publish an empty feed? | Yes: publish a valid feed without events and record the success. Any failure (transport error, non-success status, unparsable body, unknown calendar) keeps the previous feed and never yields an empty one (D-7d, NFR-R1) |
+| Q-17 | Response headers beyond NFR-S1: `X-Content-Type-Options: nosniff` and `Cache-Control: private, max-age=0` | Send both |
+| Q-18 | What triggers local recurrence expansion (the FR-2 fallback)? | An explicit configuration setting, off by default; no automatic switch on a server error |
 
 ---
 
