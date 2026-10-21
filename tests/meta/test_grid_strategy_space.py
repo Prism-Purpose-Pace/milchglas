@@ -1,5 +1,7 @@
 """The grid and zone strategies must be able to draw every pair the zone check accepts.
 
+Catalogue GATE-15.
+
 A property over generated input holds by construction when the generator draws from a
 hand-picked subset (grids 5, 15, 30 and 60 in Berlin only): the config space the check
 accepts is wider than the space the property saw. This test enumerates the accepted

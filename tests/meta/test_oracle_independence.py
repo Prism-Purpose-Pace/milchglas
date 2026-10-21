@@ -1,5 +1,7 @@
 """A test oracle must not be copied from the code it checks.
 
+Catalogue GATE-16.
+
 A property that compares the implementation with its own pattern passes whenever the
 pattern is wrong. Two shapes give the copy away, and both are read from the syntax tree:
 a `re.compile` pattern literal in tests/ that appears verbatim as a string in src/, and a
