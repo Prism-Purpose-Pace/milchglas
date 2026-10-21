@@ -422,9 +422,9 @@ def test_pre_push_scans_the_pushed_branch_not_head(
     assert _pre_push(push_repo) == 1
     short = _git(push_repo, "rev-parse", "--short", pushed)
     err = capsys.readouterr().err
-    # the file at the pushed commit, then its message (author and committer are lines 1-2)
+    # the file in the pushed commit, then its message (author and committer are lines 1-2)
     assert err.splitlines() == [
-        "notes.md:1: matches denylist pattern #2",
+        f"{short}:notes.md:1: matches denylist pattern #2",
         f"commit {short}:3: matches denylist pattern #2",
         "check-public-tree: 2 finding(s)",
     ]
@@ -553,7 +553,8 @@ def test_pre_push_reports_what_the_pushed_tree_holds(
     pushed = _branch_x(push_repo, {path: data}, "feat: add file")
     monkeypatch.setenv("PRE_COMMIT_TO_REF", pushed)
     assert _pre_push(push_repo) == 1
-    assert capsys.readouterr().err.splitlines()[0] == finding
+    short = _git(push_repo, "rev-parse", "--short", pushed)
+    assert capsys.readouterr().err.splitlines()[0] == f"{short}:{finding}"
 
 
 @pytest.mark.parametrize(
@@ -578,6 +579,200 @@ def test_pre_push_skips_a_gitlink_entry(push_repo: Path) -> None:
     _git(push_repo, "update-index", "--add", "--cacheinfo", f"160000,{elsewhere},sub")
     _git(push_repo, "commit", "-q", "-m", "chore: add pointer")
     assert _pre_push(push_repo) == 0
+
+
+# --pre-push reads what a push transfers: every commit the remote lacks (`<pushed> --not
+# --remotes=<remote>`, pre-commit's own rule for "new"), with its message, identities and every
+# path and blob it adds or changes. The tip tree alone misses a term added and removed again
+# inside the push; a literal `origin/main` base breaks for any other remote name.
+PRIVATE_PATH_FINDING = "private path must not be tracked in the public repo"
+
+
+def _remote(repo: Path, name: str) -> None:
+    """A bare tmp remote `name` holding main as it is now (so refs/remotes/<name>/main exists)."""
+    bare = repo.parent / f"{name}.git"
+    _git(repo.parent, "init", "-q", "--bare", str(bare))
+    _git(repo, "remote", "add", name, str(bare))
+    _git(repo, "push", "-q", name, "main")
+
+
+def _remove(repo: Path, name: str, message: str) -> str:
+    _git(repo, "rm", "-q", name)
+    _git(repo, "commit", "-q", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _push(monkeypatch: pytest.MonkeyPatch, remote: str, commit: str) -> None:
+    monkeypatch.setenv("PRE_COMMIT_REMOTE_NAME", remote)
+    monkeypatch.setenv("PRE_COMMIT_TO_REF", commit)
+
+
+ON_REMOTE = pytest.mark.parametrize(
+    "on_remote", [False, True], ids=["remote-lacks-A", "remote-has-A"]
+)
+
+
+@ON_REMOTE
+def test_pre_push_reads_a_term_added_and_removed_inside_the_push(
+    push_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    on_remote: bool,
+) -> None:
+    _remote(push_repo, "origin")
+    added = _commit_files(push_repo, {"notes.md": TERM_TEXT}, "feat: add notes")  # commit A
+    if on_remote:
+        _git(push_repo, "push", "-q", "origin", "main")
+    _push(monkeypatch, "origin", _remove(push_repo, "notes.md", "fix: drop notes"))  # commit B
+    assert _pre_push(push_repo) == (0 if on_remote else 1)
+    err = capsys.readouterr().err
+    if on_remote:
+        assert err == ""
+    else:
+        short = _git(push_repo, "rev-parse", "--short", added)
+        assert err.splitlines() == [
+            f"{short}:notes.md:1: matches denylist pattern #2",
+            "check-public-tree: 1 finding(s)",
+        ]
+        assert "secretproject" not in err.lower()
+
+
+@ON_REMOTE
+def test_pre_push_reports_a_private_path_added_and_removed_inside_the_push(
+    push_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    on_remote: bool,
+) -> None:
+    _remote(push_repo, "origin")
+    added = _commit_files(push_repo, {".claude/x": b"fine\n"}, "feat: add x")
+    if on_remote:
+        _git(push_repo, "push", "-q", "origin", "main")
+    _push(monkeypatch, "origin", _remove(push_repo, ".claude/x", "fix: drop x"))
+    assert _pre_push(push_repo) == (0 if on_remote else 1)  # removing a published path is no leak
+    short = _git(push_repo, "rev-parse", "--short", added)
+    expected = [] if on_remote else [f"{short}:.claude/x: {PRIVATE_PATH_FINDING}"]
+    assert capsys.readouterr().err.splitlines()[:1] == expected
+
+
+@ON_REMOTE
+def test_pre_push_leaves_a_message_the_remote_already_has_unscanned(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, *, on_remote: bool
+) -> None:
+    _remote(push_repo, "origin")
+    _commit_files(push_repo, {"p.md": b"fine\n"}, TERM_MESSAGE)
+    if on_remote:
+        _git(push_repo, "push", "-q", "origin", "main")
+    _push(monkeypatch, "origin", _commit_files(push_repo, {"q.md": b"fine\n"}, "feat: add q"))
+    assert _pre_push(push_repo) == (0 if on_remote else 1)
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"), [(TERM_TEXT, 1), (b"fine\n", 0)], ids=["term", "clean"]
+)
+def test_pre_push_to_a_remote_not_named_origin_scans_normally(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, *, data: bytes, expected: int
+) -> None:
+    _git(push_repo, "update-ref", "-d", "refs/remotes/origin/main")  # no origin/main anywhere
+    _remote(push_repo, "upstream")
+    _push(monkeypatch, "upstream", _commit_files(push_repo, {"n.md": data}, "feat: add n"))
+    assert _pre_push(push_repo) == expected
+
+
+def test_pre_push_counts_a_commit_only_another_remote_holds_as_new(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _git(push_repo, "update-ref", "-d", "refs/remotes/origin/main")
+    _remote(push_repo, "upstream")
+    _remote(push_repo, "mirror")
+    _commit_files(push_repo, {"notes.md": TERM_TEXT}, "feat: add notes")
+    _git(push_repo, "push", "-q", "mirror", "main")  # only the mirror holds the term commit
+    pushed = _commit_files(push_repo, {"q.md": b"fine\n"}, "feat: add q")
+    _push(monkeypatch, "upstream", pushed)
+    assert _pre_push(push_repo) == 1  # upstream lacks it
+    _push(monkeypatch, "mirror", pushed)
+    assert _pre_push(push_repo) == 0  # the mirror has it
+    # a manual run names no remote: a commit any remote-tracking ref holds is published
+    for name in ("PRE_COMMIT_REMOTE_NAME", "PRE_COMMIT_TO_REF"):
+        monkeypatch.delenv(name)
+    assert _pre_push(push_repo) == 0
+
+
+def test_pre_push_reads_what_a_merge_adds_beyond_its_parents(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _remote(push_repo, "origin")
+    _branch_x(push_repo, {"x.md": b"fine\n"}, "feat: add x")
+    _commit_files(push_repo, {"m.md": b"fine\n"}, "feat: add m")
+    _git(push_repo, "merge", "-q", "--no-ff", "--no-commit", "x")
+    (push_repo / "evil.md").write_bytes(TERM_TEXT)  # in neither parent
+    _git(push_repo, "add", "evil.md")
+    _git(push_repo, "commit", "-q", "-m", "chore: merge x")
+    _push(monkeypatch, "origin", _git(push_repo, "rev-parse", "HEAD"))
+    assert _pre_push(push_repo) == 1
+    short = _git(push_repo, "rev-parse", "--short", "HEAD")
+    assert (
+        capsys.readouterr().err.splitlines()[0] == f"{short}:evil.md:1: matches denylist pattern #2"
+    )
+
+
+@pytest.mark.parametrize("on_remote", [False, True], ids=["remote-lacks-x", "remote-has-x"])
+def test_pre_push_does_not_rescan_what_a_merge_takes_from_a_parent(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, *, on_remote: bool
+) -> None:
+    _remote(push_repo, "origin")
+    _branch_x(push_repo, {"notes.md": TERM_TEXT}, "feat: add notes")
+    if on_remote:
+        _git(push_repo, "push", "-q", "origin", "x")
+    _commit_files(push_repo, {"m.md": b"fine\n"}, "feat: add m")
+    _git(push_repo, "merge", "-q", "--no-ff", "-m", "chore: merge x", "x")
+    _push(monkeypatch, "origin", _git(push_repo, "rev-parse", "HEAD"))
+    assert _pre_push(push_repo) == (0 if on_remote else 1)
+
+
+def test_pre_push_reports_a_failing_git_in_one_line(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _push(monkeypatch, "origin", "1" * 40)  # no such object
+    assert _pre_push(push_repo) == 1
+    assert capsys.readouterr().err.splitlines() == [
+        "check-public-tree: git rev-list failed, refusing"
+    ]
+
+
+@pytest.mark.usefixtures("push_repo")
+def test_a_missing_blob_fails_closed_instead_of_reading_as_empty() -> None:
+    with pytest.raises(cpt.GitError, match="cat-file"):
+        cpt.read_blobs(["1" * 40])
+
+
+def test_diff_tree_output_it_cannot_parse_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cpt, "git_out", lambda *_args, **_kw: b"not-a-record\0path\0")
+    with pytest.raises(cpt.GitError, match="diff-tree"):
+        cpt.changes("HEAD")
+
+
+def test_push_report_takes_its_inputs_as_arguments_not_from_the_environment(
+    push_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pushed = _commit_files(push_repo, {"n.md": TERM_TEXT, ".claude/x": b"fine\n"}, "feat: add n")
+    short = _git(push_repo, "rev-parse", "--short", pushed)
+    monkeypatch.setenv("PRE_COMMIT_REMOTE_NAME", "nowhere")
+    monkeypatch.setenv("PRE_COMMIT_LOCAL_BRANCH", "refs/heads/secretproject")
+    clean_ref = {"local ref": "refs/heads/feature"}
+    assert cpt.push_report("origin", pushed, clean_ref, PATTERNS) == [
+        f"{short}:.claude/x: {PRIVATE_PATH_FINDING}",
+        f"{short}:n.md:1: matches denylist pattern #2",
+    ]
+    assert cpt.push_report("origin", pushed, {"remote ref": "refs/heads/secretproject"}, PATTERNS)[
+        -1:
+    ] == ["ref remote ref: matches denylist pattern #2"]
+    # without a denylist only the path guard runs
+    assert cpt.push_report("origin", pushed, clean_ref, None) == [
+        f"{short}:.claude/x: {PRIVATE_PATH_FINDING}"
+    ]
 
 
 @pytest.mark.parametrize(
