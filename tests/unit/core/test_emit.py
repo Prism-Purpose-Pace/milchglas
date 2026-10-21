@@ -177,8 +177,20 @@ def test_summary_is_escaped_as_rfc_5545_text_emit_6(summary: str, escaped: str) 
         "Blocker\x0bPrivat",
         "Blocker\x85Privat",
         "Blocker\u2028Privat",
+        "Blocker\u2029Privat",
+        "Blocker\ud800Privat",
     ],
-    ids=["LF", "CR", "CRLF-injection", "NUL", "VT", "NEL", "LINE-SEPARATOR"],
+    ids=[
+        "LF",
+        "CR",
+        "CRLF-injection",
+        "NUL",
+        "VT",
+        "NEL",
+        "LINE-SEPARATOR",
+        "PARAGRAPH-SEPARATOR",
+        "LONE-SURROGATE",
+    ],
 )
 def test_summary_with_a_line_break_or_control_character_is_rejected(summary: str) -> None:
     # The only free text in the feed: a raw line break would start a new property.
