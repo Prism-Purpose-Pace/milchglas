@@ -300,6 +300,36 @@ def test_denylist_falls_back_to_file(tmp_path: Path) -> None:
     assert [p.pattern for p in patterns] == ["fromfile"]
 
 
+def test_linked_worktree_reads_the_main_checkout_denylist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The denylist is git-ignored, so a linked worktree has no copy of it: the default
+    # path missed there and the term scan was skipped behind a passing hook.
+    main = tmp_path / "main"
+    main.mkdir()
+    _git(main, "init", "-q")
+    _git(main, "commit", "-q", "--allow-empty", "-m", "root")
+    (main / cpt.DEFAULT_DENYLIST).parent.mkdir(parents=True)
+    (main / cpt.DEFAULT_DENYLIST).write_text("secretproject\n", encoding="utf-8")
+    _git(main, "worktree", "add", "-q", "--detach", str(tmp_path / "wt"))
+    (tmp_path / "wt/note.md").write_text("about secretproject\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path / "wt")
+    monkeypatch.delenv("PUBLIC_DENYLIST", raising=False)
+    assert cpt.main(["note.md"]) == 1
+    assert "note.md:1: matches denylist pattern #1" in capsys.readouterr().err
+
+
+def test_repository_without_any_denylist_still_skips_the_term_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _git(tmp_path, "init", "-q")
+    (tmp_path / "note.md").write_text("about secretproject\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PUBLIC_DENYLIST", raising=False)
+    assert cpt.main(["note.md"]) == 0
+    assert "term scan skipped" in capsys.readouterr().err
+
+
 def test_missing_denylist_yields_none(tmp_path: Path) -> None:
     assert cpt.load_denylist(tmp_path / "absent.txt", {}) is None
 
