@@ -8,8 +8,8 @@ event only start, end and two flags survive the reduction; the rest exists in me
 moment of parsing and is then discarded (spec G1, G3, FR-4).
 
 This page shows the MVP architecture in two C4 views: the system in its environment, and the
-containers of the default deployment, Option B. Milchglas is pre-feature: the diagrams describe
-the planned MVP, not shipped code. Every statement traces to [spec.md](spec.md) (cited as
+containers of the default deployment, Option B. Only the pure core (`src/milchglas/core/`) is
+built so far: the diagrams describe the planned MVP, not shipped code. Every statement traces to [spec.md](spec.md) (cited as
 section, requirement or decision ID) or to the layout and invariants in `CLAUDE.md`.
 
 **Legend.** Blue = Milchglas (the system in scope; in the container view its system boundary is

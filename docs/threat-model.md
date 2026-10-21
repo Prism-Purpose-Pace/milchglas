@@ -2,7 +2,7 @@
 
 Milchglas reads private CalDAV calendars read-only, reduces every event to an anonymous
 interval and publishes a busy-only ICS feed (see [architecture.md](architecture.md)). This page
-models the threats to the **planned MVP**: Milchglas is pre-feature, so every statement refers
+models the threats to the **planned MVP**: only the pure core is built so far, so every statement refers
 to the design in [spec.md](spec.md) (cited by requirement, decision, acceptance-criterion or
 open-question ID, or by section), to the invariants in `CLAUDE.md`, and to the repository's CI
 and release setup in `TOOLING.md`, `SECURITY.md` and `.github/workflows/`.
