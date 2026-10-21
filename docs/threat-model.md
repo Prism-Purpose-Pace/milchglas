@@ -66,9 +66,9 @@ Every proposed control is written as the check that fails when the control is mi
 ### 1.3 Out of scope
 
 Protection against the providers themselves (CalDAV host, platform, consumers) processing what
-they legitimately see (spec section 3), compromise of the CalDAV server or of the host Milchglas
+they legitimately see (spec W6), compromise of the CalDAV server or of the host Milchglas
 runs on (`SECURITY.md`, out of scope), how consumers cache or display the feed (`SECURITY.md`),
-and encryption of the feed for consumers (spec section 3). These still appear as residual risks
+and encryption of the feed for consumers (spec W5). These still appear as residual risks
 in section 5.3 where they bound what Milchglas can promise.
 
 ---
@@ -83,7 +83,7 @@ in section 5.3 where they bound what Milchglas can promise.
 | TB2 | Edge proxy and platform network to the Milchglas containers | Forwarded requests after TLS termination | Co-tenant apps share the platform network; access logs are written here (NFR-S5) |
 | TB3 | Class-A zone inside the refresher | Full events in, `(start, end, tentative, allday)` out | The privacy boundary of `architecture.md` section 2.3: from the reduce step on, no private field exists (FR-4) |
 | TB4 | Refresher to CalDAV provider | CalDAV `REPORT` with Basic auth out, multistatus XML with full events back | The provider is trusted for data, never for redaction (D-3); its answers are untrusted input |
-| TB5 | Operator to platform | `config.json` edits, environment secrets, Git-push deploys | The operator is the only administrator (G6, spec section 3) |
+| TB5 | Operator to platform | `config.json` edits, environment secrets, Git-push deploys | The operator is the only administrator (G6, spec W3) |
 | TB6 | Supply chain to build and runtime | Dependencies, base image, actions, release assets | Code from outside runs next to A1 and A3 |
 
 ### 2.2 Data-flow diagram
@@ -255,7 +255,7 @@ is missing.
 | ID | Category | Element / flow | Threat | L | I | Risk | Rationale | Existing mitigation | Gap | Proposed control (fails when missing) |
 |---|---|---|---|---|---|---|---|---|---|---|
 | T-33 | D, T | Consumers, F6 | While the feed is unreachable (deploy restart, platform maintenance, T-26), a consumer might treat the calendar as empty. meetergo documents the opposite: it keeps the busy times it loaded last, blocks the host when it has none, and re-checks before confirming a booking, refusing it when that check fails (E-23). So an outage of `web` blocks bookings rather than freeing slots, and a valid but empty feed (T-16) is the case that fails open. mailbox.org's behaviour is UNVERIFIABLE (E-23); a fail-open there hides private blocks from the owner's own view. | M | M | 4 M | Short outages are routine; meetergo fails closed by its own account, so the impact is lost bookings and a misleading owner view, not double bookings. | D-7d (the file is kept); AC-0.2 (blocking works while reachable) | partial: the vendor statement is untested, and nothing covers mailbox.org | A new verification (proposed V-entry, section 5.2): with the feed answering 404, 503 and a timeout, meetergo still blocks the test slot and refuses the booking, and mailbox.org keeps the blocks. If meetergo fails open, the availability of `web` becomes a correctness requirement with its own AC. |
-| T-34 | I | Consumers | Both consumers keep the URL for years: provider staff, support exports, breaches, delegated or shared views of the subscribed calendar. | M | M | 4 M | One URL lives long and sits with two third parties. | Spec section 3 (providers see what they process); D-4; FR-16 (per-consumer tokens, LATER) | partial: no rotation cadence | A rotation cadence (for example yearly, and after any provider breach notice) as a new open question (section 5.2); the rotation procedure is one of the AC-14 executions. |
+| T-34 | I | Consumers | Both consumers keep the URL for years: provider staff, support exports, breaches, delegated or shared views of the subscribed calendar. | M | M | 4 M | One URL lives long and sits with two third parties. | Spec W6 (providers see what they process); D-4; FR-16 (per-consumer tokens, LATER) | partial: no rotation cadence | A rotation cadence (for example yearly, and after any provider breach notice) as a new open question (section 5.2); the rotation procedure is one of the AC-14 executions. |
 | T-35 | I | Operator, setup | The URL leaks while it is set up: sent by mail or chat (link-preview bots and mail scanners fetch and log it), opened in a browser (history, history sync, extensions), shortened. The W3C TAG lists these routes for capability URLs (E-19). | M | M | 4 M | Setup is manual, and tools do not treat URLs as secrets. | NFR-S1 (`X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`) | partial: no handling rule for the operator | `docs/consumers.md` tells the operator to paste the URL from the server terminal straight into the consumer dialog, never through mail, chat or a browser tab. The response test asserts `X-Robots-Tag` and `Referrer-Policy` (an ICS body loads nothing, so the referrer header is defence in depth). |
 | T-36 | R | `web`, logs | With one shared token and stripped logs, a third party polling the feed is invisible: the operator cannot tell whether a leak happened or which consumer leaked. | M | M | 4 M | Detecting a leak decides whether rotation happens at all. | NFR-S5 (allows hashing); FR-16 (LATER) | open | Log each successful feed fetch with the client network (/24 or /48), a user-agent class and a keyed-hash prefix of the token, never the token (new open question, section 5.2). Test: a 200 produces that line, and the line contains no token substring. |
 | T-37 | E, S | `config.json`, `web` | Revocation lag: after a rotation the old token works until `web` re-reads the config; AC-10 tests config reload for calendars only. Without a grace period both consumers break at once, which tempts the operator to postpone rotation. | M | M | 4 M | Rotation is rare and usually follows a leak, when lag matters most. | G7; NFR-O2; AC-14; FR-16 (LATER) | partial: no AC for token reload | Test: after changing the token, within one refresh interval and without a restart, the old token returns 404 and the new one 200; in Option A no old file remains. |
@@ -305,7 +305,7 @@ is missing.
 ## 4. Privacy pass (LINDDUN): the busy pattern and the feed URL
 
 The busy pattern is personal data even without content (spec section 15). It reaches three
-audiences: the two consumers (legitimate, spec section 3), anyone holding a leaked feed URL, and,
+audiences: the two consumers (legitimate, spec W6), anyone holding a leaked feed URL, and,
 through the public booking page, anyone at all. The pass uses four LINDDUN categories (E-20):
 linking (combining data to learn more), identifying (tying data to a person), detecting
 (learning that something exists or happened) and data disclosure.
@@ -383,7 +383,7 @@ uv version pinned in the release workflow satisfies `[build-system].requires` (T
 
 | ID | Residual risk | Why it is accepted | Related |
 |---|---|---|---|
-| R-1 | Both consumers see the full busy pattern within the window. | Spec section 3: the providers' legitimate processing is a non-goal; D-4 keeps content away from them. | T-34, T-53 |
+| R-1 | Both consumers see the full busy pattern within the window. | Spec W6: the providers' legitimate processing is out of scope; D-4 keeps content away from them. | T-34, T-53 |
 | R-2 | Event content transits refresher memory on every run, and the host may swap that memory to disk. | Only `free-busy-query` acquisition (FR-19, LATER, V-3) removes the transit; a Python process does not lock its memory. | T-11 |
 | R-3 | Any poller can build a history of the pattern and date changes. | Inherent to a subscribed feed; AC-6 limits it to change events. | T-54 |
 | R-4 | The public booking page reveals busy times inside the booking horizon. | Inherent to problem 2 (spec section 1). | T-58 |

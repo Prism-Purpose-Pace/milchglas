@@ -18,7 +18,7 @@ every arrow that crosses one crosses a trust boundary. The orange dashed region 
 place where event content (Class-A) exists, in the refresher's memory. An arrow starts at the
 caller; its label gives the protocol. `TOKEN` stands for the capability token in the feed URL
 (spec NFR-S1). Data about events flows the opposite way to the consumer arrows: consumers pull,
-Milchglas never pushes (spec section 3). The diagrams are SVG files in `docs/diagrams/`.
+Milchglas never pushes (spec W1). The diagrams are SVG files in `docs/diagrams/`.
 
 ---
 
@@ -34,7 +34,7 @@ anonymous feed (spec D-4). Nextcloud sharing is used for least privilege, never 
 
 | Name | Type | Responsibility | Spec reference |
 |---|---|---|---|
-| Calendar owner and maintainer | Person | Owns the private appointments, shares the calendars read-only with a dedicated service user, edits the config file, sets secrets in the platform, and is the only operator (one person, no on-call). | section 1; G6, G7; D-2; section 3 (no multi-user) |
+| Calendar owner and maintainer | Person | Owns the private appointments, shares the calendars read-only with a dedicated service user, edits the config file, sets secrets in the platform, and is the only operator (one person, no on-call). | section 1; G6, G7; D-2; W3 (no multi-user) |
 | Person booking an appointment | Person | Books a slot through the booking tool; never interacts with Milchglas and never sees private content. | section 1 (problem 2); AC-11 |
 | Milchglas | System | Fetches the enabled calendars, reduces each event to `(start, end, tentative, allday)`, clips, rounds, merges, emits one ICS feed and serves it by capability URL. Redaction happens only here. | section 1; G1, G3, G9; D-1, D-3; section 8 |
 | Nextcloud | External system (CalDAV server) | Source of truth for private calendars. Exposes them read-only to the service user. Not trusted for redaction. | section 1; section 4.1; D-2, D-3; NFR-S3 |
@@ -53,7 +53,7 @@ anonymous feed (spec D-4). Nextcloud sharing is used for least privilege, never 
 | 5 | Milchglas | Nextcloud | Pull. Reads all enabled calendars of the service user; server-side recurrence expansion; 10 s timeout, 3 retries. | CalDAV `REPORT calendar-query` with `expand`, HTTPS, Basic auth, read-only | FR-1, FR-2; section 4.6; NFR-S3 |
 | 6 | mailbox.org | Milchglas | Pull. Periodic fetch of the feed; the feed's `REFRESH-INTERVAL` is honoured. | HTTPS `GET /f/<token>.ics`, iCal subscription | FR-7, FR-9; section 4.2; V-1 |
 | 7 | meetergo | Milchglas | Pull. Periodic fetch of the feed; the URL must be publicly reachable. | HTTPS `GET /f/<token>.ics`, ICS calendar | FR-9; section 4.3; V-5 |
-| 8 | meetergo | mailbox.org | Bookings continue to flow into the business calendar. Unchanged by Milchglas. | CalDAV | section 1; section 3; section 8 |
+| 8 | meetergo | mailbox.org | Bookings continue to flow into the business calendar. Unchanged by Milchglas. | CalDAV | section 1; W1; section 8 |
 | 9 | Uptime monitor | Milchglas | Pull. 200 if the last success is younger than 60 minutes, else 503, no body data. | HTTPS `GET /healthz` | FR-11; NFR-R2; AC-7 |
 
 ---
