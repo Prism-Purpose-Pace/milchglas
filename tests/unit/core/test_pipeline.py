@@ -1,19 +1,22 @@
-"""The demo calendars through reduce, clip, round and merge, against the e2e oracle.
+"""The demo calendars through the whole pure pipeline, against the e2e oracle.
 
 objects/demo2.ics and demo3.ics are the import fixtures of the live end-to-end suite;
 expected_blocks.json is its oracle, so both suites share one source of truth (AC-1, AC-3,
-AC-4, AC-5). Recurring masters and their overrides are left out: expanding them is the
-source layer's job (server-side `expand`, spec FR-2), not the core's.
+AC-4, AC-5, AC-8). Recurring masters and their overrides are left out: expanding them is
+the source layer's job (server-side `expand`, spec FR-2), not the core's.
 """
 
 import json
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from milchglas.core.emit import emit
 from milchglas.core.model import Block, DayBlock, TimedBlock, clip, merge, round_to_grid, window
 from milchglas.core.reduce import Skip, reduce_event
+from tests.support.feed import assert_feed_invariants, parse_feed
 from tests.support.ical import components
 
 ORACLE: dict[str, Any] = json.loads(
@@ -84,3 +87,19 @@ def test_demo_blocks_carry_no_event_content() -> None:
     blocks, _ = _pipeline()
     assert all(isinstance(b, DayBlock | TimedBlock) for b in blocks)
     assert not any(s in repr(blocks) for s in ORACLE["forbidden_substrings"])
+
+
+def test_demo_feed_holds_every_invariant_and_no_event_content() -> None:
+    blocks, _ = _pipeline()
+    feed = emit(
+        blocks,
+        summary="Blocker Privat",
+        salt="demo-salt",
+        ttl_seconds=900,
+        version="0.1.2",
+        now=datetime.fromisoformat(ORACLE["now"]),
+        dtstamps={},
+    )
+    # AC-8: the grep for every fixture title runs inside the invariants.
+    assert_feed_invariants(feed, forbidden=tuple(ORACLE["forbidden_substrings"]))
+    assert parse_feed(feed) == [replace(b, tentative=False) for b in blocks]
