@@ -49,10 +49,12 @@ def reduce_event(
 ) -> Block | Skip:
     """The busy block of `event`, or why it has none (FR-3, FR-4).
 
-    `CLASS` is never read: redaction is Milchglas's job (D-3). The filters run before the
-    times, so an event that cannot block anyway cannot fail a refresh either. Floating
-    times are read in `tz`. OPEN Q-12 default: all-day events ignore TRANSP, because most
-    clients write TRANSPARENT as their all-day default; only timed events are dropped.
+    `CLASS` is never read: redaction is Milchglas's job (D-3). The cancelled and declined
+    filters run before the times are read, but reduce does not decide Q-14: the source
+    layer fails the refresh for an object the parser reported an error for, before reduce
+    sees it. Floating times are read in `tz`. OPEN Q-12 default: all-day events ignore
+    TRANSP, because most clients write TRANSPARENT as their all-day default; only timed
+    events are dropped.
 
     `duration` is the raw text of the DURATION property, `None` if the event has none.
     icalendar hands DURATION over as a timedelta, which loses what RFC 5545 §3.3.6
