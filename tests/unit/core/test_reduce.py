@@ -138,18 +138,18 @@ def test_no_event_content_survives_reduction_core_fil_14() -> None:
         ("CORE-ZERO-2", Skip.NEGATIVE),
         # ZERO-3: RFC 5545 §3.6.1, a timed DTSTART alone has zero length.
         ("CORE-ZERO-3", Skip.EMPTY),
-        ("dur-negative", Skip.NEGATIVE),
-        ("allday-zero", Skip.EMPTY),
-        ("allday-negative", Skip.NEGATIVE),
+        ("CORE-ZERO-2-duration", Skip.NEGATIVE),
+        ("CORE-ZERO-1-allday", Skip.EMPTY),
+        ("CORE-ZERO-2-allday", Skip.NEGATIVE),
         # RFC 5545 §3.3.5: a local time in the spring gap takes the offset before the gap,
         # so 02:30 and 03:30 are the same instant and the event has no length.
-        ("floating-gap-empty", Skip.EMPTY),
+        ("CORE-TZ-1-empty", Skip.EMPTY),
         # Both times are 03:xx CEST by wall clock but 01:30Z and 01:10Z as instants.
-        ("zoned-gap-instants-reversed", Skip.NEGATIVE),
+        ("CORE-TZ-3-instants-reversed", Skip.NEGATIVE),
         # RFC 5545 §3.3.6: the sign belongs to the whole duration. -PT30M on a 23-hour
         # local day is still half an hour backwards, never a +30 minute block.
-        ("dur-negative-half-hour-on-spring-day", Skip.NEGATIVE),
-        ("dur-negative-hour-on-spring-day", Skip.NEGATIVE),
+        ("CORE-ZERO-2-duration-half-hour-spring-day", Skip.NEGATIVE),
+        ("CORE-ZERO-2-duration-hour-spring-day", Skip.NEGATIVE),
     ],
 )
 def test_events_without_positive_length_yield_no_block(uid: str, expected: Skip) -> None:
@@ -176,11 +176,11 @@ def test_events_without_positive_length_yield_no_block(uid: str, expected: Skip)
         # so 09:00 EDT + P1D is 09:00 EST, 25 real hours (Berlin changed a week earlier).
         ("CORE-DUR-6-other-zone", timed("2026-10-31T13:00Z", "2026-11-01T14:00Z")),
         # The time part is exact: 01:30 CEST + PT2H = 02:30 CET, not 03:30 CET.
-        ("dur-exact-across-fold", timed("2026-10-25T01:30+02:00", "2026-10-25T02:30+01:00")),
+        ("CORE-DUR-6-exact-across-fold", timed("2026-10-25T01:30+02:00", "2026-10-25T02:30+01:00")),
         # Hours are exact time even when they add up to a day: PT24H is 24 real hours,
         # not "one day", so on the spring day it ends at 08:00Z, not 07:00Z.
-        ("dur-24-hours-across-spring", timed("2026-03-28T08:00Z", "2026-03-29T08:00Z")),
-        ("dur-36-hours-across-spring", timed("2026-03-28T08:00Z", "2026-03-29T20:00Z")),
+        ("CORE-DUR-6-exact-24-hours", timed("2026-03-28T08:00Z", "2026-03-29T08:00Z")),
+        ("CORE-DUR-6-exact-36-hours", timed("2026-03-28T08:00Z", "2026-03-29T20:00Z")),
         # RFC 5545 §3.6.1 forbids both; the later end errs towards busy (G5), never free.
         ("dtend-shorter-than-duration", timed("2026-10-01T16:00Z", "2026-10-01T18:00Z")),
         ("dtend-later-than-duration", timed("2026-10-01T16:00Z", "2026-10-01T18:00Z")),
@@ -189,11 +189,11 @@ def test_events_without_positive_length_yield_no_block(uid: str, expected: Skip)
         # Floating time is read in the configured zone.
         ("floating", timed("2026-10-01T09:00+02:00", "2026-10-01T10:00+02:00")),
         # NFR-C1: 02:30 does not exist on 2026-03-29 and reads as 01:30Z.
-        ("floating-gap-start", timed("2026-03-29T01:30Z", "2026-03-29T02:00Z")),
+        ("CORE-TZ-1-start", timed("2026-03-29T01:30Z", "2026-03-29T02:00Z")),
         # 02:30 happens twice on 2026-10-25; the first pass (CEST) is the one that counts.
-        ("floating-fold-first-pass", timed("2026-10-25T00:30Z", "2026-10-25T02:00Z")),
+        ("CORE-TZ-2", timed("2026-10-25T00:30Z", "2026-10-25T02:00Z")),
         # Wall clock says 03:10 -> 02:50 is backwards; as instants it is 40 real minutes.
-        ("zoned-gap-wall-reversed", timed("2026-03-29T01:10Z", "2026-03-29T01:50Z")),
+        ("CORE-TZ-3-wall-reversed", timed("2026-03-29T01:10Z", "2026-03-29T01:50Z")),
     ],
 )
 def test_event_times_reduce_to_one_block(uid: str, expected: Block) -> None:
@@ -217,7 +217,7 @@ def test_event_times_reduce_to_one_block(uid: str, expected: Block) -> None:
         "allday-beyond-year-9999",
     ],
 )
-def test_malformed_times_raise_without_quoting_the_event(uid: str) -> None:
+def test_malformed_times_raise_without_quoting_the_event_core_mal_1(uid: str) -> None:
     with pytest.raises(MalformedEventError) as caught:
         _reduce(TIMES, uid)
     # The library's own message quotes the raw value; none of it may survive (AC-8).
@@ -260,7 +260,7 @@ def _with_duration(text: str | None) -> Block | Skip:
         ("-PT1M", Skip.NEGATIVE),
     ],
 )
-def test_duration_text_sets_the_end(text: str, expected: Block | Skip) -> None:
+def test_duration_text_sets_the_end_core_dur_7(text: str, expected: Block | Skip) -> None:
     assert _with_duration(text) == expected
 
 
@@ -280,7 +280,7 @@ def test_duration_text_sets_the_end(text: str, expected: Block | Skip) -> None:
         "BBY-garbage",
     ],
 )
-def test_unreadable_duration_text_raises_without_quoting_it(text: str) -> None:
+def test_unreadable_duration_text_raises_without_quoting_it_core_dur_8(text: str) -> None:
     with pytest.raises(MalformedEventError) as caught:
         _with_duration(text)
     assert str(caught.value) == "DURATION is unreadable"  # the text may be private
@@ -288,7 +288,7 @@ def test_unreadable_duration_text_raises_without_quoting_it(text: str) -> None:
     assert caught.value.__context__ is None or caught.value.__suppress_context__
 
 
-def test_an_event_with_a_duration_property_needs_its_text() -> None:
+def test_an_event_with_a_duration_property_needs_its_text_core_dur_8() -> None:
     # Reading it as "no duration" would make the event zero length: a false free slot.
     with pytest.raises(MalformedEventError):
         _with_duration(None)
