@@ -67,9 +67,9 @@ reduce, emit — pure, no I/O; ruff bans I/O imports there), `web/` (WSGI app se
   spec Q-12), and events where a configured owner e-mail has `PARTSTAT=DECLINED`.
 - **Rounding** in the configured local time zone: start floored, end ceiled to the grid;
   then merge overlapping **and adjacent** intervals — no two output blocks may touch.
-- **Output:** only `UID, DTSTAMP, DTSTART, DTEND, SUMMARY, TRANSP, STATUS` (+ optional
-  `X-MICROSOFT-CDO-BUSYSTATUS`); timed blocks in UTC (no `VTIMEZONE`), all-day as
-  `VALUE=DATE`, `TRANSP:OPAQUE`, RFC 5545 line folding.
+- **Output:** only `UID, DTSTAMP, DTSTART, DTEND, SUMMARY, TRANSP, STATUS`; timed
+  blocks in UTC (no `VTIMEZONE`), all-day as `VALUE=DATE`, `TRANSP:OPAQUE`, RFC 5545
+  line folding.
 - **Determinism:** `UID = sha256(salt|start|end)[:32]@milchglas`; `DTSTAMP` is the last
   content change, never "now". Unchanged source ⇒ byte-identical feed.
 - **Never overwrite the last good feed on failure:** atomic replace only on full success;
