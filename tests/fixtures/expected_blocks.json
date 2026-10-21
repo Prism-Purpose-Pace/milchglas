@@ -34,9 +34,8 @@
   "allday_date": [
     {"start": "20260928", "end": "20260929", "from": ["BBX-D3-12"], "depends_on": "Q-E2E-1"},
     {"start": "20261003", "end": "20261005", "from": ["BBX-D3-11"]},
-    {"start": "20261012", "end": "20261013", "from": ["BBX-D3-05"], "depends_on": "Q-E2E-1"},
-    {"start": "20261015", "end": "20261016", "from": ["BBX-D2-23"]},
-    {"start": "20261017", "end": "20261020", "from": ["BBX-D3-08", "BBX-D2-24"]},
+    {"start": "20261012", "end": "20261014", "from": ["BBX-D3-05", "BBX-D2-25"], "depends_on": "Q-E2E-1, Q-12"},
+    {"start": "20261015", "end": "20261020", "from": ["BBX-D2-23", "BBX-D3-07", "BBX-D3-08", "BBX-D2-24"], "depends_on": "Q-12"},
     {"start": "20261021", "end": "20261023", "from": ["BBX-D3-09", "BBX-D3-10"]}
   ],
   "no_block": {
@@ -47,9 +46,7 @@
     "BBX-D2-20": "starts exactly at window end",
     "BBX-D2-21": "after window",
     "BBX-D2-22": "TRANSP:TRANSPARENT (timed)",
-    "BBX-D2-25": "TRANSP:TRANSPARENT (all-day)",
     "BBX-D3-03": "TRANSP:TRANSPARENT (timed)",
-    "BBX-D3-07": "TRANSP:TRANSPARENT (all-day)",
     "BBX-D3-13": "all-day ending exactly at window start",
     "BBX-D3-16": "all-day starting exactly at window end"
   },

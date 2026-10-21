@@ -19,13 +19,8 @@ FILTER = "core-filter.ics"
 OWNERS = ("OWNER@example.org", "owner.private@example.org")
 
 
-def _reduce(name: str, uid: str, *, keep_transparent_allday: bool = False) -> Block | Skip:
-    return reduce_event(
-        component(name, uid),
-        tz=BERLIN,
-        owner_emails=OWNERS,
-        keep_transparent_allday=keep_transparent_allday,
-    )
+def _reduce(name: str, uid: str) -> Block | Skip:
+    return reduce_event(component(name, uid), tz=BERLIN, owner_emails=OWNERS)
 
 
 # --- filter (CORE-FIL, FR-3, D-3) ---------------------------------------------------------
@@ -43,8 +38,6 @@ def _reduce(name: str, uid: str, *, keep_transparent_allday: bool = False) -> Bl
         ("CORE-FIL-11-todo", Skip.NOT_EVENT),
         ("CORE-FIL-11-journal", Skip.NOT_EVENT),
         ("CORE-FIL-11-freebusy", Skip.NOT_EVENT),
-        # OPEN Q-12 default: an all-day TRANSP:TRANSPARENT event is excluded too.
-        ("CORE-FIL-12", Skip.TRANSPARENT),
         # Filters run before the times are read: a cancelled event cannot fail a refresh.
         ("cancelled-with-broken-start", Skip.CANCELLED),
     ],
@@ -69,20 +62,23 @@ def test_excluded_events_yield_their_skip_reason(uid: str, expected: Skip) -> No
         ("CORE-FIL-9", timed("2026-10-02T13:00Z", "2026-10-02T14:00Z", tentative=True)),
         # OPEN Q-11 default: the owner's own TENTATIVE reply marks the block tentative.
         ("CORE-FIL-10", timed("2026-10-02T13:00Z", "2026-10-02T14:00Z", tentative=True)),
+        # OPEN Q-12 default: all-day events ignore TRANSP, so a Thunderbird all-day
+        # event, written TRANSPARENT by default, still blocks (allday_mode busy).
+        ("CORE-FIL-12", day("2026-10-13", "2026-10-14")),
     ],
 )
 def test_busy_events_yield_a_block(uid: str, expected: Block) -> None:
     assert _reduce(FILTER, uid) == expected
 
 
-def test_transparent_all_day_events_can_be_kept_open_q_12() -> None:
-    assert _reduce(FILTER, "CORE-FIL-12", keep_transparent_allday=True) == day(
-        "2026-10-13", "2026-10-14"
-    )
-    # The switch is about all-day events only.
-    assert _reduce(FILTER, "CORE-FIL-3-transparent", keep_transparent_allday=True) is (
-        Skip.TRANSPARENT
-    )
+def test_transparent_all_day_events_can_be_dropped_open_q_12() -> None:
+    # The switch restores the RFC-literal reading for all-day events; timed transparent
+    # events are dropped either way (FR-3).
+    for uid in ("CORE-FIL-12", "CORE-FIL-3-transparent"):
+        event = component(FILTER, uid)
+        assert reduce_event(
+            event, tz=BERLIN, owner_emails=OWNERS, keep_transparent_allday=False
+        ) is (Skip.TRANSPARENT)
 
 
 def test_declines_count_only_for_configured_owners() -> None:

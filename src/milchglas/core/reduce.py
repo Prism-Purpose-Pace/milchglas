@@ -36,14 +36,15 @@ def reduce_event(
     *,
     tz: ZoneInfo,
     owner_emails: Collection[str],
-    keep_transparent_allday: bool = False,
+    keep_transparent_allday: bool = True,
 ) -> Block | Skip:
     """The busy block of `event`, or why it has none (FR-3, FR-4).
 
     `CLASS` is never read: redaction is Milchglas's job (D-3). The filters run before the
     times, so an event that cannot block anyway cannot fail a refresh either. Floating
-    times are read in `tz`. `keep_transparent_allday` flips the OPEN Q-12 default, which
-    drops transparent all-day events like any transparent event.
+    times are read in `tz`. OPEN Q-12 default: all-day events ignore TRANSP, because most
+    clients write TRANSPARENT as their all-day default; `keep_transparent_allday=False`
+    drops them like timed transparent events.
     """
     status = _text(event, "STATUS")
     replies = _owner_replies(event, {_address(email) for email in owner_emails})
