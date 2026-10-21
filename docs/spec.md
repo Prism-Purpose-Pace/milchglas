@@ -186,7 +186,7 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 | D-2 | Nextcloud access via a dedicated service user `svc-milchglas` with read-only shares, zero quota, revocable app password | Decided; rationale corrected 2026-10-21 | Least privilege. A leaked app password reads every event in the shared calendars in full except `CLASS:PRIVATE` ones (`CLASS:PUBLIC` is the default; read-only sharees see `CLASS:CONFIDENTIAL` as busy) and, unless disabled, the system address book. It can write only to the service user's own, empty calendar home, never to a shared calendar or to files. Revocation is one click (NFR-S3). |
 | D-3 | Redaction happens exclusively in Milchglas; never rely on Nextcloud `CLASS`; never use `CLASS:PRIVATE` on private events | Decided; consequence added 2026-10-21 | Enforcement bugs (4.1); hidden events create false-free slots. Do not rely on `CLASS:CONFIDENTIAL` either: for the read-only service user Nextcloud removes `STATUS`, `TRANSP` and `ATTENDEE` from confidential events, so cancelled, transparent, tentative and owner-declined confidential events still block. |
 | D-4 | Both consumers (mailbox.org, meetergo) subscribe to the Milchglas feed; Nextcloud is **not** connected to meetergo directly | Decided | Data minimisation toward the third-party processor |
-| D-5 | MVP first (≈60 lines core logic + cron + feed behind HTTPS); v0.1 concept features become backlog | Decided 2026-09-13; wording aligned 2026-10-21 (the feed is served through the WSGI app, D-14) | The maintainer's challenge was correct: most of v0.1 is optional; four items are not (D-7) |
+| D-5 | MVP first (a small pure core + cron + feed behind HTTPS); v0.1 concept features become backlog | Decided 2026-09-13; wording aligned 2026-10-21 (the feed is served through the WSGI app, D-14; the line estimate is dropped) | The maintainer's challenge was correct: most of v0.1 is optional; four items are not (D-7) |
 | D-6 | Window: today → +33 days (meetergo's default booking window of 30 calendar days, today, and a two-day buffer for refresher outages) | Proposed; confirm [OPEN Q-2] | Covers the booking horizon with a staleness margin; shorter windows leave bookable days |
 | D-7 | Mandatory even in MVP: (a) correct recurrence expansion, (b) merged intervals (set union), (c) deterministic UIDs, (d) never overwrite the last good feed on failure | Decided | Correctness and safety, not architecture |
 | D-8 | Output as `VEVENT`s in UTC, all-day as `DATE`, `SUMMARY` "Blocker Privat" (configurable), `TRANSP:OPAQUE` | Proposed; decided after AC-0.1 and AC-0.2 pass with the shipped header and one `VALUE=DATE` block | OX and meetergo consume VEVENTs; UTC avoids VTIMEZONE; stable UIDs prevent OX churn. Without `METHOD`, RFC 5545 section 3.8.7.2 defines DTSTAMP as the last revision of the component, which is what Milchglas emits (D-7c). If either consumer rejects the `METHOD`-less header in AC-0.1 or AC-0.2, `METHOD:PUBLISH` returns and D-7c records that a regenerated, byte-identical feed is the same object instance. |
@@ -270,7 +270,7 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
   - Option A installs only a release wheel verified with `gh attestation verify`, never a package by name (D-15);
   - the feed URL travels only from the server terminal to the consumer dialog, never through mail, chat or a browser tab; the feed host name names neither the person nor the purpose (Q-22);
   - the optional egress rule under Option B (Section 9).
-- NFR-O3 Runtime dependencies pure Python only (`icalendar`, `python-dateutil`, `tzdata`, `recurring-ical-events`, `x-wr-timezone`) so Options A–C share one codebase. Once runtime dependencies enter `uv.lock`, CI fails on any wheel in the runtime closure that is not `py*-none-any` with `Root-Is-Purelib: true`.
+- NFR-O3 Runtime dependencies pure Python only (`icalendar` and `tzdata`, plus `python-dateutil` through icalendar; `recurring-ical-events` and `x-wr-timezone` only with the FR-2 fallback) so Options A–C share one codebase. Once runtime dependencies enter `uv.lock`, CI fails on any wheel in the runtime closure that is not `py*-none-any` with `Root-Is-Purelib: true`.
 
 ---
 
@@ -278,7 +278,7 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 
 ```
 Nextcloud ──read-only CalDAV (svc-milchglas)──► Milchglas core
-                                                   fetch → expand → filter → reduce → round → merge → emit
+                                                   fetch → expand → filter → reduce → clip → round → merge → emit
                                                    └─► busy.ics (atomic write; keep last good on error)
                                                               │
                                         HTTPS  /f/<token>.ics │  (WSGI route; Option D: static file)
@@ -292,9 +292,10 @@ Nextcloud ──read-only CalDAV (svc-milchglas)──► Milchglas core
 ```
 intervals = fetch_all(enabled_calendars, window)            # FR-1..FR-4
 intervals = clip(intervals, window)                          # FR-5
-intervals = round_to_grid(intervals, 15min, tz=Europe/Berlin)
+intervals = round_to_grid(intervals, grid_minutes, tz)       # FR-6
 intervals = merge(sorted(intervals))                         # FR-6  (set union)
-ics       = emit(intervals, summary="Blocker Privat")        # FR-7
+ics       = emit(intervals, summary, uid_salt, ttl_seconds, version, now,
+                 previous_stamps)        # FR-7
 atomic_replace("busy.ics", ics) if ok else keep_previous()   # FR-8
 ```
 
@@ -351,7 +352,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - **Pros:** minimal moving parts; best hardening; no Docker.  **Cons:** awkward when the PaaS host already owns ports 80/443; a second VPS adds cost and upkeep; no Git-push deploys.
 
 ### Option B — Docker container(s) on a self-hosted PaaS (recommended for now)
-- **Shape:** one image (`python:3.12-slim`, non-root UID, `read_only` FS, `tmpfs /tmp`, volume for state). Compose services: `web` (gunicorn serving `/f/<token>.ics` and `/healthz`) and `refresher` (`python -m milchglas refresh --loop --interval 900`). Traefik (or the PaaS's built-in proxy) provides TLS on an operator-chosen subdomain, e.g. `feed.example.org`. Python 3.12 receives security fixes only and reaches end of life around 2028-10 (PEP 693); the image moves to a newer minor before then.
+- **Shape:** one image (`python:3.12-slim`, non-root UID, `read_only` FS, `tmpfs /tmp`, volume for state). Compose services: `web` (gunicorn serving `/f/<token>.ics` and `/healthz`) and `refresher` (`python -m milchglas refresh --loop --interval 900`). Traefik (or the PaaS's built-in proxy) provides TLS on an operator-chosen subdomain, e.g. `k7q2.example.org`. Python 3.12 receives security fixes only and reaches end of life around 2028-10 (PEP 693); the image moves to a newer minor before then.
   - Hardening, both services: non-root `user`, `read_only: true`, `tmpfs /tmp`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `ulimits: core: 0`, memory and pids limits, no Docker socket; the volume mounted read-only in `web`; `config.json` read-only in both; only `web` publishes a port. The Dockerfile pins `python:3.12-slim` by digest, installs only with `uv sync --frozen --no-dev`, and creates and chowns the state directory (a non-root process can write an empty named volume only then). Dependabot watches the image with an ignore rule that holds the 3.12 minor. Whether the platform keeps `read_only`, `cap_drop`, `security_opt` and `tmpfs` is unverified until `docker inspect` checks it after deployment (AC-13).
   - gunicorn runs with `--no-control-socket` (since 25.1.0 it opens a control socket under `$XDG_RUNTIME_DIR` or `$HOME/.gunicorn` by default, which fails on a read-only root and is only logged), `--worker-tmp-dir /tmp`, no access log, and a worker timeout.
 - **Prerequisites:** DNS record for the chosen subdomain; the PaaS app created from the Git repo.
@@ -412,7 +413,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - **AC-0.4** Every meetergo meeting type's booking window (a weekday-based window converted to calendar days) is confirmed ≤ `window_days` - 3, or `window_days` is raised accordingly. *(Q-2)*
 
 ### 10.2 MVP functional
-- **AC-1** Given three enabled calendars with overlapping events, when refresh runs, then the feed contains merged intervals only, and no interval overlaps or touches another.
+- **AC-1** Given three enabled calendars with overlapping events, when refresh runs, then the feed contains merged intervals only, and no interval overlaps or touches another of the same kind (timed or all-day, Q-9).
 - **AC-2** Given a weekly recurring event with one excluded date and one moved instance, the feed contains blocks for exactly the real occurrences within the window.
 - **AC-3** Given events on the DST transition days of `Europe/Berlin`, local start/end times in the feed (converted from UTC) match the source; a timed event with `DURATION:P1D` across each transition ends at the same local time the next day (Q-20).
 - **AC-4** Given a cancelled event, a transparent timed event and an event the owner declined (all `CLASS:PUBLIC`), none produces a block; a `CLASS:CONFIDENTIAL` event as the read-only sharee receives it (`SUMMARY` "Busy", localised, such as "Beschäftigt" in German; no `STATUS`, `TRANSP` or `ATTENDEE`) produces one (D-3).
@@ -422,7 +423,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - **AC-8** The feed body contains no property other than `UID, DTSTAMP, DTSTART, DTEND, SUMMARY, TRANSP, STATUS` (and the optional Microsoft busy hint); a test greps the output and every log line for any fixture title and finds none. A fixture with malformed `SUMMARY`, `DESCRIPTION` and `LOCATION` lines carrying a fixture title is refreshed at `DEBUG` against a fixture server: the title, the `Authorization` header, the secret and its base64 form appear in no stdout or stderr line, no state field and no HTTP response; an error on a calendar with a fixture name leaves no line with that name or href (NFR-P4).
 - **AC-9** Requests cover methods (`GET`, `HEAD`, `OPTIONS`, `POST`) × right or wrong token × conditional headers (`If-None-Match`, `Range`) × path variants (`/f/../state`, `%2e%2e%2f`, `%00`, `//f/`, `.ICS`, a trailing slash, `;` parameters, double encoding, a non-ASCII token such as `/f/ä.ics`): every wrong-token response is byte-identical to the unknown-path response apart from `Date`. The correct token returns `200 text/calendar; charset=utf-8` with `ETag`, `X-Robots-Tag`, `Referrer-Policy`, `X-Content-Type-Options: nosniff` and `Cache-Control: private, max-age=0`; the 404 carries the last two. No versioned `Server` header. Wrong-token and unknown-path requests share a timing class: the medians of 1000 of each, measured locally, differ by less than a stated bound.
 - **AC-10** `config.json` edit (`enabled: false` on one calendar) + refresh removes that calendar's blocks; no restart needed. The edit is made the way the operator makes it (the platform's file-mount editor, or an editor that replaces the file), and the next refresh sees it.
-- **AC-11** meetergo does not offer a slot that overlaps a private block; mailbox.org shows the block in the subscribed calendar within the measured propagation time.
+- **AC-11** meetergo does not offer a slot that overlaps a private block; mailbox.org shows the block in the subscribed calendar within 30 minutes of the private change (one 15-minute refresh interval plus one `REFRESH-INTERVAL` of `PT15M`).
 - **AC-20** Token rotation needs no restart: after `rotate-token`, within one refresh interval the old token returns the identical 404 and the new one 200; under Option A no file is named after any token (D-14).
 - **AC-22** Configuration is validated on every refresh. Unknown keys; `window_days` outside 1..90; a `grid_minutes` that does not divide 1440; an unknown `tz`; zero enabled calendars (Q-16); a missing salt (Q-13); a plaintext `token` key (D-14); control characters in output strings (FR-7); a non-`https` `CALDAV_URL` or an href with scheme, host or a dot segment after decoding (NFR-S7): each fails the refresh before any request and keeps the last feed. A changed configuration logs the names of the changed keys, never values. Rounding lays the grid on local wall time with the UTC offset in force at each instant and never rebuilds a local datetime from components, which loses `fold`; a start only moves earlier and an end only later, so no offset condition is needed: `grid_minutes` 7, 25 and 50 are rejected, 15, 30, 45, 60, 90 and 120 pass; 60 with Asia/Kolkata (+05:30) floors to local full hours; 2026-10-25 02:07 with `fold=1` rounds to 01:00Z.
 
@@ -431,7 +432,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - **AC-13** Container/process runs unprivileged; secret is not present in image layers, Git history or config file (CI secret scan). CI builds the image and scans its layers and its image configuration (`--image-config-scanners secret`) for secrets; the scanner's action is pinned by commit SHA (its release actions were compromised on 2026-03-19); a planted canary in a format outside the scanner's built-in allow rules must fail the job. A CI check over the Compose file and Dockerfile fails on a missing hardening key (Section 9, Option B), a `FROM` without digest or any `pip install`. After deployment `docker inspect` shows `ReadonlyRootfs`, `CapDrop` and `SecurityOpt` on both services; that the platform keeps these keys is an assumption until then. gunicorn starts without warnings in the read-only container.
 - **AC-14** Runbook documents token rotation, calendar swap, stale recovery and host migration; each procedure has been executed once. The execution record has one checked line per NFR-O2 item, and `docs/consumers.md` holds one field per AC-0.1 and AC-0.2 observation; an empty field fails the review.
 - **AC-19** An external monitor polls `/healthz` at least every 5 minutes; a 503 sends an e-mail to the operator; during deployment the refresher is made to fail (wrong password) and the alert is observed after the 60-minute threshold.
-- **AC-21** After deployment one fetch with a canary token leaves zero hits in proxy, platform and app logs; the canary path returns the identical 404; the plain-HTTP router answers 404 for `/f/*`, never a redirect. A polling loop during a redeploy sees no non-200 answer.
+- **AC-21** After deployment one fetch with a canary token leaves zero hits in proxy, platform and app logs; the canary path returns the identical 404; the plain-HTTP router answers 404 for `/f/*`, never a redirect. A loop that fetches the feed every second for the whole redeploy sees no non-200 answer.
 
 ### 10.4 Later features (when pulled from backlog)
 - **AC-15** (FR-15) After `stale_max_age`, the feed contains one all-day blocker per day in the window and `/healthz` reports fail-closed state.
@@ -486,7 +487,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | Q-3 | Feed summary text and whether tentative appointments appear as a distinct "Vorläufig" | `Blocker Privat`, tentative = busy |
 | Q-4 | Fail-closed threshold (when the feed is stale, how long until booking is blocked?) | 48 h (backlog). meetergo keeps its last loaded busy times on a failed update and blocks the host without data, so fail-closed covers only the stale-data case |
 | Q-5 | Mobile subscription wanted in v1? | no |
-| Q-6 | Hostname (operator-chosen subdomain?) and DNS location | an operator-chosen subdomain, e.g. `feed.example.org` |
+| Q-6 | Hostname (operator-chosen subdomain?) and DNS location | an operator-chosen subdomain, e.g. `k7q2.example.org` |
 | Q-7 | Runbook / consumer docs in German? | German |
 | Q-8 | Deployment decision D-9: B now, A later? Or D because shared hosting must host it? | B |
 | Q-9 | A timed busy block overlaps an all-day busy block: merge them into one, or keep both? | Keep both; the no-overlap, no-touch rule of AC-1 applies per kind |
@@ -500,7 +501,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | Q-17 | Response headers beyond NFR-S1: `X-Content-Type-Options: nosniff` and `Cache-Control: private, max-age=0` | Send both |
 | Q-18 | What triggers local recurrence expansion (the FR-2 fallback)? | An explicit configuration setting, off by default; no automatic switch on a server error. Before it can be enabled, local expansion has a per-run time budget and a maximum instance count per object, and treats sub-hourly `FREQ` (`SECONDLY`, `MINUTELY`) as unparsable. Floating times: local expansion reads them in `tz`, sabre in the calendar's `calendar-timezone`, else UTC, so both paths agree only where these match |
 | Q-19 | Does an event whose owner attendee has `PARTSTAT=NEEDS-ACTION` (or no `PARTSTAT`, which RFC 5545 defaults to NEEDS-ACTION) block? | Yes (busy); a mode switch is LATER, like FR-13 and FR-14. A block too many costs a slot, a block too few a double booking |
-| Q-20 | Expanded instances of a `DURATION`-based event keep `DURATION` with a UTC `DTSTART` (sabre/vobject 4.5.6). How is the end computed? | Day and week components are added as a nominal duration in `tz`, time components as exact time (RFC 5545 section 3.3.6): a `P1D` instance starting 2026-10-24 07:00Z ends 2026-10-25 08:00Z. An event created in a zone with other DST dates can be off by one hour |
+| Q-20 | Expanded instances of a `DURATION`-based event keep `DURATION` with a UTC `DTSTART` (sabre/vobject 4.5.6). How is the end computed? | Day and week components are added as a nominal duration in `tz`, time components as exact time (RFC 5545 section 3.3.6): a `P1D` instance starting 2026-10-24 07:00Z ends 2026-10-25 08:00Z. An event created in a zone with other DST dates can be off by one hour. This rule covers UTC and floating starts; a start with a resolvable `TZID` counts its days in that zone (RFC 5545 section 3.3.6) |
 | Q-21 | Token rotation cadence? | Yearly and after any provider breach notice; until FR-16 both consumers are re-subscribed together |
 | Q-22 | Should the busy pattern be minimised beyond NFR-P2 (a coarser default grid, merging blocks separated by less than a gap, per-source all-day handling)? | No: the NFR-P2 defaults stay until real data shows the trade-off, because merging lowers the block count only for overlapping or touching appointments. The runbook advises a feed host name that names neither the person nor the purpose (Q-6) |
 

@@ -11,8 +11,9 @@ intervals and publishes a busy-only ICS feed. Spec: [docs/spec.md](docs/spec.md)
 ## Stack
 
 - Python 3.12 (container image `python:3.12-slim` for deployment option B), managed with **uv**.
-- Runtime dependencies stay **pure Python** (`icalendar`, `python-dateutil`, `tzdata`,
-  `recurring-ical-events`, `x-wr-timezone`) so every deployment option shares one codebase.
+- Runtime dependencies stay **pure Python** (`icalendar` and `tzdata`, plus
+  `python-dateutil` through icalendar; `recurring-ical-events` and `x-wr-timezone` only
+  with the FR-2 fallback) so every deployment option shares one codebase.
 
 ## Commands (canonical — do not infer alternatives)
 
