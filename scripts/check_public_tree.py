@@ -17,6 +17,7 @@ Checks over the tracked (or given) files:
   variable (a CI secret) or a local file (default .claude/context/public-denylist.txt).
   Reports name file, line and pattern index only - never the matched text - so public CI
   logs cannot leak what is guarded. Denylist patterns must be ASCII (enforced: exit 2).
+- --message-files: the paths are commit-message files; only their content is term-scanned.
 
 Residual: matching is per line, so a term split across lines, encoded (base64, UTF-16
 without BOM) or spelled with homoglyphs from another script is not detected.
@@ -178,15 +179,22 @@ def format_hit(hit: Hit) -> str:
     return f"{hit.where}:{hit.line}: matches denylist pattern #{hit.pattern + 1}"
 
 
-def run(paths: Sequence[str], patterns: Sequence[re.Pattern[str]] | None, root: Path) -> list[str]:
-    private = path_violations(paths)
+def run(
+    paths: Sequence[str],
+    patterns: Sequence[re.Pattern[str]] | None,
+    root: Path,
+    *,
+    message_files: bool = False,
+) -> list[str]:
+    private = [] if message_files else path_violations(paths)
     report = [f"{p}: private path must not be tracked in the public repo" for p in private]
     if patterns is None:
         return report
     for path in paths:
         if path in private:
             continue
-        report.extend(format_hit(hit) for hit in name_violations(path, patterns))
+        if not message_files:
+            report.extend(format_hit(hit) for hit in name_violations(path, patterns))
         file = root / path
         if file.is_symlink():
             text = str(file.readlink())  # git publishes the link text, not the target
@@ -238,7 +246,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         metavar="REV",
         help="also scan commit messages and identities reachable from REV",
     )
+    parser.add_argument(
+        "--message-files",
+        action="store_true",
+        help="the paths are commit-message files: scan their content only (no path or name check)",
+    )
     args = parser.parse_args(argv)
+    if args.message_files and not args.paths:
+        # Else the tracked-files default would run with the path guard off.
+        parser.error("--message-files needs at least one path")
     denylist = args.denylist
     if denylist == DEFAULT_DENYLIST and not denylist.is_file():
         denylist = main_checkout_denylist() or denylist
@@ -252,7 +268,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("check-public-tree: no denylist (PUBLIC_DENYLIST or --denylist)", file=sys.stderr)
             return 2
         print("check-public-tree: no denylist found, term scan skipped", file=sys.stderr)
-    report = run(args.paths or tracked_files(), patterns, Path.cwd())
+    report = run(
+        args.paths or tracked_files(), patterns, Path.cwd(), message_files=args.message_files
+    )
     if patterns is not None and args.commit_messages:
         messages = commit_messages(args.commit_messages)
         report.extend(format_hit(hit) for hit in message_violations(messages, patterns))
