@@ -5,6 +5,7 @@ carry a title, a description, a location or an attendee. Errors carry the proper
 only, never a value, because the library quotes raw values in its messages.
 """
 
+import re
 from collections.abc import Collection
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
@@ -31,11 +32,20 @@ class MalformedEventError(ValueError):
     """The event's times cannot be read; the refresh fails and keeps the last feed (Q-14)."""
 
 
+# RFC 5545 §3.3.6 dur-value; weeks and days may precede a time part, as producers write them.
+_DURATION = re.compile(
+    r"(?P<sign>[+-])?P(?:(?P<w>[0-9]{1,9})W)?(?:(?P<d>[0-9]{1,9})D)?"
+    r"(?:T(?=[0-9])(?:(?P<h>[0-9]{1,9})H)?(?:(?P<m>[0-9]{1,9})M)?(?:(?P<s>[0-9]{1,9})S)?)?"
+)
+type _Duration = tuple[int, timedelta]  # nominal days, exact time; both carry the sign
+
+
 def reduce_event(
     event: Component,
     *,
     tz: ZoneInfo,
     owner_emails: Collection[str],
+    duration: str | None,
     keep_transparent_allday: bool = True,
 ) -> Block | Skip:
     """The busy block of `event`, or why it has none (FR-3, FR-4).
@@ -45,6 +55,11 @@ def reduce_event(
     times are read in `tz`. OPEN Q-12 default: all-day events ignore TRANSP, because most
     clients write TRANSPARENT as their all-day default; `keep_transparent_allday=False`
     drops them like timed transparent events.
+
+    `duration` is the raw text of the DURATION property, `None` if the event has none.
+    icalendar hands DURATION over as a timedelta, which loses what RFC 5545 §3.3.6
+    distinguishes: PT24H and P1D are one day to it, and a minus sign is folded into the
+    day count. So the source layer passes the text and `_parse_duration` reads it.
     """
     status = _text(event, "STATUS")
     replies = _owner_replies(event, {_address(email) for email in owner_emails})
@@ -54,7 +69,7 @@ def reduce_event(
     )
     if skip is not None:
         return skip
-    block = _span(event, tz)
+    block = _span(event, tz, duration)
     if isinstance(block, Skip):
         return block
     if transparent and isinstance(block, TimedBlock):
@@ -79,23 +94,30 @@ def _excluded(
     return None
 
 
-def _span(event: Component, tz: ZoneInfo) -> Block | Skip:
+def _span(event: Component, tz: ZoneInfo, text: str | None) -> Block | Skip:
+    if text is None and "DURATION" in event:
+        # Treating it as absent would read the event as zero length: a false free slot.
+        msg = "DURATION text was not handed over"
+        raise MalformedEventError(msg)
+    duration = None if text is None else _parse_duration(text)
     start = _read(event, "DTSTART")
     if isinstance(start, datetime):
-        return _timed(event, _zoned(start, tz), tz)
+        return _timed(event, _zoned(start, tz), tz, duration)
     if isinstance(start, date):
-        return _allday(event, start)
+        return _allday(event, start, duration)
     msg = "DTSTART is missing or neither a date nor a date-time"
     raise MalformedEventError(msg)
 
 
-def _timed(event: Component, start: datetime, tz: ZoneInfo) -> TimedBlock | Skip:
-    end, duration = _read(event, "DTEND"), _read(event, "DURATION")
+def _timed(
+    event: Component, start: datetime, tz: ZoneInfo, duration: _Duration | None
+) -> TimedBlock | Skip:
+    end = _read(event, "DTEND")
     if isinstance(end, datetime):
         stop = _zoned(end, tz)
-    elif end is None and isinstance(duration, timedelta):
+    elif end is None and duration is not None:
         stop = _after(start, duration, tz)
-    elif end is None and duration is None:
+    elif end is None:
         stop = start
     else:
         msg = "DTEND or DURATION does not fit a date-time DTSTART"
@@ -110,12 +132,12 @@ def _timed(event: Component, start: datetime, tz: ZoneInfo) -> TimedBlock | Skip
     return TimedBlock(start, stop)
 
 
-def _allday(event: Component, start: date) -> DayBlock | Skip:
-    end, duration = _read(event, "DTEND"), _read(event, "DURATION")
+def _allday(event: Component, start: date, duration: _Duration | None) -> DayBlock | Skip:
+    end = _read(event, "DTEND")
     if isinstance(end, date) and not isinstance(end, datetime):
         stop = end
-    elif end is None and isinstance(duration, timedelta) and not duration % timedelta(days=1):
-        stop = start + duration
+    elif end is None and duration is not None and not duration[1] % timedelta(days=1):
+        stop = start + timedelta(days=duration[0]) + duration[1]
     elif end is None and duration is None:
         stop = start + timedelta(days=1)
     else:
@@ -172,16 +194,28 @@ def _zoned(value: datetime, tz: ZoneInfo) -> datetime:
     return value.replace(tzinfo=tz) if value.tzinfo is None else value
 
 
-def _after(start: datetime, duration: timedelta, tz: ZoneInfo) -> datetime:
+def _parse_duration(text: str) -> _Duration:
+    """RFC 5545 §3.3.6: weeks and days are nominal, hours to seconds are exact."""
+    match = _DURATION.fullmatch(text.strip())
+    if match is None or not any(match.group("w", "d", "h", "m", "s")):
+        msg = "DURATION is unreadable"  # never the text: it may be private
+        raise MalformedEventError(msg)
+    weeks, days, hours, minutes, seconds = (
+        int(g or 0) for g in match.group("w", "d", "h", "m", "s")
+    )
+    sign = -1 if match["sign"] == "-" else 1
+    return sign * (7 * weeks + days), sign * timedelta(
+        hours=hours, minutes=minutes, seconds=seconds
+    )
+
+
+def _after(start: datetime, duration: _Duration, tz: ZoneInfo) -> datetime:
     """OPEN Q-20 default: days and weeks are nominal in `tz`, the rest is exact.
 
     RFC 5545 §3.3.6 counts a day as the same wall time next day. The server expands an
     instance to a UTC DTSTART and keeps DURATION, so the day is counted in the configured
     zone, not in UTC: P1D from 2026-10-24 07:00Z ends 08:00Z, 25 real hours (CORE-DUR-6).
-
-    shortcut: timedelta stores PT24H as one day, so a PT24H instance also counts as
-    nominal and over-blocks by one hour on a DST change day; reading the raw DURATION
-    text in the source layer would tell the two apart.
+    PT24H has no day part and stays 24 real hours.
     """
-    days = timedelta(days=duration.days)
-    return (start.astimezone(tz) + days).astimezone(UTC) + (duration - days)
+    days, exact = duration
+    return (start.astimezone(tz) + timedelta(days=days)).astimezone(UTC) + exact

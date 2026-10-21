@@ -11,7 +11,7 @@ from milchglas.core.model import Block, TimedBlock
 from milchglas.core.reduce import reduce_event
 from tests.support.blocks import BERLIN, at, day, timed
 from tests.support.feed import assert_feed_invariants, logical_lines, parse_feed, summaries
-from tests.support.ical import component
+from tests.support.ical import component, duration_text
 
 SALT = "test-salt"
 NOW = at("2026-09-14T12:00Z")
@@ -245,9 +245,12 @@ def test_naive_instants_are_rejected() -> None:
 
 
 def test_one_instant_in_three_spellings_gives_one_feed_det_7() -> None:
+    events = [
+        component("core-identity.ics", n) for n in ("DET-7-utc", "DET-7-berlin", "DET-7-new-york")
+    ]
     blocks = [
-        reduce_event(component("core-identity.ics", name), tz=BERLIN, owner_emails=())
-        for name in ("DET-7-utc", "DET-7-berlin", "DET-7-new-york")
+        reduce_event(e, tz=BERLIN, owner_emails=(), duration=duration_text("core-identity.ics", e))
+        for e in events
     ]
     assert blocks == [timed("2026-10-01T07:30Z", "2026-10-01T09:00Z")] * 3
     feeds = {_emit([b]) for b in blocks if isinstance(b, TimedBlock)}

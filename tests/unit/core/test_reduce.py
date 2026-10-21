@@ -3,6 +3,7 @@
 Fixtures: tests/fixtures/objects/*.ics, one VEVENT per catalogue case, looked up by UID.
 """
 
+from collections.abc import Collection
 from dataclasses import fields
 
 import pytest
@@ -11,7 +12,7 @@ from icalendar import Component
 from milchglas.core.model import Block, DayBlock, TimedBlock
 from milchglas.core.reduce import MalformedEventError, Skip, reduce_event
 from tests.support.blocks import BERLIN, day, timed
-from tests.support.ical import OBJECTS, component, components
+from tests.support.ical import OBJECTS, component, components, duration_text
 
 TIMES = "core-times.ics"
 FILTER = "core-filter.ics"
@@ -20,7 +21,23 @@ OWNERS = ("OWNER@example.org", "owner.private@example.org")
 
 
 def _reduce(name: str, uid: str) -> Block | Skip:
-    return reduce_event(component(name, uid), tz=BERLIN, owner_emails=OWNERS)
+    return _reduce_event(name, component(name, uid))
+
+
+def _reduce_event(
+    name: str,
+    event: Component,
+    owner_emails: Collection[str] = OWNERS,
+    *,
+    keep_transparent_allday: bool = True,
+) -> Block | Skip:
+    return reduce_event(
+        event,
+        tz=BERLIN,
+        owner_emails=owner_emails,
+        duration=duration_text(name, event),
+        keep_transparent_allday=keep_transparent_allday,
+    )
 
 
 # --- filter (CORE-FIL, FR-3, D-3) ---------------------------------------------------------
@@ -82,28 +99,28 @@ def test_transparent_all_day_events_can_be_dropped_open_q_12() -> None:
     # events are dropped either way (FR-3).
     for uid in ("CORE-FIL-12", "CORE-FIL-3-transparent"):
         event = component(FILTER, uid)
-        assert reduce_event(
-            event, tz=BERLIN, owner_emails=OWNERS, keep_transparent_allday=False
-        ) is (Skip.TRANSPARENT)
+        assert _reduce_event(FILTER, event, keep_transparent_allday=False) is Skip.TRANSPARENT
 
 
 def test_declines_count_only_for_configured_owners() -> None:
     event = component(FILTER, "CORE-FIL-4-upper")
-    assert reduce_event(event, tz=BERLIN, owner_emails=()) == timed(
+    assert _reduce_event(FILTER, event, owner_emails=()) == timed(
         "2026-10-05T08:00Z", "2026-10-05T09:00Z"
     )
 
 
-def _outcome(event: Component) -> Block | Skip | MalformedEventError:
+def _outcome(name: str, event: Component) -> Block | Skip | MalformedEventError:
     try:
-        return reduce_event(event, tz=BERLIN, owner_emails=OWNERS)
+        return _reduce_event(name, event)
     except MalformedEventError as error:
         return error
 
 
 def test_no_event_content_survives_reduction_core_fil_14() -> None:
     outcomes = [
-        _outcome(c) for path in sorted(OBJECTS.glob("*.ics")) for c in components(path.name)
+        _outcome(path.name, c)
+        for path in sorted(OBJECTS.glob("*.ics"))
+        for c in components(path.name)
     ]
     blocks = [o for o in outcomes if isinstance(o, DayBlock | TimedBlock)]
     # The scan saw every kind of outcome, so the checks below are not vacuous.
@@ -140,6 +157,10 @@ def test_no_event_content_survives_reduction_core_fil_14() -> None:
         ("floating-gap-empty", Skip.EMPTY),
         # Both times are 03:xx CEST by wall clock but 01:30Z and 01:10Z as instants.
         ("zoned-gap-instants-reversed", Skip.NEGATIVE),
+        # RFC 5545 §3.3.6: the sign belongs to the whole duration. -PT30M on a 23-hour
+        # local day is still half an hour backwards, never a +30 minute block.
+        ("dur-negative-half-hour-on-spring-day", Skip.NEGATIVE),
+        ("dur-negative-hour-on-spring-day", Skip.NEGATIVE),
     ],
 )
 def test_events_without_positive_length_yield_no_block(uid: str, expected: Skip) -> None:
@@ -167,6 +188,10 @@ def test_events_without_positive_length_yield_no_block(uid: str, expected: Skip)
         ("CORE-DUR-6-other-zone", timed("2026-10-24T07:00Z", "2026-10-25T08:00Z")),
         # The time part is exact: 01:30 CEST + PT2H = 02:30 CET, not 03:30 CET.
         ("dur-exact-across-fold", timed("2026-10-25T01:30+02:00", "2026-10-25T02:30+01:00")),
+        # Hours are exact time even when they add up to a day: PT24H is 24 real hours,
+        # not "one day", so on the spring day it ends at 08:00Z, not 07:00Z.
+        ("dur-24-hours-across-spring", timed("2026-03-28T08:00Z", "2026-03-29T08:00Z")),
+        ("dur-36-hours-across-spring", timed("2026-03-28T08:00Z", "2026-03-29T20:00Z")),
         ("dtend-wins-over-duration", timed("2026-10-01T16:00Z", "2026-10-01T16:30Z")),
         ("utc", timed("2026-10-07T16:00Z", "2026-10-07T17:00Z")),
         # Floating time is read in the configured zone.
@@ -204,3 +229,68 @@ def test_malformed_times_raise_without_quoting_the_event(uid: str) -> None:
     # No chained library exception either: a logged traceback would print its message.
     assert caught.value.__cause__ is None
     assert caught.value.__context__ is None or caught.value.__suppress_context__
+
+
+# --- the DURATION text (RFC 5545 §3.3.6) --------------------------------------------------
+
+# A two-hour event at 14:00 Berlin time; only the DURATION text changes below.
+DURATION_BASE = "CORE-DUR-1"
+START = "2026-10-01T12:00Z"
+
+
+def _with_duration(text: str | None) -> Block | Skip:
+    event = component(TIMES, DURATION_BASE)
+    return reduce_event(event, tz=BERLIN, owner_emails=OWNERS, duration=text)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("PT90M", timed(START, "2026-10-01T13:30Z")),
+        ("PT1H30M", timed(START, "2026-10-01T13:30Z")),
+        ("+PT1H", timed(START, "2026-10-01T13:00Z")),
+        ("PT30S", timed(START, "2026-10-01T12:00:30Z")),
+        ("P1DT1H", timed(START, "2026-10-02T13:00Z")),
+        ("P1W", timed(START, "2026-10-08T12:00Z")),
+        ("  PT1H\r", timed(START, "2026-10-01T13:00Z")),
+        ("PT0S", Skip.EMPTY),
+        ("P0D", Skip.EMPTY),
+        # A zero has no sign to speak of: it is empty, not backwards.
+        ("-PT0S", Skip.EMPTY),
+        ("-P1D", Skip.NEGATIVE),
+        ("-P1DT2H", Skip.NEGATIVE),
+        ("-PT1M", Skip.NEGATIVE),
+    ],
+)
+def test_duration_text_sets_the_end(text: str, expected: Block | Skip) -> None:
+    assert _with_duration(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "P",
+        "PT",
+        "P1H",  # hours need the T
+        "1D",
+        "PT1.5H",
+        "P1D2H",
+        "PT1S1M",  # parts keep their order
+        "P\u0661D",  # Arabic-Indic digit one: int() would take it, the grammar does not
+        "P9999999999D",  # more digits than any real duration
+        "BBY-garbage",
+    ],
+)
+def test_unreadable_duration_text_raises_without_quoting_it(text: str) -> None:
+    with pytest.raises(MalformedEventError) as caught:
+        _with_duration(text)
+    assert str(caught.value) == "DURATION is unreadable"  # the text may be private
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None or caught.value.__suppress_context__
+
+
+def test_an_event_with_a_duration_property_needs_its_text() -> None:
+    # Reading it as "no duration" would make the event zero length: a false free slot.
+    with pytest.raises(MalformedEventError):
+        _with_duration(None)

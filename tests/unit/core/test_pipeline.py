@@ -17,7 +17,7 @@ from milchglas.core.emit import emit
 from milchglas.core.model import Block, DayBlock, TimedBlock, clip, merge, round_to_grid, window
 from milchglas.core.reduce import Skip, reduce_event
 from tests.support.feed import assert_feed_invariants, parse_feed
-from tests.support.ical import components
+from tests.support.ical import components, duration_text
 
 ORACLE: dict[str, Any] = json.loads(
     (Path(__file__).resolve().parents[2] / "fixtures" / "expected_blocks.json").read_text()
@@ -33,15 +33,17 @@ def _sentinel(uid: str) -> str:
 
 
 def _pipeline() -> tuple[list[Block], set[str]]:
-    events, recurring = [], set()
+    events, recurring = [], set()  # events: (VEVENT, its raw DURATION text)
     for name in ORACLE["source_fixtures"]:
         for event in components(Path(name).name):
             if "RRULE" in event or "RECURRENCE-ID" in event:
                 recurring.add(_sentinel(str(event["UID"])))
             else:
-                events.append(event)
+                events.append((event, duration_text(Path(name).name, event)))
     win = window(datetime.fromisoformat(ORACLE["now"]), TZ, WINDOW_DAYS)
-    reduced = [reduce_event(e, tz=TZ, owner_emails=ORACLE["owner_emails"]) for e in events]
+    reduced = [
+        reduce_event(e, tz=TZ, owner_emails=ORACLE["owner_emails"], duration=d) for e, d in events
+    ]
     blocks = [r for r in reduced if not isinstance(r, Skip)]
     return merge(round_to_grid(clip(blocks, win), GRID, TZ)), recurring
 
