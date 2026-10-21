@@ -10,7 +10,7 @@
   },
   "owner_emails": ["owner@example.org"],
   "timed_utc": [
-    {"start": "20260927T220000Z", "end": "20260927T231500Z", "from": ["BBX-D2-01"], "depends_on": "Q-E2E-1"},
+    {"start": "20260927T220000Z", "end": "20260927T231500Z", "from": ["BBX-D2-01"], "depends_on": "E2E-1"},
     {"start": "20260929T070000Z", "end": "20260929T100000Z", "from": ["BBX-D2-04", "BBX-D2-05", "BBX-D3-01"]},
     {"start": "20260929T160000Z", "end": "20260929T173000Z", "from": ["BBX-D2-17"]},
     {"start": "20260930T120000Z", "end": "20260930T133000Z", "from": ["BBX-D2-06", "BBX-D2-07", "BBX-D3-02"]},
@@ -22,7 +22,7 @@
     {"start": "20261006T100000Z", "end": "20261006T103000Z", "from": ["BBX-D2-16"]},
     {"start": "20261007T160000Z", "end": "20261007T170000Z", "from": ["BBX-D3-04"]},
     {"start": "20261008T180000Z", "end": "20261010T060000Z", "from": ["BBX-D2-18"]},
-    {"start": "20261012T080000Z", "end": "20261012T090000Z", "from": ["BBX-D3-06"], "depends_on": "Q-E2E-1"},
+    {"start": "20261012T080000Z", "end": "20261012T090000Z", "from": ["BBX-D3-06"], "depends_on": "E2E-1"},
     {"start": "20261014T050000Z", "end": "20261014T060000Z", "from": ["BBX-D2-17"]},
     {"start": "20261020T160000Z", "end": "20261020T173000Z", "from": ["BBX-D2-17"]},
     {"start": "20261023T070000Z", "end": "20261023T080000Z", "from": ["BBX-D3-14"]},
@@ -32,9 +32,9 @@
     {"start": "20261025T210000Z", "end": "20261025T230000Z", "from": ["BBX-D2-19"]}
   ],
   "allday_date": [
-    {"start": "20260928", "end": "20260929", "from": ["BBX-D3-12"], "depends_on": "Q-E2E-1"},
+    {"start": "20260928", "end": "20260929", "from": ["BBX-D3-12"], "depends_on": "E2E-1"},
     {"start": "20261003", "end": "20261005", "from": ["BBX-D3-11"]},
-    {"start": "20261012", "end": "20261014", "from": ["BBX-D3-05", "BBX-D2-25"], "depends_on": "Q-E2E-1, Q-12"},
+    {"start": "20261012", "end": "20261014", "from": ["BBX-D3-05", "BBX-D2-25"], "depends_on": "E2E-1, Q-12"},
     {"start": "20261015", "end": "20261020", "from": ["BBX-D2-23", "BBX-D3-07", "BBX-D3-08", "BBX-D2-24"], "depends_on": "Q-12"},
     {"start": "20261021", "end": "20261023", "from": ["BBX-D3-09", "BBX-D3-10"]}
   ],
