@@ -11,11 +11,13 @@ has.
 
 import zoneinfo
 from bisect import bisect_left
+from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
 from functools import cache, partial
 from zoneinfo import ZoneInfo
 
-from hypothesis import assume, example, find, given
+import pytest
+from hypothesis import assume, example, find, given, settings
 from hypothesis import strategies as st
 from icalendar import Calendar
 
@@ -151,7 +153,13 @@ def _changes_2026(zone: str) -> tuple[datetime, ...]:
 
 @st.composite
 def _cases(draw: st.DrawFn) -> _Case:
-    """A zone, a UTC start within three hours of one of its 2026 changes, and a DURATION."""
+    """A zone, a UTC start, and a DURATION; a start or a day-part end lies near a 2026 change.
+
+    The start lies within three hours of one of the zone's changes. For half of the cases
+    with a day part the nominal end does instead, which is the only way it reaches a gap or
+    a fold: the zone's 2026 changes are at least 35 days apart and a day part is at most
+    nine days.
+    """
     zone = draw(st.sampled_from(ZONES))
     changes = _changes_2026(zone)
     # A zone without a change in 2026 still gets a start: the plain path must stay right.
@@ -160,9 +168,12 @@ def _cases(draw: st.DrawFn) -> _Case:
         if changes
         else _YEAR + timedelta(minutes=draw(st.integers(0, 365 * 24 * 60)))
     )
-    start = anchor + timedelta(minutes=draw(st.integers(-180, 180)))
     # Half the cases have no day or week part: that is the path the fold broke.
     weeks, days = draw(st.just((0, 0)) | st.tuples(st.integers(0, 1), st.integers(0, 2)))
+    nominal = timedelta(days=7 * weeks + days)
+    if nominal and draw(st.booleans()):
+        anchor -= nominal  # the start is as many days before the change as the part counts
+    start = anchor + timedelta(minutes=draw(st.integers(-180, 180)))
     minutes = draw(st.integers(0, 240))
     zero_days = draw(st.booleans())  # `P0DT30M` as well as `PT30M`
     date_part = (f"{weeks}W" if weeks else "") + (
@@ -174,17 +185,24 @@ def _cases(draw: st.DrawFn) -> _Case:
     return zone, start, weeks, days, minutes, f"P{date_part}{time_part}"
 
 
+def _wall_end(case: _Case) -> datetime | None:
+    """The local wall time after the day and week parts, or None without them (§3.3.6)."""
+    zone, start, weeks, days, _, _ = case
+    if weeks == 0 and days == 0:
+        return None
+    return start.astimezone(ZoneInfo(zone)).replace(tzinfo=None) + timedelta(days=7 * weeks + days)
+
+
 def _rfc_interval(case: _Case) -> tuple[datetime, datetime] | None:
     """RFC 5545 §3.3.6 and §3.3.5, from the case alone: no milchglas name is used."""
-    zone, start, weeks, days, minutes, _ = case
+    zone, start, _, _, minutes, _ = case
     exact = timedelta(minutes=minutes)
-    if weeks == 0 and days == 0:
+    wall = _wall_end(case)
+    if wall is None:
         end = start + exact  # no nominal part: the UTC instant plus real time
     else:
-        info = ZoneInfo(zone)
-        wall = start.astimezone(info).replace(tzinfo=None) + timedelta(days=7 * weeks + days)
         # An ambiguous or missing wall time reads as the first pass, the offset before a gap.
-        end = wall.replace(tzinfo=info, fold=0).astimezone(UTC) + exact
+        end = wall.replace(tzinfo=ZoneInfo(zone), fold=0).astimezone(UTC) + exact
     return None if end == start else (start, end)
 
 
@@ -193,6 +211,11 @@ def _rfc_interval(case: _Case) -> tuple[datetime, datetime] | None:
 @example(("Europe/Berlin", datetime(2026, 10, 25, 1, 30, tzinfo=UTC), 0, 0, 60, "PT1H"))
 @example(("Australia/Lord_Howe", datetime(2026, 4, 4, 15, 10, tzinfo=UTC), 0, 0, 10, "PT10M"))
 @example(("Europe/Berlin", datetime(2026, 10, 25, 1, 10, tzinfo=UTC), 0, 1, 30, "P1DT30M"))
+# The day-part end in the spring gap (01:30Z is 02:30 CET, the next 02:30 does not exist), the
+# exact part across the change after a day part, and a gap that opens at midnight.
+@example(("Europe/Berlin", datetime(2026, 3, 28, 1, 30, tzinfo=UTC), 0, 1, 0, "P1D"))
+@example(("Europe/Berlin", datetime(2026, 3, 28, 0, 30, tzinfo=UTC), 0, 1, 120, "P1DT2H"))
+@example(("Africa/Cairo", datetime(2026, 4, 22, 22, 0, tzinfo=UTC), 0, 1, 0, "P1D"))
 def test_reduce_end_follows_rfc_beside_an_offset_change_prop_14(case: _Case) -> None:
     zone, start, _, _, _, text = case
     ics = "\r\n".join(
@@ -221,6 +244,48 @@ def _starts_in_a_fold_second_pass_with_exact_time_only(case: _Case) -> bool:
     return start.astimezone(ZoneInfo(zone)).fold == 1 and weeks == days == 0 and minutes > 0
 
 
-def test_generated_cases_reach_a_fold_second_pass_without_a_day_part_prop_14() -> None:
+def _readings(case: _Case) -> tuple[datetime, datetime] | None:
+    """The day-part end read as `fold=0` and as `fold=1`: they differ in a gap or a fold."""
+    wall = _wall_end(case)
+    if wall is None:
+        return None
+    info = ZoneInfo(case[0])
+    first, second = (wall.replace(tzinfo=info, fold=fold).astimezone(UTC) for fold in (0, 1))
+    return first, second
+
+
+def _day_part_end_in_a_fold(case: _Case) -> bool:
+    readings = _readings(case)
+    return readings is not None and readings[0] < readings[1]
+
+
+def _day_part_end_in_a_gap(case: _Case) -> bool:
+    readings = _readings(case)
+    return readings is not None and readings[0] > readings[1]
+
+
+def _exact_part_crosses_a_change_after_a_day_part(case: _Case) -> bool:
+    readings = _readings(case)
+    if readings is None:
+        return False
+    info = ZoneInfo(case[0])
+    nominal = readings[0]
+    after = nominal + timedelta(minutes=case[4])
+    return nominal.astimezone(info).utcoffset() != after.astimezone(info).utcoffset()
+
+
+@pytest.mark.parametrize(
+    "reached",
+    [
+        _starts_in_a_fold_second_pass_with_exact_time_only,
+        _day_part_end_in_a_fold,
+        _day_part_end_in_a_gap,
+        _exact_part_crosses_a_change_after_a_day_part,
+    ],
+)
+def test_generated_cases_reach_the_edges_of_an_offset_change_prop_14(
+    reached: Callable[[_Case], bool],
+) -> None:
     # Without this the property above could hold only because the search never gets there.
-    find(_cases(), _starts_in_a_fold_second_pass_with_exact_time_only)
+    # A day-part end in a fold is 3 draws in 1000: 20000 draws leave a miss at e**-60.
+    find(_cases(), reached, settings=settings(max_examples=20000))
