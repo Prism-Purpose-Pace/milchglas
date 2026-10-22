@@ -5,7 +5,17 @@
 [![CI](https://github.com/Prism-Purpose-Pace/milchglas/actions/workflows/ci.yml/badge.svg)](https://github.com/Prism-Purpose-Pace/milchglas/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/Prism-Purpose-Pace/milchglas/actions/workflows/codeql.yml/badge.svg)](https://github.com/Prism-Purpose-Pace/milchglas/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Prism-Purpose-Pace/milchglas/badge)](https://scorecard.dev/viewer/?uri=github.com/Prism-Purpose-Pace/milchglas)
+[![Coverage ≥ 90%](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)](pyproject.toml)
+
+[![Threat model: STRIDE + LINDDUN](https://img.shields.io/badge/threat%20model-STRIDE%20%2B%20LINDDUN-8a2be2)](docs/threat-model.md)
+[![Architecture: C4 model](https://img.shields.io/badge/architecture-C4%20model-0b7285)](docs/architecture.md)
+
+[![Release](https://img.shields.io/github/v/release/Prism-Purpose-Pace/milchglas)](https://github.com/Prism-Purpose-Pace/milchglas/releases)
+[![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FPrism-Purpose-Pace%2Fmilchglas%2Fmain%2Fpyproject.toml)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Types: mypy strict](https://img.shields.io/badge/types-mypy%20strict-2a6db2)](https://mypy-lang.org/)
 
 Milchglas (German for *frosted glass*) reads private CalDAV calendars — for example on
 Nextcloud — strictly read-only, reduces every event to an anonymous time block and
