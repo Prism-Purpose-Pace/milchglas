@@ -23,6 +23,11 @@ _UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u2028\u2029\ud800-\udfff]")
 _UNIT = re.compile(r"\\.|.", re.DOTALL)
 
 
+def valid_text(text: str) -> bool:
+    """Whether `text` may reach the feed: no line break and no control character."""
+    return not _UNSAFE.search(text)
+
+
 def uid(salt: str, block: Block) -> str:
     """`sha256(salt|start|end)[:32]@milchglas`: stable while the span is (V-7)."""
     digest = hashlib.sha256(f"{salt}|{_value(block.start)}|{_value(block.end)}".encode())
@@ -47,7 +52,7 @@ def emit(
     `dtstamps` maps UIDs of the previous feed to their DTSTAMP: a block that is still
     there keeps it, a new block gets `now`, so DTSTAMP is the last content change (D-7c).
     """
-    if _UNSAFE.search(summary):
+    if not valid_text(summary):
         msg = "summary must not contain line breaks or control characters"
         raise ValueError(msg)
     ttl = _duration(ttl_seconds)
