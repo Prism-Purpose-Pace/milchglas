@@ -73,18 +73,20 @@ Non-secret settings live in one `config.json` and take effect on the next refres
 | Key | Default | Meaning |
 |---|---|---|
 | `tz` | `Europe/Berlin` | time zone for grid rounding |
-| `window_days` | `28` | feed horizon from today |
+| `window_days` | `33` | feed horizon from today |
 | `grid_minutes` | `15` | rounding grid |
 | `summary` | `Blocker Privat` | title of every busy block |
 | `ttl_seconds` | `900` | refresh interval hint |
 | `allday_mode`, `tentative_mode` | see spec | how all-day and tentative events are shown |
 | `owner_emails` | — | addresses whose declined invitations are skipped |
 | `calendars[]` | — | `{href, name, enabled}` per source calendar |
-| `token` | — | secret part of the feed URL |
+| `token_sha256` | — | SHA-256 of the feed token, printed by `init` and `rotate-token` |
+| `uid_salt` | — | salt of the block UIDs, printed once by `init` |
 
 Secrets and paths come only from the environment: `CALDAV_URL` (DAV root),
-`CALDAV_USER`, `CALDAV_SECRET` (an app password with read access), `MILCHGLAS_VAR_DIR`,
-`MILCHGLAS_LOG_LEVEL`.
+`CALDAV_USER`, `CALDAV_SECRET` (an app password with read access), `MILCHGLAS_VAR_DIR`
+(feed, state and run lock), `MILCHGLAS_CONFIG` (path to `config.json`, default
+`./config.json`), `MILCHGLAS_LOG_LEVEL`.
 
 ## Deployment (planned)
 

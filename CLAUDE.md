@@ -52,7 +52,8 @@ reduce, emit — pure, no I/O; ruff bans I/O imports there), `web/` (WSGI app se
   `token_sha256`, `uid_salt`); changes apply on the next refresh without restart. Only
   the SHA-256 of the feed token is stored, never the token itself (spec D-14).
 - Secrets and paths only via environment: `CALDAV_URL`, `CALDAV_USER`, `CALDAV_SECRET`,
-  `MILCHGLAS_VAR_DIR`, `MILCHGLAS_LOG_LEVEL`.
+  `MILCHGLAS_VAR_DIR` (`feed.ics`, `state.json`, run lock), `MILCHGLAS_CONFIG` (path to
+  `config.json`, default `./config.json`, spec D-16), `MILCHGLAS_LOG_LEVEL`.
 
 ## Invariants that are easy to break
 
