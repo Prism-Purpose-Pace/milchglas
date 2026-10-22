@@ -181,7 +181,7 @@ the expected-blocks oracle assumes until the spec changes.
 | DET-6 | 365 daily refreshes with a fake clock over fixtures spanning both DST days: invariants hold every day, bytes change only on days the window boundary crosses a block, DTSTAMPs of persisting blocks never change, runtime at most 2 s | AC-6, NFR-C1 | unit | planned |
 | DET-7 | The same instant as `…Z`, `TZID=Europe/Berlin` and `TZID=America/New_York` → identical UID and identical feed bytes | D-7c, NFR-C1 | unit | exists |
 | DET-8 | Unreadable previous feed (truncated, not UTF-8, not a calendar) does not stop the refresh: every DTSTAMP equals now and one warning with counts only is logged | D-7c, AC-6 | unit | planned |
-| DET-9 | Under `python -m milchglas`, `zoneinfo.TZPATH` is empty (set once in `__main__`, never in `core/`), so the pinned `tzdata` decides every DST rule and the feed bytes do not depend on the host | NFR-O3, FR-6 | unit | planned |
+| DET-9 | Under `python -m milchglas`, `zoneinfo.TZPATH` is empty (set once in `__main__`, never in `core/`), so the pinned `tzdata` decides every DST rule and the feed bytes do not depend on the host | NFR-O3, FR-6 | unit | exists |
 
 ## 7. Orchestration and config (fakes: scripted fetcher, fake clock, `tmp_path`)
 
@@ -229,9 +229,9 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-LOCK-1 | Second refresh while the var-dir lock is held → non-zero exit, feed and state untouched, one complete feed remains | FR-8, AC-7 | unit | planned |
 | ORCH-CLI-1 | `refresh --now 2026-09-28T00:00:00+02:00` pins the clock; a naive `--now` is rejected | FR-5 | unit | planned |
 | ORCH-CLI-2 | `refresh --dry-run` prints counts and timestamps only, writes neither feed nor state (mtimes unchanged) and takes no lock; no command prints raw source data | NFR-O1 | unit | planned |
-| ORCH-CLI-3 | `init` prints once the token and the members `"uid_salt"` and `"token_sha256"` (hex SHA-256 of the token as UTF-8 bytes) and writes no file: working directory, state directory and `config.json` are unchanged | D-14, NFR-O1, Q-13 | unit | planned |
-| ORCH-CLI-4 | `rotate-token` prints a new token and its `"token_sha256"` and writes no file; the token is the URL-safe encoding of 32 CSPRNG bytes (256 bits), two runs differ | D-14, NFR-S1, AC-20 | unit | planned |
-| ORCH-CLI-5 | The printed token appears nowhere except the output of `init` and `rotate-token` (logs, state, feed, config searched) | NFR-S2, NFR-S5 | unit | planned |
+| ORCH-CLI-3 | `init` prints once the token and the members `"uid_salt"` and `"token_sha256"` (hex SHA-256 of the token as UTF-8 bytes) and writes no file: working directory, state directory and `config.json` are unchanged | D-14, NFR-O1, Q-13 | unit | exists |
+| ORCH-CLI-4 | `rotate-token` prints a new token and its `"token_sha256"` and writes no file; the token is the URL-safe encoding of 32 CSPRNG bytes (256 bits), two runs differ | D-14, NFR-S1, AC-20 | unit | exists |
+| ORCH-CLI-5 | The printed token appears nowhere except the output of `init` and `rotate-token` (logs, state, feed, config searched) | NFR-S2, NFR-S5 | unit | exists |
 
 ## 8. Web (WSGI, direct `environ` calls, no server)
 
