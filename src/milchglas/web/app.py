@@ -121,7 +121,8 @@ class FeedApp:
     def _health(self, now: datetime, start_response: StartResponse) -> Iterable[bytes]:
         """200 or 503 with one identical empty body: no timestamps, no counts (FR-11)."""
         success = read_state(self._var_dir).last_success
-        healthy = self._digest_ok and success is not None and now - success < _STALE
+        # A success dated in the future (a skewed clock) proves no live refresher.
+        healthy = self._digest_ok and success is not None and timedelta(0) <= now - success < _STALE
         start_response(
             "200 OK" if healthy else "503 Service Unavailable",
             [("Content-Type", "text/plain; charset=utf-8"), ("Content-Length", "0"), *_COMMON],
