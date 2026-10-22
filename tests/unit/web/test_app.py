@@ -438,6 +438,35 @@ def test_create_reads_paths_from_the_environment(
         create({})
 
 
+@pytest.mark.parametrize(
+    ("value", "level"),
+    [("debug", "DEBUG"), ("Warning", "WARNING"), ("ERROR", "ERROR"), ("", "INFO"), (None, "INFO")],
+)
+def test_log_level_is_read_in_any_letter_case_web_19(
+    site: Site, monkeypatch: pytest.MonkeyPatch, value: str | None, level: str
+) -> None:
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(logging, "basicConfig", lambda **kwargs: seen.update(kwargs))
+    environ = {"MILCHGLAS_VAR_DIR": str(site.var), "MILCHGLAS_CONFIG": str(site.config)}
+    if value is not None:
+        environ["MILCHGLAS_LOG_LEVEL"] = value
+    create(environ)
+    assert seen["level"] == level
+
+
+@pytest.mark.parametrize("value", ["verbose", "5", "BBX-LEVEL"])
+def test_unknown_log_level_refuses_the_start_web_19(site: Site, value: str) -> None:
+    environ = {
+        "MILCHGLAS_VAR_DIR": str(site.var),
+        "MILCHGLAS_CONFIG": str(site.config),
+        "MILCHGLAS_LOG_LEVEL": value,
+    }
+    with pytest.raises(StartupError) as caught:
+        create(environ)
+    assert "MILCHGLAS_LOG_LEVEL" in str(caught.value)
+    assert value not in str(caught.value)
+
+
 def _imports(module: Path) -> set[str]:
     names: set[str] = set()
     for node in ast.walk(ast.parse(module.read_text())):

@@ -26,9 +26,12 @@ def create(environ: Mapping[str, str] = os.environ) -> FeedApp:
     if not var_dir:
         msg = "MILCHGLAS_VAR_DIR is not set"
         raise StartupError(msg)
+    # Platform forms often save a set-but-empty variable; logging accepts upper case only.
+    level = environ.get("MILCHGLAS_LOG_LEVEL", "").upper() or "INFO"
+    if level not in logging.getLevelNamesMapping():
+        msg = "MILCHGLAS_LOG_LEVEL is not a logging level name"
+        raise StartupError(msg)
     logging.basicConfig(
-        stream=sys.stdout,
-        level=environ.get("MILCHGLAS_LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        stream=sys.stdout, level=level, format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
     return FeedApp(var_dir=Path(var_dir), config=config_path(environ))
