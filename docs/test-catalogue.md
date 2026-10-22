@@ -200,11 +200,11 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-NET-1 | `CALDAV_URL` with an untrusted TLS certificate fails the refresh; the feed stays byte-identical | NFR-S7 | unit | planned |
 | ORCH-NET-2 | A server answering in a slow drip ends the run at the total deadline (default 120 s, injected); the refresh fails, the feed stays byte-identical | NFR-S7 | unit | planned |
 | ORCH-NET-3 | The contract suite's plain-HTTP switch is test-only: production code never reads it, so with the switch absent an `http` URL is rejected | NFR-S7 | unit | planned |
-| ORCH-WRITE-1 | Success → unique temp file in the feed's own directory, `fsync`, `os.replace`, directory `fsync`; no `*.tmp` left; `feed.ics` mode `0644`, var dir `0700` | FR-8, NFR-S4 | unit | planned |
-| ORCH-WRITE-2 | Failure injected after the temp write, before the replace → old feed intact, temp file removed | AC-7, FR-8 | unit | planned |
+| ORCH-WRITE-1 | Success → unique temp file in the feed's own directory, `fsync`, `os.replace`, directory `fsync`; no `*.tmp` left; `feed.ics` mode `0644`, var dir `0700` | FR-8, NFR-S4 | unit | exists |
+| ORCH-WRITE-2 | Failure injected after the temp write, before the replace → old feed intact, temp file removed | AC-7, FR-8 | unit | exists |
 | ORCH-WRITE-3 | Crash injected between `os.replace` and the state write → next run: byte-identical feed, state repaired | AC-6, AC-7 | unit | planned |
 | ORCH-WRITE-4 | State is written atomically; a corrupt or missing `state.json` counts as absent, the refresh still works, `/healthz` is 503 until the next success | FR-8, FR-11 | unit | planned |
-| ORCH-WRITE-5 | Injected `ENOSPC` (full disk) → previous feed byte-identical | AC-7, FR-8 | unit | planned |
+| ORCH-WRITE-5 | Injected `ENOSPC` (full disk) → previous feed byte-identical | AC-7, FR-8 | unit | exists |
 | ORCH-CFG-1 | `enabled: false` edited between two runs → that calendar's blocks are gone, no restart; config is re-read every refresh, also after an edit that replaces the file (write and rename) | AC-10, FR-12 | unit | planned |
 | ORCH-CFG-2 | Invalid config fails before any request, keeps the old feed and names only the field: unknown `tz`, a `grid_minutes` that fails CORE-RND-8, empty `calendars`, zero calendars with `enabled: true`, duplicate hrefs, `owner_emails` not a list | AC-22, Q-16 | unit | planned |
 | ORCH-CFG-3 | Missing `CALDAV_SECRET` → exit 2, message names the variable only | NFR-S2, NFR-O1 | unit | planned |
