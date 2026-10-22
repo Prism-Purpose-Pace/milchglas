@@ -265,6 +265,12 @@ def test_one_comparison_and_no_file_open_before_a_404_web_8(
         spies.update(compare=0, open=0)
         assert call(app, method, target)[0] == "404 Not Found"
         assert spies == {"compare": 1, "open": 0}
+    # The timed re-read opens config.json once per tick, whatever the request presents.
+    site.clock.now = NOW + timedelta(seconds=61)
+    for opens in (1, 0):
+        spies.update(compare=0, open=0)
+        assert call(app, method, path)[0] == "404 Not Found"
+        assert spies == {"compare": 1, "open": opens}
 
 
 def _counting(spies: dict[str, int], real: Callable[..., object]) -> Callable[..., object]:
@@ -400,10 +406,14 @@ def test_failed_reread_keeps_the_last_digest_and_turns_health_503_web_14(
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 2
     assert all("token_sha256" in message for message in warnings)
-    assert not any(content.decode(errors="replace") in message for message in warnings)
-    site.write_config({"token_sha256": DIGEST})
+    text = "\n".join(warnings)
+    for value in (DIGEST, "ab" * 31, "not json"):
+        assert not any(value[i : i + 8] in text for i in range(len(value) - 7))
+    site.write_config({"token_sha256": hashlib.sha256(WRONG.encode()).hexdigest()})
     site.clock.now = NOW + timedelta(minutes=3)
     assert call(app, "GET", "/healthz")[0] == "200 OK"
+    assert call(app, path=f"/f/{WRONG}.ics")[0] == "200 OK"
+    assert call(app, path=FEED_PATH) == call(app, path="/no/such/path")
 
 
 def test_unrelated_invalid_key_does_not_touch_the_feed_web_15(site: Site) -> None:
@@ -477,7 +487,14 @@ def _imports(module: Path) -> set[str]:
             names.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.add(node.module)
+            names.update(f"{node.module}.{alias.name}" for alias in node.names)
     return names
+
+
+def test_import_scan_sees_a_module_imported_from_its_package(tmp_path: Path) -> None:
+    module = tmp_path / "probe.py"
+    module.write_text("from milchglas import refresh\nimport milchglas.sources.caldav\n")
+    assert {"milchglas.refresh", "milchglas.sources.caldav"} <= _imports(module)
 
 
 def test_web_never_reaches_the_source_side_web_11() -> None:

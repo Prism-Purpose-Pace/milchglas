@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import runpy
 import subprocess
 import sys
 import zoneinfo
@@ -114,6 +115,27 @@ def test_entry_point_pins_the_tzdata_package_det_9(monkeypatch: pytest.MonkeyPat
     assert calls == []
     assert run(["rotate-token"]) == 0
     assert calls == [()]
+
+
+def test_dash_m_guard_goes_through_run_det_9(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[object] = []
+    monkeypatch.setattr(zoneinfo, "reset_tzpath", lambda to=None: calls.append(to))
+    monkeypatch.setattr(sys, "argv", ["milchglas", "rotate-token"])
+    # runpy warns when the module it executes is already imported.
+    monkeypatch.delitem(sys.modules, "milchglas.__main__", raising=False)
+    with pytest.raises(SystemExit) as caught:
+        runpy.run_module("milchglas", run_name="__main__")
+    assert caught.value.code == 0
+    assert calls == [()]
+    assert "Feed token, shown once:" in capsys.readouterr().out
+
+
+def test_only_the_entry_point_touches_the_tz_path_det_9() -> None:
+    src = Path(__file__).resolve().parents[2] / "src" / "milchglas"
+    touching = [p.relative_to(src) for p in src.rglob("*.py") if "reset_tzpath" in p.read_text()]
+    assert touching == [Path("__main__.py")]
 
 
 # PYTHONOPTIMIZE=2 (-OO) strips docstrings, as some slim images set it.
