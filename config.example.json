@@ -1,0 +1,15 @@
+{
+  "tz": "Europe/Berlin",
+  "window_days": 33,
+  "grid_minutes": 15,
+  "summary": "Blocker Privat",
+  "ttl_seconds": 900,
+  "allday_mode": "busy",
+  "tentative_mode": "busy",
+  "owner_emails": ["owner@example.org"],
+  "calendars": [
+    {"href": "/remote.php/dav/calendars/svc-milchglas/privat_shared_by_owner/", "name": "Privat", "enabled": true}
+  ],
+  "token_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "uid_salt": "replace-with-the-uid_salt-printed-by-milchglas-init"
+}
