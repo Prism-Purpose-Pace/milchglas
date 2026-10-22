@@ -148,6 +148,9 @@ def _network(address: str) -> str:
         ip = ipaddress.ip_address(address)
     except ValueError:
         return "unknown"
+    # A dual-stack bind hands IPv4 clients over as ::ffff:a.b.c.d, which /48 would erase.
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
     prefix = 24 if isinstance(ip, ipaddress.IPv4Address) else 48
     return str(ipaddress.ip_network(f"{ip}/{prefix}", strict=False))
 

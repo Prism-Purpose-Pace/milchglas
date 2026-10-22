@@ -223,6 +223,8 @@ def test_feed_fetch_logs_network_and_agent_class_only_web_7(
     app = site.app()
     call(app, path=FEED_PATH)
     call(app, path=FEED_PATH, remote="2001:db8:1234:5678::1")
+    # A dual-stack bind ([::]) hands IPv4 clients over as IPv4-mapped IPv6.
+    call(app, path=FEED_PATH, remote="::ffff:198.51.100.9")
     call(app, path=FEED_PATH, remote="")
     for path in ("/no/such/path", f"/f/{WRONG}.ics", f"{FEED_PATH}/x"):
         call(app, path=path)
@@ -230,6 +232,7 @@ def test_feed_fetch_logs_network_and_agent_class_only_web_7(
     assert served == [
         "feed served to 203.0.113.0/24 (mozilla)",
         "feed served to 2001:db8:1234::/48 (mozilla)",
+        "feed served to 198.51.100.0/24 (mozilla)",
         "feed served to unknown (mozilla)",
     ]
     text = caplog.text
