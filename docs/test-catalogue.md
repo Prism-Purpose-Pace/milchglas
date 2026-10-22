@@ -242,7 +242,7 @@ the expected-blocks oracle assumes until the spec changes.
 | WEB-3 | `If-None-Match` equal → 304 without body; different → 200; the ETag is unchanged across refreshes of an unchanged source | AC-9, AC-6 | unit | exists |
 | WEB-4 | `HEAD` → same headers, empty body; `POST`, `PUT`, `DELETE`, `OPTIONS` on any path → the identical 404 | AC-9 | unit | exists |
 | WEB-6 | Feed file missing (never refreshed) → the identical 404, not a server error | FR-9, AC-9 | unit | exists |
-| WEB-7 | A successful feed fetch writes one log line with the client network (/24 IPv4, /48 IPv6) and a user-agent class; no log line holds the token, a part of it or any part of `token_sha256` | NFR-S5, AC-21 | unit | exists |
+| WEB-7 | A successful feed fetch, a `304` revalidation included, writes one log line with the client network (/24 IPv4, /48 IPv6) and a user-agent class; no log line holds the token, a part of it or any part of `token_sha256` | NFR-S5, AC-21 | unit | exists |
 | WEB-8 | The token is only hashed (UTF-8 bytes, SHA-256) and compared with `hmac.compare_digest`, never joined into a path; a spy sees exactly one digest comparison per request on every 404 path, unknown paths and unsupported methods included, and no file open before a 404 except the timed `config.json` re-read, once per 60 s tick whatever the request presents | AC-9, NFR-S1 | unit | exists |
 | WEB-9 | Non-ASCII token (`/f/ä.ics`), empty token and a token of another length → the identical 404, not a server error | AC-9, NFR-S1 | unit | exists |
 | WEB-10 | `web` refuses to start when any `CALDAV_*` variable is set; the error names the variable only | D-13 | unit | exists |
