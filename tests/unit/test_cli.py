@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import subprocess
 import sys
 import zoneinfo
@@ -115,13 +116,16 @@ def test_entry_point_pins_the_tzdata_package_det_9(monkeypatch: pytest.MonkeyPat
     assert calls == [()]
 
 
-def test_python_dash_m_milchglas_runs(tmp_path: Path) -> None:
+# PYTHONOPTIMIZE=2 (-OO) strips docstrings, as some slim images set it.
+@pytest.mark.parametrize("optimize", ["", "2"], ids=["plain", "optimized"])
+def test_python_dash_m_milchglas_runs(tmp_path: Path, optimize: str) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "milchglas", "rotate-token"],
         capture_output=True,
         text=True,
         check=True,
         cwd=tmp_path,
+        env={**os.environ, "PYTHONOPTIMIZE": optimize},
     )
     token, members = _printed(result.stdout)
     assert members["token_sha256"] == hashlib.sha256(token.encode()).hexdigest()
