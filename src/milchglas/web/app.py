@@ -4,7 +4,8 @@ The token is the feed's only credential (a capability URL), so the surface must 
 wrong token from an unknown path. Every request that does not get the feed gets one
 identical 404, and every request outside `/healthz` passes through exactly one digest
 comparison before anything else differs. The token is only hashed, never joined into a
-path. The digest is re-read on a timer, never per request, so no 404 path opens a file.
+path. The digest is re-read on a timer, never per request, so the only file a 404 path
+can open is that re-read, once per tick whatever the request presents.
 """
 
 import hashlib
