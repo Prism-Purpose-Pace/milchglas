@@ -249,6 +249,7 @@ the expected-blocks oracle assumes until the spec changes.
 | WEB-11 | Import graph: `milchglas.web` imports neither `milchglas.sources` nor `milchglas.refresh`, so a lazy refresh cannot creep in | D-13 | unit | exists |
 | WEB-12 | After the printed `token_sha256` is pasted, within one refresh interval (injected clock) the old token returns the identical 404 and the new one 200, without a restart; under Option A no file in the state directory is named after any token | AC-20, D-14 | unit | exists |
 | WEB-13 | `web` refuses to start on a `token_sha256` that is not 64 hex characters | NFR-S1, D-14 | unit | exists |
+| WEB-18 | Feed file unreadable (permission, a directory, an I/O error) → the identical 404 and one constant warning naming the exception class; no exception leaves the app, so no server error log line carries the request path or the token | NFR-S5, AC-9 | unit | exists |
 
 ## 9. Health
 

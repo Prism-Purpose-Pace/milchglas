@@ -191,6 +191,31 @@ def test_missing_feed_is_the_identical_404_web_6(site: Site) -> None:
         assert call(app, method, FEED_PATH) == call(app, method, "/no/such/path")
 
 
+@pytest.mark.parametrize(
+    "error",
+    [PermissionError(13, "denied"), IsADirectoryError(21, "directory"), OSError(5, "I/O")],
+    ids=["permission", "directory", "eio"],
+)
+def test_unreadable_feed_is_the_identical_404_web_18(
+    site: Site, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, error: OSError
+) -> None:
+    # An exception leaving the app would put the request path, token included, into the
+    # WSGI server's error log; the app answers the identical 404 and logs a constant line.
+    app = site.app()
+    baseline = {method: call(app, method, "/no/such/path") for method in ("GET", "HEAD")}
+
+    def unreadable(_self: Path) -> bytes:
+        raise error
+
+    monkeypatch.setattr(Path, "read_bytes", unreadable)
+    caplog.set_level(logging.DEBUG)
+    for method in ("GET", "HEAD"):
+        assert call(app, method, FEED_PATH) == baseline[method]
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings == [f"feed.ics unreadable ({type(error).__name__}); answering 404"] * 2
+    assert not any(TOKEN[i : i + 8] in caplog.text for i in range(len(TOKEN) - 7))
+
+
 def test_feed_fetch_logs_network_and_agent_class_only_web_7(
     site: Site, caplog: pytest.LogCaptureFixture
 ) -> None:
