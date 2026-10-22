@@ -84,6 +84,11 @@ class FeedApp:
             body = (self._var_dir / FEED).read_bytes()
         except FileNotFoundError:  # never refreshed yet (WEB-6)
             return _miss(start_response, head=head)
+        except OSError as error:
+            # An escaping exception puts the request path, token included, into the WSGI
+            # server's error log (NFR-S5): answer the identical 404 instead (WEB-18).
+            _LOG.warning("feed.ics unreadable (%s); answering 404", type(error).__name__)
+            return _miss(start_response, head=head)
         etag = f'"{hashlib.sha256(body).hexdigest()}"'
         headers = [
             ("ETag", etag),
