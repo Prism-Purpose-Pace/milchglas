@@ -101,14 +101,16 @@ class FeedApp:
             tag.strip().removeprefix("W/")
             for tag in environ.get("HTTP_IF_NONE_MATCH", "").split(",")
         }
-        if etag in tags or "*" in tags:
-            start_response("304 Not Modified", headers)
-            return [b""]
-        _LOG.info(
-            "feed served to %s (%s)",
+        client = (
             _network(environ.get("REMOTE_ADDR", "")),
             _agent(environ.get("HTTP_USER_AGENT", "")),
         )
+        if etag in tags or "*" in tags:
+            # An ETag poller only ever gets 304s; it must stay as visible as a 200 (NFR-S5).
+            _LOG.info("feed unchanged for %s (%s)", *client)
+            start_response("304 Not Modified", headers)
+            return [b""]
+        _LOG.info("feed served to %s (%s)", *client)
         start_response(
             "200 OK",
             [

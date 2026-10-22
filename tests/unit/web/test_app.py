@@ -226,6 +226,8 @@ def test_feed_fetch_logs_network_and_agent_class_only_web_7(
     # A dual-stack bind ([::]) hands IPv4 clients over as IPv4-mapped IPv6.
     call(app, path=FEED_PATH, remote="::ffff:198.51.100.9")
     call(app, path=FEED_PATH, remote="")
+    # A poller that revalidates by ETag only ever gets 304s and must stay visible too.
+    call(app, path=FEED_PATH, if_none_match=f'"{hashlib.sha256(BODY).hexdigest()}"')
     for path in ("/no/such/path", f"/f/{WRONG}.ics", f"{FEED_PATH}/x"):
         call(app, path=path)
     served = [r.getMessage() for r in caplog.records if r.name == "milchglas.web.app"]
@@ -234,6 +236,7 @@ def test_feed_fetch_logs_network_and_agent_class_only_web_7(
         "feed served to 2001:db8:1234::/48 (mozilla)",
         "feed served to 198.51.100.0/24 (mozilla)",
         "feed served to unknown (mozilla)",
+        "feed unchanged for 203.0.113.0/24 (mozilla)",
     ]
     text = caplog.text
     for secret in (TOKEN, DIGEST):
