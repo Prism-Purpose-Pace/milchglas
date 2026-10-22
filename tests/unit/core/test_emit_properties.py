@@ -1,15 +1,16 @@
-"""Properties of the emitted feed over generated blocks (catalogue PROP-7 to PROP-10)."""
+"""Properties of the emitted feed over generated blocks (catalogue PROP-7 to PROP-10, PROP-12)."""
 
 import re
 import unicodedata
 from dataclasses import replace
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from milchglas.core.emit import emit, uid
+from milchglas.core.emit import emit, stamps, uid
 from milchglas.core.model import Block, TimedBlock, clip, merge, round_to_grid, window
 from tests.support.blocks import BERLIN
 from tests.support.feed import assert_feed_invariants, logical_lines, parse_feed, summaries
@@ -118,3 +119,26 @@ def test_every_emitted_ttl_is_a_dur_value_of_the_configured_seconds_emit_2(
         assert DUR_VALUE.fullmatch(hint), hint
         said = sum(int(n) * _SECONDS[unit] for n, unit in re.findall(r"(\d+)([HMS])", hint))
         assert said == ttl_seconds
+
+
+# Whole seconds: DTSTAMP carries no fraction.
+SECONDS = st.integers(946_684_800, 4_102_444_800).map(lambda s: datetime.fromtimestamp(s, UTC))
+
+
+@given(mixed_blocks(), st.data())
+def test_stamps_returns_the_dtstamp_of_every_uid(blocks: list[Block], data: st.DataObject) -> None:
+    # PROP-12: stamps reads back exactly what emit wrote, kept stamps and fresh ones alike.
+    merged = merge(blocks)
+    keys = [uid("prop-salt", block) for block in merged]
+    kept = {key: data.draw(SECONDS) for key in keys if data.draw(st.booleans())}
+    now = data.draw(SECONDS)
+    feed = emit(
+        merged,
+        summary="Blocker Privat",
+        salt="prop-salt",
+        ttl_seconds=900,
+        version="0.1.2",
+        now=now,
+        dtstamps=kept,
+    )
+    assert stamps(feed) == {key: kept.get(key, now) for key in keys}
