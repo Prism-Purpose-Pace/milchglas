@@ -17,6 +17,7 @@ from milchglas.core.model import window
 
 NOW = datetime(2026, 10, 22, 7, 0, tzinfo=UTC)
 DIGEST = "ab" * 32
+SALT = "5a" * 16  # the shape `init` prints: 32 lower-case hex characters
 MARKER = "BBX-SECRET-VALUE"
 EXAMPLE = Path(__file__).resolve().parents[2] / "config.example.json"
 
@@ -26,7 +27,7 @@ def _valid(**changes: object) -> dict[str, object]:
         "owner_emails": ["owner@example.org"],
         "calendars": [{"href": "/dav/calendars/svc/a/", "name": "A", "enabled": True}],
         "token_sha256": DIGEST,
-        "uid_salt": "salt",
+        "uid_salt": SALT,
     }
     raw.update(changes)
     return raw
@@ -52,7 +53,7 @@ def test_defaults_fill_every_optional_key() -> None:
     )
     assert config.owner_emails == ("owner@example.org",)
     assert config.token_sha256 == DIGEST
-    assert config.uid_salt == "salt"
+    assert config.uid_salt == SALT
 
 
 def test_missing_window_days_gives_a_33_day_window_orch_cfg_5() -> None:
@@ -77,8 +78,12 @@ def test_unknown_key_is_named_never_its_value_orch_cfg_4(key: str) -> None:
 
 
 def test_example_configuration_loads_and_holds_no_secret_orch_cfg_4() -> None:
-    config = load(EXAMPLE, NOW)
+    # As committed the example refuses to run: its uid_salt is a placeholder, so nobody
+    # publishes UIDs under a salt every reader of the repository knows.
+    with pytest.raises(ConfigError, match=r"^uid_salt"):
+        load(EXAMPLE, NOW)
     raw = json.loads(EXAMPLE.read_text())
+    config = parse({**raw, "uid_salt": SALT}, NOW)
     assert "token" not in raw
     assert not any("secret" in key.lower() or "password" in key.lower() for key in raw)
     # No known preimage: deploying the example unchanged serves the feed to nobody.
@@ -131,6 +136,10 @@ def test_example_configuration_loads_and_holds_no_secret_orch_cfg_4() -> None:
         pytest.param(_valid(token_sha256="ab" * 31), "token_sha256", id="digest-short"),
         pytest.param(_valid(token_sha256="zz" * 32), "token_sha256", id="digest-not-hex"),
         pytest.param({**_valid(), "uid_salt": ""}, "uid_salt", id="salt-empty"),
+        pytest.param(_valid(uid_salt="salt"), "uid_salt", id="salt-short"),
+        pytest.param(_valid(uid_salt=SALT.upper()), "uid_salt", id="salt-upper"),
+        pytest.param(_valid(uid_salt=SALT + "0"), "uid_salt", id="salt-long"),
+        pytest.param(_valid(uid_salt=f"{SALT}\n"), "uid_salt", id="salt-newline"),
         pytest.param(
             {k: v for k, v in _valid().items() if k != "uid_salt"}, "uid_salt", id="no-salt"
         ),
@@ -146,6 +155,7 @@ def test_errors_never_quote_a_value() -> None:
         _valid(tz=MARKER),
         _valid(summary=f"{MARKER}\n"),
         _valid(token_sha256=MARKER),
+        _valid(uid_salt=MARKER),
         _valid(calendars=[{"href": MARKER, "name": MARKER, "enabled": MARKER}]),
     ):
         assert MARKER not in _error(raw)

@@ -82,7 +82,7 @@ Non-secret settings live in one `config.json` and take effect on the next refres
 | `owner_emails` | — | addresses whose declined invitations are skipped |
 | `calendars[]` | — | `{href, name, enabled}` per source calendar |
 | `token_sha256` | — | SHA-256 of the feed token, printed by `init` and `rotate-token` |
-| `uid_salt` | — | salt of the block UIDs, printed once by `init` |
+| `uid_salt` | — | salt of the block UIDs: the 32 hex characters printed once by `init`; the example's placeholder is rejected |
 
 Secrets and paths come only from the environment: `CALDAV_URL` (DAV root),
 `CALDAV_USER`, `CALDAV_SECRET` (an app password with read access), `MILCHGLAS_VAR_DIR`
