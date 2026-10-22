@@ -237,26 +237,26 @@ the expected-blocks oracle assumes until the spec changes.
 
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
-| WEB-1 | `GET /f/<token>.ics` → 200 with `Content-Type: text/calendar; charset=utf-8`, quoted `ETag`, `Content-Length`, `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, max-age=0`; no versioned `Server` header | AC-9, NFR-S1, Q-17 | unit | planned |
-| WEB-2 | Methods GET, HEAD, OPTIONS, POST × right or wrong token × `If-None-Match` and `Range` × path variants (`/`, `/f/`, `/f/<token>.ics/x`, `/robots.txt`, `/f/../state`, `%2e%2e%2f`, `%00`, `//f/`, `.ICS`, trailing slash, `;` parameters, double encoding): every wrong-token response equals the unknown-path response in status, body and headers (apart from `Date`); the 404 carries `X-Content-Type-Options` and `Cache-Control` | AC-9, Q-17 | unit | planned |
-| WEB-3 | `If-None-Match` equal → 304 without body; different → 200; the ETag is unchanged across refreshes of an unchanged source | AC-9, AC-6 | unit | planned |
-| WEB-4 | `HEAD` → same headers, empty body; `POST`, `PUT`, `DELETE`, `OPTIONS` on any path → the identical 404 | AC-9 | unit | planned |
-| WEB-6 | Feed file missing (never refreshed) → the identical 404, not a server error | FR-9, AC-9 | unit | planned |
-| WEB-7 | A successful feed fetch writes one log line with the client network (/24 IPv4, /48 IPv6) and a user-agent class; no log line holds the token, a part of it or any part of `token_sha256` | NFR-S5, AC-21 | unit | planned |
-| WEB-8 | The token is only hashed (UTF-8 bytes, SHA-256) and compared with `hmac.compare_digest`, never joined into a path; a spy sees exactly one digest comparison per request on every 404 path, unknown paths and unsupported methods included, and no file open before a 404 | AC-9, NFR-S1 | unit | planned |
-| WEB-9 | Non-ASCII token (`/f/ä.ics`), empty token and a token of another length → the identical 404, not a server error | AC-9, NFR-S1 | unit | planned |
-| WEB-10 | `web` refuses to start when any `CALDAV_*` variable is set; the error names the variable only | D-13 | unit | planned |
-| WEB-11 | Import graph: `milchglas.web` imports neither `milchglas.sources` nor `milchglas.refresh`, so a lazy refresh cannot creep in | D-13 | unit | planned |
-| WEB-12 | After the printed `token_sha256` is pasted, within one refresh interval (injected clock) the old token returns the identical 404 and the new one 200, without a restart; under Option A no file in the state directory is named after any token | AC-20, D-14 | unit | planned |
-| WEB-13 | `web` refuses to start on a `token_sha256` that is not 64 hex characters | NFR-S1, D-14 | unit | planned |
+| WEB-1 | `GET /f/<token>.ics` → 200 with `Content-Type: text/calendar; charset=utf-8`, quoted `ETag`, `Content-Length`, `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, max-age=0`; no versioned `Server` header | AC-9, NFR-S1, Q-17 | unit | exists |
+| WEB-2 | Methods GET, HEAD, OPTIONS, POST × right or wrong token × `If-None-Match` and `Range` × path variants (`/`, `/f/`, `/f/<token>.ics/x`, `/robots.txt`, `/f/../state`, `%2e%2e%2f`, `%00`, `//f/`, `.ICS`, trailing slash, `;` parameters, double encoding): every wrong-token response equals the unknown-path response in status, body and headers (apart from `Date`); the 404 carries `X-Content-Type-Options` and `Cache-Control` | AC-9, Q-17 | unit | exists |
+| WEB-3 | `If-None-Match` equal → 304 without body; different → 200; the ETag is unchanged across refreshes of an unchanged source | AC-9, AC-6 | unit | exists |
+| WEB-4 | `HEAD` → same headers, empty body; `POST`, `PUT`, `DELETE`, `OPTIONS` on any path → the identical 404 | AC-9 | unit | exists |
+| WEB-6 | Feed file missing (never refreshed) → the identical 404, not a server error | FR-9, AC-9 | unit | exists |
+| WEB-7 | A successful feed fetch writes one log line with the client network (/24 IPv4, /48 IPv6) and a user-agent class; no log line holds the token, a part of it or any part of `token_sha256` | NFR-S5, AC-21 | unit | exists |
+| WEB-8 | The token is only hashed (UTF-8 bytes, SHA-256) and compared with `hmac.compare_digest`, never joined into a path; a spy sees exactly one digest comparison per request on every 404 path, unknown paths and unsupported methods included, and no file open before a 404 | AC-9, NFR-S1 | unit | exists |
+| WEB-9 | Non-ASCII token (`/f/ä.ics`), empty token and a token of another length → the identical 404, not a server error | AC-9, NFR-S1 | unit | exists |
+| WEB-10 | `web` refuses to start when any `CALDAV_*` variable is set; the error names the variable only | D-13 | unit | exists |
+| WEB-11 | Import graph: `milchglas.web` imports neither `milchglas.sources` nor `milchglas.refresh`, so a lazy refresh cannot creep in | D-13 | unit | exists |
+| WEB-12 | After the printed `token_sha256` is pasted, within one refresh interval (injected clock) the old token returns the identical 404 and the new one 200, without a restart; under Option A no file in the state directory is named after any token | AC-20, D-14 | unit | exists |
+| WEB-13 | `web` refuses to start on a `token_sha256` that is not 64 hex characters | NFR-S1, D-14 | unit | exists |
 
 ## 9. Health
 
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
-| WEB-5 | `/healthz` → 200 when `last_success` is under 60 min old and `token_sha256` is readable; 503 when older, when state is missing or unreadable, and while the digest is unreadable; the body is identical in both states and holds no timestamps or counts | FR-11, Q-23 | unit | planned |
-| WEB-14 | Run-time re-read finds a malformed or truncated `token_sha256`, or an unparsable `config.json`: `web` keeps the last valid digest (old token 200, anything else the identical 404), logs one line naming the key (no value) on every re-read, `/healthz` is 503; after the fix it is 200 and the new token works within one re-read | Q-23, FR-11 | unit | planned |
-| WEB-15 | An invalid unrelated key (for example `grid_minutes` 7) beside a valid `token_sha256`: the right token still gets 200 and `/healthz` is unaffected, because `web` reads only `token_sha256` | Q-23, NFR-S1 | unit | planned |
+| WEB-5 | `/healthz` → 200 when `last_success` is under 60 min old and `token_sha256` is readable; 503 when older, when state is missing or unreadable, and while the digest is unreadable; the body is identical in both states and holds no timestamps or counts | FR-11, Q-23 | unit | exists |
+| WEB-14 | Run-time re-read finds a malformed or truncated `token_sha256`, or an unparsable `config.json`: `web` keeps the last valid digest (old token 200, anything else the identical 404), logs one line naming the key (no value) on every re-read, `/healthz` is 503; after the fix it is 200 and the new token works within one re-read | Q-23, FR-11 | unit | exists |
+| WEB-15 | An invalid unrelated key (for example `grid_minutes` 7) beside a valid `token_sha256`: the right token still gets 200 and `/healthz` is unaffected, because `web` reads only `token_sha256` | Q-23, NFR-S1 | unit | exists |
 | WEB-16 | Refresh against an unreachable source: the feed is unchanged and `/healthz` turns 503 once 60 min have passed (fake clock) | AC-7, FR-11 | unit | planned |
 | WEB-17 | Container health check tests liveness only: with `state.json` two hours old `/healthz` is 503 and the `web` container stays `healthy`; it passes on any HTTP answer, 200 or 503 (a stub answering 503 → exit 0), and fails only when nothing answers | AC-21, FR-11, D-7d | gate | planned |
 
