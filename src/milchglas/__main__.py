@@ -15,7 +15,10 @@ from collections.abc import Sequence
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="milchglas", description=__doc__.splitlines()[0])
+    # A literal: -OO strips __doc__ (PYTHONOPTIMIZE=2 images).
+    parser = argparse.ArgumentParser(
+        prog="milchglas", description="python -m milchglas init | rotate-token"
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init", help="print a feed token, its token_sha256 and a new uid_salt")
     commands.add_parser("rotate-token", help="print a new feed token and its token_sha256")
