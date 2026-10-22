@@ -16,6 +16,8 @@ from milchglas.core.emit import valid_text
 from milchglas.core.model import grid_fits_zone
 
 _DIGEST = re.compile(r"[0-9a-fA-F]{64}")
+# The shape `init` prints, so a placeholder or hand-typed word cannot become the salt.
+_SALT = re.compile(r"[0-9a-f]{32}")
 _KEYS = frozenset(
     {
         "tz",
@@ -109,8 +111,8 @@ def parse(raw: object, now: datetime) -> Config:
         msg = "ttl_seconds: must be positive"
         raise ConfigError(msg)
     uid_salt = _get(raw, "uid_salt", str)
-    if not uid_salt:
-        msg = "uid_salt: must not be empty; run `python -m milchglas init` once"
+    if not _SALT.fullmatch(uid_salt):
+        msg = "uid_salt: must be the 32 hex characters `python -m milchglas init` prints"
         raise ConfigError(msg)
     return Config(
         tz=tz,
