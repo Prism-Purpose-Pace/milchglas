@@ -229,6 +229,7 @@ class FakeGh:
         self,
         existing_rulesets: str = "[]",
         existing_projects: str = "[]",
+        existing_fields: str = "[]",
         owner_type: str = "User",
         org_policy: str | None = '{"can_approve_pull_request_reviews": true}',
     ) -> None:
@@ -236,6 +237,7 @@ class FakeGh:
         self.stdins: list[str | None] = []
         self.rulesets = existing_rulesets
         self.projects = existing_projects
+        self.fields = existing_fields
         self.owner_type = owner_type
         self.org_policy = org_policy  # None: the token may not read it
 
@@ -249,10 +251,13 @@ class FakeGh:
                 msg = "gh api failed: HTTP 403"
                 raise gb.GhError(msg)
             return self.org_policy
-        if argv[:3] == ["gh", "project", "list"]:
-            return '{"projects": ' + self.projects + "}"
-        if argv[:3] == ["gh", "project", "create"]:
-            return '{"number": 7}'
+        project = {
+            "list": '{"projects": ' + self.projects + "}",
+            "create": '{"number": 7}',
+            "field-list": '{"fields": ' + self.fields + "}",
+        }
+        if argv[:2] == ["gh", "project"] and argv[2] in project:
+            return project[argv[2]]
         if argv == ["gh", "api", "repos/octo/milchglas/rulesets"]:
             return self.rulesets
         return ""
@@ -298,6 +303,28 @@ def test_apply_updates_existing_ruleset_and_reuses_project() -> None:
     ] in gh.calls
     assert not any(call[:3] == ["gh", "project", "create"] for call in gh.calls)
     assert ["gh", "project", "link", "3", "--owner", "octo", "--repo", "milchglas"] in gh.calls
+
+
+PRIORITY_FIELD = [
+    "gh", "project", "field-create", "7", "--owner", "octo", "--name", "Priority",
+    "--data-type", "SINGLE_SELECT", "--single-select-options", "High,Medium,Low",
+]  # fmt: skip
+
+
+def test_priority_is_a_project_field_not_a_label() -> None:
+    assert not [name for name, _, _ in gb.LABELS if name.startswith("priority")]
+
+
+def test_apply_adds_the_priority_field_to_a_project_without_one() -> None:
+    gh = FakeGh(existing_fields='[{"name": "Status"}]')
+    assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
+    assert PRIORITY_FIELD in gh.calls
+
+
+def test_apply_keeps_an_existing_priority_field() -> None:
+    gh = FakeGh(existing_fields='[{"name": "Status"}, {"name": "Priority"}]')
+    assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
+    assert not any(call[:3] == ["gh", "project", "field-create"] for call in gh.calls)
 
 
 def _writes(gh: FakeGh) -> list[list[str]]:

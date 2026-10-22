@@ -5,7 +5,7 @@
 """Apply the GitHub repository settings that files in .github/ cannot express.
 
 Security features, workflow-token permissions, the default-branch ruleset, labels
-and the Projects v2 board - idempotent, so re-running converges instead of
+and the Projects v2 board with its Priority field - idempotent, so re-running converges instead of
 duplicating. Needs `gh auth login` with the `repo` and `project` scopes
 (`gh auth refresh -s project`). Preview with --dry-run.
 """
@@ -45,6 +45,8 @@ RULESET_NAME = "main"
 REVIEW_RULESET_NAME = "review"
 TAG_RULESET_NAME = "tags"
 PROJECT_TITLE = "Milchglas"
+# Issue priority is this single-select project field; there are no priority labels.
+PRIORITIES = ("High", "Medium", "Low")
 # GitHub's default labels (bug, enhancement, documentation, good first issue, ...) stay.
 LABELS = (
     ("needs-triage", "fbca04", "New issue, not yet assessed"),
@@ -58,8 +60,6 @@ LABELS = (
     ("area: feed", "c5def5", "ICS emission and determinism"),
     ("area: web", "c5def5", "Feed endpoint, tokens, health check"),
     ("area: deploy", "c5def5", "Deployment options and runbook"),
-    ("priority: high", "b60205", "Next up"),
-    ("priority: low", "e4e669", "Nice to have"),
 )
 MANUAL_FOLLOW_UP = """\
 Done. Manual follow-up (no API for these):
@@ -287,6 +287,19 @@ def _ensure_project(step: Step, owner: str, repo: str, runner: Runner) -> None:
         number = json.loads(runner(step.argv, None))["number"]
     # `gh project link --repo` takes the bare repository name; the owner comes from --owner.
     runner(["gh", "project", "link", str(number), "--owner", owner, "--repo", repo], None)
+    listing = runner(
+        ["gh", "project", "field-list", str(number), "--owner", owner, "--format", "json"], None
+    )
+    fields: list[dict[str, Any]] = json.loads(listing or "{}").get("fields", [])
+    if not any(f.get("name") == "Priority" for f in fields):
+        runner(
+            [
+                "gh", "project", "field-create", str(number), "--owner", owner,
+                "--name", "Priority", "--data-type", "SINGLE_SELECT",
+                "--single-select-options", ",".join(PRIORITIES),
+            ],
+            None,
+        )  # fmt: skip
 
 
 def apply(steps: Sequence[Step], owner: str, repo: str, runner: Runner) -> None:
