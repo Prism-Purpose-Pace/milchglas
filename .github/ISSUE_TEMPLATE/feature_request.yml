@@ -1,6 +1,8 @@
 name: Feature request
 description: Propose a change in scope or behaviour
 labels: [enhancement, needs-triage]
+type: Feature
+projects: [Prism-Purpose-Pace/2]
 body:
   - type: markdown
     attributes:

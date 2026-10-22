@@ -1,6 +1,8 @@
 name: Bug report
 description: Milchglas behaves differently than documented
 labels: [bug, needs-triage]
+type: Bug
+projects: [Prism-Purpose-Pace/2]
 body:
   - type: markdown
     attributes:
