@@ -303,6 +303,10 @@ def test_token_never_reaches_a_path(site: Site, monkeypatch: pytest.MonkeyPatch)
         (State(NOW - timedelta(minutes=59), "TimeoutError calendar=0"), "200 OK"),
         (State(NOW - timedelta(minutes=60), None), "503 Service Unavailable"),
         (State(None, "TimeoutError calendar=0"), "503 Service Unavailable"),
+        (State(NOW, None), "200 OK"),
+        # A success dated ahead of web's clock is no evidence of a live refresher.
+        (State(NOW + timedelta(seconds=1), None), "503 Service Unavailable"),
+        (State(NOW + timedelta(hours=5), None), "503 Service Unavailable"),
     ],
 )
 def test_health_follows_the_last_success_web_5(site: Site, recorded: State, status: str) -> None:
