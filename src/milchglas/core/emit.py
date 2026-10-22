@@ -21,6 +21,7 @@ _LIMIT = 75  # octets per line, CRLF excluded (RFC 5545 §3.1)
 _UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u2028\u2029\ud800-\udfff]")
 # A TEXT escape (backslash + character) is never split across a fold.
 _UNIT = re.compile(r"\\.|.", re.DOTALL)
+_UNREADABLE = "previous feed is unreadable"
 
 
 def valid_text(text: str) -> bool:
@@ -84,6 +85,36 @@ def emit(
         ]
     lines.append("END:VCALENDAR")
     return "".join(f"{_fold(line)}\r\n" for line in lines).encode()
+
+
+def stamps(feed: bytes) -> dict[str, datetime]:
+    """UID to DTSTAMP of a feed `emit` wrote, read from the UID and DTSTAMP lines only (D-7c).
+
+    Both lines are shorter than one fold, so no unfolding is needed. Anything `emit` cannot
+    have written (not UTF-8, no calendar, truncated, a malformed stamp) raises ValueError.
+    """
+    try:
+        lines = feed.decode().split("\r\n")
+    except UnicodeDecodeError:
+        lines = []
+    if lines[:1] != ["BEGIN:VCALENDAR"] or lines[-2:] != ["END:VCALENDAR", ""]:
+        raise ValueError(_UNREADABLE)
+    found: dict[str, datetime] = {}
+    key = None
+    for line in lines:
+        if line.startswith("UID:"):
+            key = line.removeprefix("UID:")
+        elif line.startswith("DTSTAMP:") and key is not None:
+            found[key] = _stamp(line.removeprefix("DTSTAMP:"))
+            key = None
+    return found
+
+
+def _stamp(text: str) -> datetime:
+    try:
+        return datetime.strptime(text, "%Y%m%dT%H%M%S%z")
+    except ValueError:
+        raise ValueError(_UNREADABLE) from None
 
 
 def _value(moment: date) -> str:

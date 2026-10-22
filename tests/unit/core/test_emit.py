@@ -6,7 +6,7 @@ from datetime import datetime
 
 import pytest
 
-from milchglas.core.emit import emit, uid
+from milchglas.core.emit import emit, stamps, uid
 from milchglas.core.model import Block, TimedBlock, merge
 from milchglas.core.reduce import reduce_event
 from tests.support.blocks import BERLIN, at, day, timed
@@ -253,6 +253,25 @@ def test_dtstamp_is_kept_for_known_blocks_and_now_for_new_ones() -> None:
 def test_dtstamp_drops_fractional_seconds() -> None:
     feed = _emit([TIMED], now=at("2026-09-14T12:00:00.999+02:00"))
     assert "DTSTAMP:20260914T100000Z" in logical_lines(feed)
+
+
+def test_stamps_reads_the_golden_feed() -> None:
+    assert stamps(GOLDEN) == {uid(SALT, DAY): NOW, uid(SALT, TIMED): NOW}
+
+
+@pytest.mark.parametrize(
+    "feed",
+    [
+        pytest.param(GOLDEN[:-30], id="truncated"),
+        pytest.param(GOLDEN.replace(b"Privat", b"Priv\xe4t"), id="not-utf-8"),
+        pytest.param(b"<html>404</html>\r\n", id="not-a-calendar"),
+        pytest.param(b"", id="empty"),
+        pytest.param(GOLDEN.replace(b"DTSTAMP:20260914T120000Z", b"DTSTAMP:soon"), id="bad-stamp"),
+    ],
+)
+def test_stamps_refuses_a_feed_emit_cannot_have_written(feed: bytes) -> None:
+    with pytest.raises(ValueError, match="previous feed"):
+        stamps(feed)
 
 
 def test_naive_instants_are_rejected() -> None:

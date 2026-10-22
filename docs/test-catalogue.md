@@ -167,7 +167,7 @@ the expected-blocks oracle assumes until the spec changes.
 | PROP-8 | Emit, then `icalendar` parse, equals the merged input blocks | NFR-C1 | property | exists |
 | PROP-9 | `uid(salt, a) == uid(salt, b)` iff kind, start and end are equal; format `^[0-9a-f]{32}@milchglas$` | D-7c, AC-6 | property | exists |
 | PROP-10 | The feed invariants hold for every generated feed: NFR-P3 whitelist, UTC or `VALUE=DATE` only, unique UIDs, sorted, blocks pairwise disjoint and non-adjacent per kind, lines at most 75 octets, CRLF | AC-1, AC-8, NFR-P3 | property | exists |
-| PROP-12 | `stamps` returns the DTSTAMP of every UID of an emitted feed | D-7c | property | planned |
+| PROP-12 | `stamps` returns the DTSTAMP of every UID of an emitted feed | D-7c | property | exists |
 
 ## 6. Determinism
 
