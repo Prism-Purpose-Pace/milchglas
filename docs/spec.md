@@ -198,6 +198,7 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 | D-13 | `web` serves files only: no lazy refresh, no CalDAV credential; it refuses to start when a `CALDAV_*` variable is set | Decided 2026-10-21 | The Internet-facing process holds neither the CalDAV credential nor event content; the uptime monitor (AC-19) covers a dead refresher. Option C keeps its lazy refresh because Passenger offers no other trigger |
 | D-14 | Feed token stored as SHA-256 only (`token_sha256` in `config.json`); generated and rotated by the CLI (`init`, `rotate-token`); applies to the shared Python core (Options A–C) | Decided 2026-10-21 | A plaintext token in the shareable `config.json` travels into bug reports, backups and support chats; a digest allows rotation without restart and keeps the token out of file names. A lost token cannot be recovered; `rotate-token` replaces it |
 | D-15 | No publication on PyPI; installs come only from verified release assets; installing by package name is documented as unsafe | Decided 2026-10-21 | The running code must match an attested release; the package name was unregistered on 2026-10-21, so an install by name could fetch someone else's package; a publishing pipeline adds upkeep with no consumer |
+| D-16 | `config.json` is found through `MILCHGLAS_CONFIG` (default `./config.json`); the feed file is `feed.ics` in `MILCHGLAS_VAR_DIR` | Decided 2026-10-22 | Paths come only from the environment (D-11), and `web` runs under a WSGI server without command-line options; the configuration lives in its own read-only mount, apart from the writable state volume |
 
 ---
 
@@ -280,7 +281,7 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 ```
 Nextcloud ──read-only CalDAV (svc-milchglas)──► Milchglas core
                                                    fetch → expand → filter → reduce → clip → round → merge → emit
-                                                   └─► busy.ics (atomic write; keep last good on error)
+                                                   └─► feed.ics (atomic write; keep last good on error)
                                                               │
                                         HTTPS  /f/<token>.ics │  (WSGI route; Option D: static file)
                                    ┌──────────────────────────┴──────────────────────────┐
@@ -297,7 +298,7 @@ intervals = round_to_grid(intervals, grid_minutes, tz)       # FR-6
 intervals = merge(sorted(intervals))                         # FR-6  (set union)
 ics       = emit(intervals, summary, uid_salt, ttl_seconds, version, now,
                  previous_stamps)        # FR-7
-atomic_replace("busy.ics", ics) if ok else keep_previous()   # FR-8
+atomic_replace("feed.ics", ics) if ok else keep_previous()   # FR-8
 ```
 
 **ICS skeleton:**
@@ -321,7 +322,7 @@ END:VCALENDAR
 ```
 
 **Config (`config.json`, non-secret):** `tz`, `window_days` (33), `grid_minutes` (15), `summary`, `ttl_seconds` (900), `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[] {href, name, enabled}`, `token_sha256` (hex SHA-256 of the feed token; the token itself is never stored on the server; MVP: single), `uid_salt`. Validated on every refresh (AC-22).
-**Environment:** `CALDAV_URL`, `CALDAV_USER`, `CALDAV_SECRET`, `MILCHGLAS_VAR_DIR`, `MILCHGLAS_LOG_LEVEL`.
+**Environment:** `CALDAV_URL`, `CALDAV_USER`, `CALDAV_SECRET`, `MILCHGLAS_VAR_DIR`, `MILCHGLAS_CONFIG` (path to `config.json`, default `./config.json`; D-16), `MILCHGLAS_LOG_LEVEL`. `MILCHGLAS_VAR_DIR` holds `feed.ics`, `state.json` and the run lock.
 
 **Repository layout (proposed):**
 ```
