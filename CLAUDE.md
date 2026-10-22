@@ -5,8 +5,9 @@ Human contributors: [CONTRIBUTING.md](CONTRIBUTING.md) holds the same rules.
 
 Milchglas reads CalDAV calendars read-only, reduces every event to anonymous time
 intervals and publishes a busy-only ICS feed. Spec: [docs/spec.md](docs/spec.md).
-**Status: core only** — the pure pipeline core is in place (`src/milchglas/core/`:
-model, reduce, emit; fixtures in `tests/fixtures/`); no fetch, web or refresh code yet.
+**Status: no fetch yet** — built: the pure pipeline core (`src/milchglas/core/`: model,
+reduce, emit; fixtures in `tests/fixtures/`), `config.py`, `state.py`, the token commands in
+`__main__.py` and `web/`; the CalDAV fetch (`sources/`) and `refresh.py` are not built yet.
 Toolchain rationale: [TOOLING.md](TOOLING.md).
 
 ## Stack
@@ -23,6 +24,7 @@ Toolchain rationale: [TOOLING.md](TOOLING.md).
 | Test | `uv run pytest` (branch coverage ≥ 90 %; `contract` tests excluded) · single: `uv run pytest --no-cov tests/unit/test_package.py` · contract only: `uv run pytest -m contract --no-cov` |
 | Lint / format | `uv run ruff check` · `uv run ruff format` |
 | Type-check | `uv run mypy` (strict, blocking) · advisory: `uv run ty check` |
+| Token | `uv run python -m milchglas init` (once: token, `uid_salt`, `token_sha256`) · `rotate-token` (both print only) |
 | Run (planned) | `uv run python -m milchglas refresh` (one idempotent run) · `--loop --interval 900` (refresher) |
 | Gates | commit stage `python3 scripts/gates.py` · push stage `python3 scripts/gates.py run --hook-stage pre-push --all-files` — green means both |
 
@@ -42,10 +44,11 @@ One-directional pipeline of pure functions (spec §8):
 fetch (CalDAV calendar-query + server-side expand) → filter → reduce → clip → round → merge → emit → atomic write
 ```
 
-Planned layout: `src/milchglas/sources/` (CalDAV client, parsing), `core/` (model,
-reduce, emit — pure, no I/O; ruff bans I/O imports there), `web/` (WSGI app serving
-`/f/<token>.ics` and `/healthz`), `refresh.py` (orchestration), `state.py` (last success
-/ last error); `deploy/<option>/`; `docs/`.
+Layout: `src/milchglas/core/` (model, reduce, emit — pure, no I/O; ruff bans I/O imports
+there), `config.py` (loader, minimal digest reader), `state.py` (atomic writes, last success
+/ last error, run lock), `web/` (WSGI app serving `/f/<token>.ics` and `/healthz`;
+`wsgi:create()` is the gunicorn entry); planned: `sources/` (CalDAV client, parsing),
+`refresh.py` (orchestration), `deploy/<option>/`; `docs/`.
 
 - Non-secret config: one `config.json` (`tz`, `window_days`, `grid_minutes`, `summary`,
   `ttl_seconds`, `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[]`,

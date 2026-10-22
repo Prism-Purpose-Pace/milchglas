@@ -24,8 +24,9 @@ matters — a work calendar, a booking tool — without handing it a single titl
 location or attendee.
 
 > [!IMPORTANT]
-> **Status: pre-alpha.** The specification, the toolchain and the pure pipeline core are
-> in place; fetch, web and refresh are being built. Do not use it in production yet. Progress: [docs/spec.md](docs/spec.md).
+> **Status: pre-alpha.** The specification, the toolchain, the pure pipeline core, the
+> configuration loader, the token commands and the web surface are in place; the CalDAV
+> fetch and the refresh are being built. Do not use it in production yet. Progress: [docs/spec.md](docs/spec.md).
 
 ## Why
 
