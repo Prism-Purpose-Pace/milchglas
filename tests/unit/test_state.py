@@ -1,7 +1,8 @@
 """The var directory: atomic feed and state writes, one run at a time (FR-8, FR-11).
 
-ORCH-WRITE-3, ORCH-WRITE-4 and ORCH-LOCK-1 describe whole refresh runs; they close with the
-refresh tests. The primitives they rest on are pinned here.
+The catalogue rows for a crash between two writes, a corrupt state and a second concurrent
+run describe whole refresh runs and close with the refresh tests; the primitives they rest
+on are pinned here.
 """
 
 import errno
