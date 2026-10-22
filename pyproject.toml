@@ -98,6 +98,8 @@ ignore = [
 "tests/**/*.py" = ["S101", "PLR2004"]
 # One test builds a throwaway git repository to prove the guard's range semantics.
 "tests/scripts/test_check_public_tree.py" = ["S101", "PLR2004", "S603", "S607"]
+# Plants a hook's git environment at a decoy repository and runs a test file under it.
+"tests/meta/test_hook_environment.py" = ["S101", "PLR2004", "S603", "S607"]
 # Stdlib gate scripts: print is their CLI output; subprocess runs literal git/gh argv.
 "scripts/*.py" = ["T201", "C901", "FURB167", "PERF401", "INP001"]
 "scripts/check_commit_msg.py" = ["PLR0912", "PLR2004"]
