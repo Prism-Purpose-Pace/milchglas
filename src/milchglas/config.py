@@ -62,8 +62,8 @@ class Config:
 
 
 def config_path(environ: Mapping[str, str]) -> Path:
-    """`MILCHGLAS_CONFIG`, or `config.json` in the working directory (D-16)."""
-    return Path(environ.get("MILCHGLAS_CONFIG", "config.json"))
+    """`MILCHGLAS_CONFIG`, or `config.json` in the working directory (D-16); empty means unset."""
+    return Path(environ.get("MILCHGLAS_CONFIG") or "config.json")
 
 
 def load(path: Path, now: datetime) -> Config:

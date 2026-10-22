@@ -212,6 +212,11 @@ def test_config_path_defaults_to_the_working_directory() -> None:
     )
 
 
+def test_empty_config_variable_means_unset() -> None:
+    # A platform form saves an empty field as a set-but-empty variable; Path("") is ".".
+    assert config_path({"MILCHGLAS_CONFIG": ""}) == Path("config.json")
+
+
 def test_read_digest_looks_only_at_its_key(tmp_path: Path) -> None:
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"token_sha256": DIGEST.upper(), "grid_minutes": 7}))
