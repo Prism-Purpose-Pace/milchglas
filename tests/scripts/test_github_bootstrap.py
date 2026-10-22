@@ -178,6 +178,15 @@ def test_labeler_only_applies_labels_the_bootstrap_creates() -> None:
     assert used <= {name for name, _, _ in gb.LABELS}
 
 
+@pytest.mark.parametrize("form", ["bug_report.yml", "feature_request.yml"])
+def test_issue_forms_set_an_issue_type_and_the_project(form: str) -> None:
+    # Every issue carries a type and a project item from the start; the organization's
+    # issue types, read 2026-10-22, are Task, Bug and Feature.
+    text = (REPO / ".github/ISSUE_TEMPLATE" / form).read_text(encoding="utf-8")
+    assert re.search(r"^type: (Task|Bug|Feature)$", text, re.MULTILINE)
+    assert re.search(r"^projects: \[Prism-Purpose-Pace/\d+\]$", text, re.MULTILINE)
+
+
 def test_labels_are_upserted_with_force() -> None:
     labels = [s for s in PLAN if s.argv[:3] == ["gh", "label", "create"]]
     names = {s.argv[3] for s in labels}
