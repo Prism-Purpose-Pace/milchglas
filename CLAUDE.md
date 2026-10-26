@@ -63,7 +63,8 @@ there), `config.py` (loader, minimal digest reader), `state.py` (atomic writes, 
 - **No private content anywhere.** Titles, descriptions, locations and attendees never
   reach disk, logs, metrics, exception messages or test output. Reduce each event to
   `(start, end, tentative, allday)` immediately after parsing. Tests grep the feed and
-  every log line for fixture titles.
+  every log line for fixture titles, and GATE-21 fails when `src/` names a content
+  property such as `SUMMARY` at all (only ATTENDEE's PARTSTAT is read).
 - **Redaction lives only in Milchglas.** Never rely on the server's `CLASS`; a
   `CLASS:PRIVATE` event that reaches Milchglas still produces a block (the read-only
   service user never receives one; confidential ones arrive stripped, spec D-3).
