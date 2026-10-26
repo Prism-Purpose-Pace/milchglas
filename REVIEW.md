@@ -213,6 +213,8 @@ inline comment carries the detail; the summary only lists.
 A tool that keeps its own format (Claude Code Review, Codex) still starts every inline comment with
 the `[RULE-ID]`, so a finding can be traced to its rule.
 
+- Name the head commit the review covers. If the head moves during the review, say which commit
+  was reviewed and that the new head is not.
 - One finding per root cause: when the same flaw appears in several places, report it once and
   list the locations.
 - A cap limits what is shown, never what is checked. Do not stop at a cap and do not add findings
