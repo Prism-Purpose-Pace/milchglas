@@ -76,43 +76,67 @@ Apply the profile of every path the pull request touches and of every label it c
 
 ### Core and feed: `src/milchglas/core/`, labels `area: core`, `area: feed`
 
-- Pure functions, no I/O. A dynamic import or an indirect route to I/O is review-only; the
-  lint rule does not see it.
-- An event is reduced to `(start, end, tentative, allday)` right after parsing. Title,
-  description, location and attendees appear in no structure, exception, log line or test
-  output downstream.
-- Excluded: `STATUS:CANCELLED`, `TRANSP:TRANSPARENT` on timed events, events whose owner
-  e-mail has `PARTSTAT=DECLINED`. The server's `CLASS` is never trusted.
-- Rounding in the configured `tz`: start floored, end ceiled to the grid. Overlapping and
-  adjacent intervals merge; no two output blocks touch. DST edges and the grid rule (AC-22)
-  hold.
-- Output carries only `UID, DTSTAMP, DTSTART, DTEND, SUMMARY, TRANSP, STATUS`: timed blocks in
-  UTC without `VTIMEZONE`, all-day as `VALUE=DATE`, `TRANSP:OPAQUE`, RFC 5545 line folding.
-- Determinism: `UID = sha256(salt|start|end)[:32]@milchglas`; `DTSTAMP` is the last content
-  change, never "now". Look for clocks, set or dict ordering and locale or zone dependence
-  that would change bytes for an unchanged source.
+- **RV-CORE-1** (BLOCK P0) Event content outlives parsing. An event is reduced to
+  `(start, end, tentative, allday)` right after parsing; title, description, location and
+  attendees appear in no structure, exception, log line, state file or test output after that. Look
+  for an event or component in an f-string, a `%s`, an assertion message or a `repr`, and for an
+  exception built from one. A count, an index or a hash of an href is not content. Gate: CORE-FIL-14
+  and PROP-10 pin the shape of a block and of the feed; a sentinel test covers only the paths it
+  runs, so read every new log and error path.
+- **RV-CORE-2** (BLOCK P1) The core stays pure: no I/O, no clock, no environment. Gate: GATE-14
+  and ruff TID251 reject imports off the allowlist, `open`, `eval`, `exec`, `compile`,
+  `__import__` and calls of `now`, `today` and `utcnow`. Look for what they do not see: a renamed
+  `__import__` or `__builtins__[...]`, a clock passed as a value (`default_factory=datetime.now`),
+  an ambient-timezone read (`astimezone()` without an argument) and a new allowlist entry, which
+  needs a reason in the description.
+- **RV-CORE-3** (BLOCK P1) An excluded event becomes a block. `STATUS:CANCELLED`,
+  `TRANSP:TRANSPARENT` on timed events and events whose owner e-mail has `PARTSTAT=DECLINED`
+  produce no block. The server's `CLASS` is never trusted: a `CLASS:PRIVATE` event still produces
+  a block. Gate: CORE-FIL-1..8.
+- **RV-CORE-4** (BLOCK P1) Rounding or merging is wrong. In the configured `tz` the start is
+  floored and the end ceiled to the grid; overlapping and adjacent intervals merge, so no two
+  output blocks touch. Look for arithmetic on wall-clock times across a DST change, `<` where `<=`
+  is needed and a grid that the zone cannot hold (AC-22). Gate: CORE-RND-1..10, CORE-MRG-1..5,
+  PROP-1..6, GATE-15.
+- **RV-CORE-5** (BLOCK P1) The output leaves its contract. Only
+  `UID, DTSTAMP, DTSTART, DTEND, SUMMARY, TRANSP, STATUS`; timed blocks in UTC without
+  `VTIMEZONE`; all-day as `VALUE=DATE`; `TRANSP:OPAQUE`; RFC 5545 line folding. Gate: EMIT-1..10,
+  PROP-10.
+- **RV-CORE-6** (BLOCK P1) The bytes change for an unchanged source.
+  `UID = sha256(salt|start|end)[:32]@milchglas`; `DTSTAMP` is the last content change, never "now".
+  Look for clocks, `set` or `dict` order, locale or zone dependence in anything that reaches the
+  output. Gate: DET-5, DET-7, DET-9, PROP-7, PROP-9.
 
 ### Web: `src/milchglas/web/`, label `area: web`
 
-- A wrong token and any unknown path return an identical 404: same status, headers and body,
-  constant-time comparison, no early exit that tells them apart.
-- The right token gets `200 text/calendar; charset=utf-8` with `ETag`, `X-Robots-Tag: noindex`
-  and `Referrer-Policy: no-referrer`; a conditional request keeps the same headers.
-- Only `/healthz` besides the feed: 200 when the last success is under 60 minutes old and
-  `token_sha256` is readable, otherwise 503; no body data (Q-23).
-- Tokens never appear in logs, errors or `repr`. `web` serves files only, holds no CalDAV
-  credential and refuses to start when a `CALDAV_*` variable is set (D-13). One stdout log
-  stream; SIGTERM lets the current write finish.
+- **RV-WEB-1** (BLOCK P0) A wrong token and an unknown path can be told apart: by status, headers,
+  body or timing. Compare the two branches line by line. An early `return`, `==`, `in` or
+  `startswith` on the token, or a header set on one branch only, is a finding. Gate: WEB-2, WEB-8,
+  WEB-9, WEB-18.
+- **RV-WEB-2** (BLOCK P1) The right token does not get `200 text/calendar; charset=utf-8` with
+  `ETag`, `X-Robots-Tag: noindex` and `Referrer-Policy: no-referrer`, or a conditional request
+  loses those headers. Gate: WEB-1, WEB-3, WEB-4.
+- **RV-WEB-3** (BLOCK P1) `/healthz` deviates from Q-23: a second route besides the feed, a 200
+  when the last success is 60 minutes old or older or `token_sha256` is unreadable, or body data.
+  Gate: WEB-5, WEB-14, WEB-15.
+- **RV-WEB-4** (BLOCK P0) A token in a log line, error or `repr`. Look at what is logged from the
+  request: the path, the query string, the full URL and an exception that quotes them. Gate: WEB-7
+  and ORCH-CLI-5.
+- **RV-WEB-5** (BLOCK P1) `web` is more than a file server: it holds a CalDAV credential, starts
+  with a `CALDAV_*` variable set (D-13) or imports `sources` or `refresh`. Also: more than one log
+  stream, or a SIGTERM that cuts the current write. Gate: WEB-10, WEB-11.
 
 ### Configuration, state and CLI: `config.py`, `state.py`, `__main__.py` (no area label)
 
-- Only the SHA-256 of the feed token is stored (D-14); a plaintext `token` key is a
-  configuration error. `init` and `rotate-token` print and never log.
-- Secrets and paths come only from the environment (`CALDAV_URL`, `CALDAV_USER`,
-  `CALDAV_SECRET`, `MILCHGLAS_VAR_DIR`, `MILCHGLAS_CONFIG`, `MILCHGLAS_LOG_LEVEL`). An invalid
-  value is a configuration error, not a silent default.
-- Feed and state are replaced atomically and only on full success; on failure the last good
-  feed stays and the error is recorded. Error text carries no event content.
+- **RV-CFG-1** (BLOCK P0) The token reaches disk or a log in plain text, or is printed anywhere
+  but `init` and `rotate-token`. Only its SHA-256 is stored (D-14); a plaintext `token` key is a
+  configuration error. Gate: ORCH-CLI-3..5.
+- **RV-CFG-2** (BLOCK P1) A secret or path comes from anywhere but the environment
+  (`CALDAV_URL`, `CALDAV_USER`, `CALDAV_SECRET`, `MILCHGLAS_VAR_DIR`, `MILCHGLAS_CONFIG`,
+  `MILCHGLAS_LOG_LEVEL`), or an invalid value falls back to a default instead of failing.
+- **RV-CFG-3** (BLOCK P1) The last good feed can be lost. Feed and state are replaced atomically
+  and only on full success; on failure the old feed stays and the error is recorded without event
+  content. Gate: ORCH-WRITE-1, ORCH-WRITE-2, ORCH-WRITE-5.
 
 ### CalDAV source: `src/milchglas/sources/`, label `area: caldav`
 
