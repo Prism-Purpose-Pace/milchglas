@@ -23,6 +23,15 @@ Please include:
 Never attach real calendar data, feed URLs with live tokens, or credentials. Use
 synthetic events and placeholder tokens instead.
 
+If the private reporting form is not available to you, open a public issue that only
+asks for a private channel and says nothing about the problem.
+
+## Reports we can act on
+
+Include steps that reproduce the problem with synthetic events and placeholder tokens. A
+report written with AI assistance is welcome when you have verified the issue yourself and
+say so. Output of an automated scanner without a demonstrated impact is closed without a CVE.
+
 ## What to expect
 
 This is a volunteer, single-maintainer project; the targets below are best effort:
@@ -31,6 +40,13 @@ This is a volunteer, single-maintainer project; the targets below are best effor
 - an initial assessment within 14 days,
 - a fix or mitigation, a GitHub Security Advisory and (if applicable) a CVE, released
   in coordination with you. The default disclosure deadline is 90 days after the report.
+
+## Severity
+
+We rate a confirmed report with the CVSS calculator of GitHub's advisory form, then apply the
+impact scale of the [threat model](docs/threat-model.md) as a floor. High at least: private
+event content or the CalDAV credential is disclosed, or the feed that consumers receive is
+wrong or empty. Medium at least: the feed token or the busy pattern reaches a third party.
 
 ## In scope
 
@@ -43,6 +59,8 @@ This is a volunteer, single-maintainer project; the targets below are best effor
 - A source outage or malformed input that replaces the last good feed with an empty or
   wrong one.
 - Vulnerable dependencies that are reachable from Milchglas' code paths.
+- Weaknesses in this repository's CI or release pipeline that let an outsider change a
+  release asset or read a repository secret.
 
 ## Out of scope
 
