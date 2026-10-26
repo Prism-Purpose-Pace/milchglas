@@ -4,6 +4,42 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.3.0](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.2.0...v0.3.0) (2026-10-26)
+
+
+### Features
+
+* **cli:** Add init and rotate-token ([8dc0761](https://github.com/Prism-Purpose-Pace/milchglas/commit/8dc076118a1896ad80966ac037698d4a2bc8b8f7))
+* **config:** Load and validate config.json ([7f1358b](https://github.com/Prism-Purpose-Pace/milchglas/commit/7f1358b0ec297fc34610af3aff9c2f91af0fccc4))
+* **core:** Read the previous feed's stamps back ([c97b5d3](https://github.com/Prism-Purpose-Pace/milchglas/commit/c97b5d39ff923bdc8c8ac395631bb321a0617b68))
+* **state:** Write feed and state atomically under a run lock ([9830fd7](https://github.com/Prism-Purpose-Pace/milchglas/commit/9830fd7ec57978aff142acecacd7948afa4432db))
+* **web:** Serve the feed and the health check over WSGI ([fc698f0](https://github.com/Prism-Purpose-Pace/milchglas/commit/fc698f02e2f2bac593f8d3d95be08b0c5300e81a))
+
+
+### Bug Fixes
+
+* **cli:** Keep init and rotate-token working without docstrings ([2d605f9](https://github.com/Prism-Purpose-Pace/milchglas/commit/2d605f91c081ca150f1b706d4f69610e00a51057))
+* **config:** Accept only the uid_salt shape that init prints ([e3d9cc8](https://github.com/Prism-Purpose-Pace/milchglas/commit/e3d9cc81bcde43696fc5089a9455665dc6479ebb))
+* **config:** Treat an empty MILCHGLAS_CONFIG as unset ([7ed62a5](https://github.com/Prism-Purpose-Pace/milchglas/commit/7ed62a5d39ddf4fceca9801cd1a802e859d19cd5))
+* **tests:** Keep a git hook's environment out of every test ([f260016](https://github.com/Prism-Purpose-Pace/milchglas/commit/f26001629e16ec2c589bf88e19c34bccc0e670f8))
+* **web:** Answer an unreadable feed with the identical 404 ([ed8abed](https://github.com/Prism-Purpose-Pace/milchglas/commit/ed8abedc249e1c4afcb4e129b04cb86ec5a49b3b))
+* **web:** Log a 304 revalidation like a served feed ([afe871d](https://github.com/Prism-Purpose-Pace/milchglas/commit/afe871d438421746714d52071c676fad82c5c2ef))
+* **web:** Log IPv4-mapped clients by their IPv4 /24 ([3f23886](https://github.com/Prism-Purpose-Pace/milchglas/commit/3f238868debd757fce4f28758a0015c23e44859f))
+* **web:** Read MILCHGLAS_LOG_LEVEL in any letter case ([e1e67cd](https://github.com/Prism-Purpose-Pace/milchglas/commit/e1e67cd9bd5f10964bf43ae3eb8a25122950e031))
+* **web:** Report 503 for a last success dated in the future ([3432367](https://github.com/Prism-Purpose-Pace/milchglas/commit/343236724b31b93c81c8c0c71bf76b8efdc13819))
+
+
+### Documentation
+
+* **agents:** Add AGENTS.md with code review rules for Codex ([09e1d28](https://github.com/Prism-Purpose-Pace/milchglas/commit/09e1d2850e9bf0a4249975431278ab6100d3ebe5))
+* Count six refresher variables and name the timed re-read ([ae59b8f](https://github.com/Prism-Purpose-Pace/milchglas/commit/ae59b8f694d79494e0223568d8f1c631808d7c1e))
+* **readme:** Add coverage, design-document and toolchain badges ([e821f7f](https://github.com/Prism-Purpose-Pace/milchglas/commit/e821f7f6e4d98229f3d6ee76739757c556db2c02))
+* **review:** Add review criteria for pull requests ([7dbbc50](https://github.com/Prism-Purpose-Pace/milchglas/commit/7dbbc50d974f1ee21d2ea6adc875c9e2bd587caf))
+* **spec:** Name the config path variable and the feed file ([77969bd](https://github.com/Prism-Purpose-Pace/milchglas/commit/77969bd0b8a8ee77e370ec38dadd7c2154238624))
+* **spec:** Record D-17, no third-party CalDAV client library ([f4963a3](https://github.com/Prism-Purpose-Pace/milchglas/commit/f4963a3ab621307d8b2e8474ef9a5648fca4b754))
+* **status:** Name config, state, token commands and web as built ([ba0f686](https://github.com/Prism-Purpose-Pace/milchglas/commit/ba0f686e558c98f28d032619b49b322aed1a2919))
+* **support:** Say where to ask and what support to expect ([bfd4234](https://github.com/Prism-Purpose-Pace/milchglas/commit/bfd4234866c9f9733a8187e7ac00c4c36736a786))
+
 ## [0.2.0](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.1.2...v0.2.0) (2026-10-21)
 
 
