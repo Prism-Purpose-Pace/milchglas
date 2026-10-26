@@ -51,8 +51,10 @@ version of them.
   (RV-CFG-3)
 - Once `sources/` exists: a write method or a request outside FR-1, or a CalDAV client library
   (RV-SRC-1); a `DOCTYPE` or entity not rejected, or an unparsable object that becomes a free slot
-  (RV-SRC-2); a credential over anything but HTTPS, to another host or after a redirect
-  (RV-SRC-3).
+  (RV-SRC-2); a credential over anything but HTTPS, to another host, after a redirect or in a
+  cookie, or request limits outside FR-1 and Q-15: no 10 s timeout, a retry count or backoff other
+  than three with 1, 2 and 4 s, a retry on anything but a timeout or `5xx`, or a retried `401`,
+  `403` or `429` (RV-SRC-3).
 - Once `deploy/` exists: `web` and the refresher merged into one service (RV-OPS-2).
 - A workflow runs code from a pull request with a secret or a write token. (RV-CI-2)
 - A `fix:` change without a regression test that fails without the fix. (RV-3)
