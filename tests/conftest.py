@@ -1,13 +1,19 @@
-"""Suite-wide setup: Hypothesis profiles and a git environment that belongs to no hook.
+"""Suite-wide setup: host zone, Hypothesis profiles and a git environment that belongs to no hook.
 
 `dev` runs locally, `ci` on CI runners (GitHub sets CI): more examples, derandomized so a
 failing example reproduces from the printed blob. HYPOTHESIS_PROFILE overrides either.
 """
 
 import os
+import time
 
 import pytest
 from hypothesis import settings
+
+# GATE-20: CI runners run in UTC, which hides a conversion to local time where UTC is
+# meant. A zone with DST and a half-hour offset makes every such slip move a block.
+os.environ["TZ"] = "America/St_Johns"
+time.tzset()
 
 settings.register_profile("dev", max_examples=100, deadline=None)
 settings.register_profile("ci", max_examples=500, deadline=None, derandomize=True, print_blob=True)
