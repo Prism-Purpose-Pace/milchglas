@@ -13,7 +13,7 @@ bumps `uv.lock` and the SHA-pinned GitHub Actions weekly.
 |------|-------|------------|
 | Hygiene (eof, trailing-ws, large-file, merge-conflict, case, symlinks, yaml/json/toml) | pre-commit | pre-commit-hooks v6.0.0 |
 | Private-key detection (catches PuTTY, SSH2, OpenVPN and partial keys that gitleaks misses) | pre-commit | pre-commit-hooks v6.0.0 |
-| Lint (`select = ALL`; TID251 bans I/O imports in `src/milchglas/core/`, PTH123 flags builtin `open()`; a dynamic `__import__` is review-only) + format | pre-commit | ruff (`uv.lock`) |
+| Lint (`select = ALL`; TID251 bans I/O imports in `src/milchglas/core/`, PTH123 flags builtin `open()`) + format | pre-commit | ruff (`uv.lock`) |
 | Lock in sync with `pyproject.toml` | pre-commit + pre-push | `uv lock --check` |
 | Workflow schema validation | pre-commit | check-jsonschema 0.37.4 |
 | Fast secret scan (staged diff) | pre-commit | gitleaks v8.30.1 |
@@ -24,7 +24,7 @@ bumps `uv.lock` and the SHA-pinned GitHub Actions weekly.
 | PEP 723 script-deps CVE audit | pre-commit (warn) + pre-push (block) | `scripts/audit_script_deps.py` (stdlib) |
 | Commit message convention (title ≤72, body ≤80/line) | commit-msg | `scripts/check_commit_msg.py` (stdlib) |
 | Type-check (`--strict` + extra error codes, spec AC-12) | pre-push | mypy (`uv.lock`) |
-| Unit tests + branch coverage ≥ 90 % (marker `contract` excluded) | pre-push | pytest + pytest-cov (`uv.lock`) |
+| Unit tests + branch coverage ≥ 90 % (marker `contract` excluded); includes the purity allowlist of `src/milchglas/core/` (GATE-14), whose known limits, such as a renamed `__import__`, are review-only | pre-push | pytest + pytest-cov (`uv.lock`) |
 | Deep secret scan (full history, verified) | pre-push | trufflehog (installed binary; `rev:` informational) |
 | Dependency CVE scan (blocking) | pre-push | osv-scanner v2.3.8 |
 
