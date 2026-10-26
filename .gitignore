@@ -23,6 +23,8 @@ dist/
 .coverage.*
 htmlcov/
 coverage.xml
+# Mutation testing (mutmut's working copy)
+mutants/
 # Secrets
 .env
 .env.local
