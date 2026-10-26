@@ -13,7 +13,8 @@ in one and go unnoticed in the other. Four checks close that:
 - priorities: AGENTS.md lists exactly the `BLOCK` rules, each under the priority that is its
   level (P0 for `BLOCK P0`, P1 for `BLOCK P1`), and lists no `WARN` or `INFO` rule;
 - gates: every test-catalogue ID that REVIEW.md names is a row with status `exists`, so a
-  `Gate:` claim cannot point at a test that is only planned.
+  `Gate:` claim cannot point at a test that is only planned; every ID-shaped token in a `Gate:`
+  clause must resolve to a row, whatever its prefix, so a typo cannot hide as an unknown area.
 
 Known limit: the two files are compared by ID and level, not by wording.
 """
@@ -30,6 +31,8 @@ LEVELS = frozenset({"BLOCK P0", "BLOCK P1", "WARN", "INFO"})
 RULE = r"RV-(?:[A-Z]+-)?\d+"
 DEFINITION = re.compile(rf"^- \*\*({RULE})\*\* \(([^)]*)\)", re.MULTILINE)
 CITATION = re.compile(rf"(?<![\w-])({RULE})(?![\w-])")
+GATE_CLAUSE = re.compile(r"\bGate: (.*?)(?<!\.)\.(?:\s|$)")
+GATE_ID = re.compile(r"(?<![\w-])[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d+(?:\.\.\d+)?(?!\w)")
 HEADING = re.compile(r"#{2,3} (.*)")
 PRIORITY = re.compile(r"(P[01])\b")
 EXPECTED = {"BLOCK P0": "P0", "BLOCK P1": "P1"}
@@ -67,11 +70,31 @@ def listed(agents: str) -> dict[str, str]:
     return listing
 
 
+def declared_gates(review: str) -> list[str]:
+    """The ID-shaped tokens of every `Gate:` clause, whatever their prefix.
+
+    A clause runs to the end of its sentence and may wrap over lines. The catalogue resolver
+    only recognises prefixes that are already in the catalogue, so a typo such as `WEBB-2`
+    would pass through it unseen; here every ID-shaped token of a clause counts.
+    """
+    blocks = re.split(r"\n(?=- |#|\n)", review)
+    return [
+        token
+        for block in blocks
+        for clause in GATE_CLAUSE.findall(" ".join(block.split()))
+        for token in GATE_ID.findall(clause)
+    ]
+
+
 def problems(review: str, agents: str, rows: dict[str, str]) -> Problems:
     rules = parse_rules(review)
     listing = listed(agents)
     expected = {i: EXPECTED[level] for i, level in rules.items() if level in EXPECTED}
     unresolved, gates = resolve(rows, review)
+    for token in declared_gates(review):
+        bad, found = resolve(rows, token)
+        if (bad or not found) and token not in unresolved:
+            unresolved.append(token)
     cited = {*CITATION.findall(review), *CITATION.findall(agents)}
     return {
         "undefined": sorted(cited - rules.keys()),
@@ -174,3 +197,20 @@ def test_a_warning_listed_as_p0_or_p1_is_found() -> None:
 def test_a_gate_must_be_an_existing_catalogue_row() -> None:
     assert check(review=REVIEW.replace("ALPHA-1", "ALPHA-2"))["gates"] == ["ALPHA-2"]
     assert check(review=REVIEW.replace("ALPHA-1", "ALPHA-3"))["gates"] == ["ALPHA-3"]
+
+
+def test_a_gate_with_an_unknown_prefix_is_found() -> None:
+    assert check(review=REVIEW.replace("ALPHA-1", "BETA-1"))["gates"] == ["BETA-1"]
+    assert check(review=REVIEW.replace("ALPHA-1", "ALPHA-1, BETA-1..2"))["gates"] == ["BETA-1..2"]
+
+
+def test_a_gate_clause_that_wraps_over_lines_is_read_to_its_end() -> None:
+    wrapped = REVIEW.replace("Gate: ALPHA-1.", "Gate: ALPHA-1 and\n  a tool, then BETA-7.")
+    assert check(review=wrapped)["gates"] == ["BETA-7"]
+
+
+def test_a_gate_clause_names_only_what_it_declares() -> None:
+    tools_only = REVIEW.replace("Gate: ALPHA-1.", "Gate: a scanner and a linter.")
+    assert check(review=tools_only)["gates"] == []
+    later = REVIEW.replace("Gate: ALPHA-1.", "Gate: ALPHA-1. Compare BETA-7 by hand.")
+    assert check(review=later)["gates"] == []
