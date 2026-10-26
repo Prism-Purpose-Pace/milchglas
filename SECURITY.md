@@ -32,6 +32,24 @@ Include steps that reproduce the problem with synthetic events and placeholder t
 report written with AI assistance is welcome when you have verified the issue yourself and
 say so. Output of an automated scanner without a demonstrated impact is closed without a CVE.
 
+## Good-faith research
+
+We will not take legal action against you, or report you to law enforcement, for security
+research on Milchglas that follows this policy: you test your own installation or a test
+deployment you built from this repository, you use synthetic events and placeholder tokens,
+you stop and report as soon as you can read content that is not yours, and you do not disrupt
+anyone else's system.
+
+This does not cover the maintainer's own running instance, a CalDAV server, a host or network
+you do not own, or any other third-party system; we cannot authorize research there. If a
+third party takes legal action against you for research that follows this policy, we will say
+that it did. Before you do anything this policy does not address, ask us through a private
+report.
+
+The wording is adapted from the
+[disclose.io Simple Safe Harbor](https://github.com/disclose/dioterms/blob/master/terms/simple-safe-harbor/en-US.md)
+(CC0) and narrowed to what the maintainer can promise.
+
 ## What to expect
 
 This is a volunteer, single-maintainer project; the targets below are best effort:
