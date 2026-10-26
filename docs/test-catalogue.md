@@ -238,7 +238,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
 | WEB-1 | `GET /f/<token>.ics` → 200 with `Content-Type: text/calendar; charset=utf-8`, quoted `ETag`, `Content-Length`, `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, max-age=0`; no versioned `Server` header | AC-9, NFR-S1, Q-17 | unit | exists |
-| WEB-2 | Methods GET, HEAD, OPTIONS, POST × right or wrong token × `If-None-Match` and `Range` × path variants (`/`, `/f/`, `/f/<token>.ics/x`, `/robots.txt`, `/f/../state`, `%2e%2e%2f`, `%00`, `//f/`, `.ICS`, trailing slash, `;` parameters, double encoding): every wrong-token response equals the unknown-path response in status, body and headers (apart from `Date`); the 404 carries `X-Content-Type-Options` and `Cache-Control` | AC-9, Q-17 | unit | exists |
+| WEB-2 | Methods GET, HEAD, OPTIONS, POST × right or wrong token × `If-None-Match` and `Range` × path variants (`/`, `/f/`, `/f/<token>.ics/x`, `/robots.txt`, `/f/../state`, `%2e%2e%2f`, `%00`, `//f/`, `.ICS`, trailing slash, `;` parameters, double encoding): every wrong-token response equals the unknown-path response in status, body and headers (apart from `Date`); the 404 carries `X-Content-Type-Options` and `Cache-Control`, and its body is `Not Found` and a newline (empty for `HEAD`) with `Content-Length: 10` | AC-9, Q-17 | unit | exists |
 | WEB-3 | `If-None-Match` equal → 304 without body; different → 200; the ETag is unchanged across refreshes of an unchanged source | AC-9, AC-6 | unit | exists |
 | WEB-4 | `HEAD` → same headers, empty body; `POST`, `PUT`, `DELETE`, `OPTIONS` on any path → the identical 404 | AC-9 | unit | exists |
 | WEB-6 | Feed file missing (never refreshed) → the identical 404, not a server error | FR-9, AC-9 | unit | exists |
@@ -256,7 +256,7 @@ the expected-blocks oracle assumes until the spec changes.
 
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
-| WEB-5 | `/healthz` → 200 when `last_success` is under 60 min old and `token_sha256` is readable; 503 when older, when state is missing or unreadable, and while the digest is unreadable; the body is identical in both states and holds no timestamps or counts | FR-11, Q-23 | unit | exists |
+| WEB-5 | `/healthz` → 200 when `last_success` is under 60 min old and `token_sha256` is readable; 503 when older, when state is missing or unreadable, and while the digest is unreadable; the body is identical in both states and holds no timestamps or counts; the same holds on the app's own wall clock, which production uses | FR-11, Q-23 | unit | exists |
 | WEB-14 | Run-time re-read finds a malformed or truncated `token_sha256`, or an unparsable `config.json`: `web` keeps the last valid digest (old token 200, anything else the identical 404), logs one line naming the key (no value) on every re-read, `/healthz` is 503; after the fix it is 200 and the new token works within one re-read | Q-23, FR-11 | unit | exists |
 | WEB-15 | An invalid unrelated key (for example `grid_minutes` 7) beside a valid `token_sha256`: the right token still gets 200 and `/healthz` is unaffected, because `web` reads only `token_sha256` | Q-23, NFR-S1 | unit | exists |
 | WEB-16 | Refresh against an unreachable source: the feed is unchanged and `/healthz` turns 503 once 60 min have passed (fake clock) | AC-7, FR-11 | unit | planned |
