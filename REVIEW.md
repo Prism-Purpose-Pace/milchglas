@@ -28,14 +28,24 @@ already cover part of a rule; review the residue.
 
 ## Severity
 
-| Level | Meaning | Examples |
-|---|---|---|
-| `BLOCK` | Fix before merge: breaks an invariant, leaks private content, weakens security, re-decides a `[DECIDED]` item, or ships a fix without its regression test | an event title reaches a log line; a token compared with `==`; `fix:` without a test that fails first |
-| `WARN` | Should be fixed: hard to maintain, under-tested or under-documented | behaviour changed, docs not; a test that asserts nothing the code could get wrong |
-| `INFO` | Optional, at most three per review | a clearer name or comment |
+Severity is the lower of two things: the impact of the problem and the evidence you can show. A
+rule's default level is its ceiling; evidence can lower a finding, never raise it.
 
-A problem on a line the pull request did not touch is `Pre-existing`; report it only when
-the change depends on it.
+| Level | Meaning | Claude Code Review | Codex |
+|---|---|---|---|
+| `BLOCK` (P0) | Private content, a token or a secret can leak, or the token check or a CI gate is weakened | Important | P0 |
+| `BLOCK` (P1) | Any other broken invariant, a re-decided `[DECIDED]` item, or a fix without its regression test | Important | P1 |
+| `WARN` | Should be fixed: hard to maintain, under-tested or under-documented | Nit, text starts with `WARN` | P2 (not shown) |
+| `INFO` | Optional, at most three per review | Nit, text starts with `INFO` | P3 (not shown) |
+| Pre-existing | A problem on a line the pull request did not touch; report it only when the change depends on it | Pre-existing | not reported |
+
+Evidence decides how a finding is reported:
+
+- **Shown:** the input, the line that handles it and the effect, each with `file:line`, or a
+  test case that fails. A `BLOCK` needs this.
+- **Plausible:** one step is not verified. Report it as `WARN`, start the text with `Verify:` and
+  name the missing step.
+- **Suspicion:** a pattern match without a path. Do not report it.
 
 ## Every pull request
 
@@ -227,9 +237,28 @@ accepts; the content of `uv.lock` beyond consistency; generated files (`CHANGELO
 `.release-please-manifest.json`, release pull requests); problems in code the change did not
 touch.
 
+## Calibration
+
+Flag:
+
+- `_LOG.info("skip %s", event.summary)`: RV-CORE-1, an event title reaches a log line.
+- `if presented == token:`: RV-WEB-1, the token is not compared in constant time.
+- A `fix:` commit whose new test also passes on the old code: RV-3.
+
+Skip:
+
+- `_LOG.info("skipped %d events", len(skipped))`: a count, no content.
+- `hmac.compare_digest(hashlib.sha256(presented).digest(), self._digest)`: the comparison the
+  web tests pin.
+- A `BBX-` title as test input: a synthetic fixture (RV-TST-1).
+- A refactor that moves the 404 into a shared helper and keeps every byte: the web tests cover it.
+
 ## Output
 
-One review per head commit. Open with one line: `PASS`, `PASS WITH WARNINGS` or
-`CHANGES REQUESTED` (any `BLOCK`). Then `Checked:` and `Not checked:`, one line each. List the
-findings by level, each with its rule, `file:line`, the problem and the fix. The inline comment
-carries the detail; the summary only lists.
+One review per head commit. Where you control the format, open with one line: `PASS`,
+`PASS WITH WARNINGS` or `CHANGES REQUESTED` (any `BLOCK`). Then `Checked:` and `Not checked:`, each
+a list of rule IDs. List the findings by level, each as `[RULE-ID] file:line problem, fix`. The
+inline comment carries the detail; the summary only lists.
+
+A tool that keeps its own format (Claude Code Review, Codex) still starts every inline comment with
+the `[RULE-ID]`, so a finding can be traced to its rule.
