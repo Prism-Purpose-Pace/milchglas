@@ -146,8 +146,10 @@ Apply the profile of every path the pull request touches and of every label it c
   declaration is not rejected before parsing (Q-14, NFR-C1), or one unparsable object does not fail
   the refresh and keep the last feed (it becomes a free slot).
 - **RV-SRC-3** (BLOCK P1) A credential leaves the intended route: over anything but HTTPS, to
-  another host, after a redirect, or in a cookie. A `401`, `403` or `429` is retried. An error
-  carries body content instead of byte counts and status.
+  another host, after a redirect, or in a cookie (the client keeps no cookies). The request limits
+  of FR-1 and Q-15 do not hold: no 10 s timeout, a retry count or backoff other than three with
+  1, 2 and 4 s, a retry on anything but a timeout or `5xx`, or a retried `401`, `403` or `429`.
+  An error carries body content instead of byte counts and status.
 
 ### Deployment and runbook: `deploy/`, `docs/runbook.md`, `docs/consumers.md`, label `area: deploy` (`deploy/` not built yet)
 
