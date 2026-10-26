@@ -138,61 +138,73 @@ Apply the profile of every path the pull request touches and of every label it c
   and only on full success; on failure the old feed stays and the error is recorded without event
   content. Gate: ORCH-WRITE-1, ORCH-WRITE-2, ORCH-WRITE-5.
 
-### CalDAV source: `src/milchglas/sources/`, label `area: caldav`
+### CalDAV source: `src/milchglas/sources/` (not built yet; applies once the path exists)
 
-- Read-only: no write method, only the requests the spec lists (FR-1); a writable share fails
-  the refresh.
-- External XML is untrusted: a `DOCTYPE` or entity declaration is rejected before parsing
-  (Q-14, NFR-C1). One unparsable object fails the refresh and keeps the last feed; it never
-  becomes a free slot.
-- Credentials go only over HTTPS to the configured host; timeouts and retries follow FR-1
-  (`401`, `403` and `429` are not retried); no cookies. Errors carry byte counts and status,
-  never body content.
+- **RV-SRC-1** (BLOCK P1) Not read-only: a write method, a request the spec does not list (FR-1),
+  or a writable share that does not fail the refresh. No CalDAV client library (D-17).
+- **RV-SRC-2** (BLOCK P1) External XML is parsed without hardening: a `DOCTYPE` or entity
+  declaration is not rejected before parsing (Q-14, NFR-C1), or one unparsable object does not fail
+  the refresh and keep the last feed (it becomes a free slot).
+- **RV-SRC-3** (BLOCK P1) A credential leaves the intended route: over anything but HTTPS, to
+  another host, after a redirect, or in a cookie. A `401`, `403` or `429` is retried. An error
+  carries body content instead of byte counts and status.
 
-### Deployment and runbook: `deploy/`, `docs/runbook.md`, `docs/consumers.md`, label `area: deploy`
+### Deployment and runbook: `deploy/`, `docs/runbook.md`, `docs/consumers.md`, label `area: deploy` (`deploy/` not built yet)
 
-- Secrets are runtime-only environment variables: none in an image, build argument, compose
-  file or log (OR4, NFR-S2). `web` and the refresher stay separate (D-13).
-- The runbook and consumer docs are German (Q-7); the rest of the documentation is English.
+- **RV-OPS-1** (BLOCK P0) A secret in an image, build argument, Compose file or log; secrets are
+  runtime-only environment variables (OR4, NFR-S2).
+- **RV-OPS-2** (BLOCK P1) `web` and the refresher are merged into one service, or `web` gets a
+  CalDAV variable (D-13).
+- **RV-OPS-3** (WARN) The runbook and consumer docs are not German (Q-7); the rest of the
+  documentation is English.
 
 ### CI and tooling: `.github/`, `scripts/`, `.pre-commit-config.yaml`, label `ci`
 
-- Every action is pinned to a full commit SHA with a version comment. Workflows start from
-  `permissions: {}` and grant per job only what it needs.
-- No `pull_request_target`, and no `workflow_run`, that checks out or runs code from a pull
-  request; no secret passed to code from a pull request or written to a log.
-- The job ids of the required checks stay in step with `scripts/github_bootstrap.py`. A gate is
-  never weakened (coverage floor, public-tree guard, push guard, required checks).
-- Scripts are stdlib-only and tested. `.claude/` and `.local/` are never added.
+- **RV-CI-1** (WARN) An action not pinned to a full commit SHA with a version comment, a workflow
+  that does not start from `permissions: {}`, a permission the job does not use, or a suppression
+  without a reason. Gate: zizmor.
+- **RV-CI-2** (BLOCK P1) `pull_request_target` or `workflow_run` that checks out or runs code from
+  a pull request; a secret passed to code from a pull request or written to a log. Gate: zizmor,
+  CodeQL for Actions.
+- **RV-CI-3** (WARN) A script that is not stdlib-only or has no test; a file under `.claude/` or
+  `.local/` (the public-tree guard rejects both).
+- **RV-CI-4** (BLOCK P0) A gate is weakened or bypassed: the coverage floor lowered,
+  `--strict-markers` or `--strict-config` dropped, a required check, hook or guard removed,
+  narrowed so it no longer runs on pull requests, made non-blocking (`continue-on-error`,
+  `|| true`) or skipped (`--no-verify`, `SKIP=`).
 
 ### Dependencies: `pyproject.toml`, `uv.lock`, label `dependencies`
 
-- Runtime dependencies are pure Python. Tool versions move through the lock file, never through
-  a hook `rev:`. A new dependency states why, who maintains it and under which licence; the
-  licence must fit the project's MIT licence.
+- **RV-DEP-1** (WARN) A new runtime dependency without why, maintainer and licence in the
+  description, or with a licence that does not fit the project's MIT licence. Purity is gated:
+  GATE-2 fails on any wheel in the runtime closure that is not `py*-none-any`; check that the change
+  leaves that test alone.
+- **RV-DEP-2** (WARN) The version of a Python tool moved through a hook `rev:` instead of the lock
+  file, or `uv.lock` changed without `pyproject.toml` (a lock-only update by Dependabot is fine).
 
 ### Tests: `tests/`
 
-- Fixtures are synthetic; event content starts with `BBX-`. Unit tests use no clock, network
-  or sleeping. The core keeps its property tests.
-- The coverage floor (90 % branch coverage) and the registered pytest markers are not loosened.
-  `# pragma: no cover` hides code from the floor in a review-visible way: ask why.
+- **RV-TST-1** (WARN) A fixture that is not synthetic or whose event content does not start with
+  `BBX-`; a unit test that uses the clock, the network or sleeping; a property test of the core
+  removed or weakened.
+- **RV-TST-2** (WARN) A new `# pragma: no cover`, `skip` or `xfail`: it hides behaviour from the
+  gate in a review-visible way, so ask why. Lowering the floor is RV-CI-4.
 
 ### Documentation: `docs/`, `*.md`, label `documentation`
 
-- Consistent with the spec: config keys and numeric thresholds live in one place
-  (`scripts/check_spec_drift.py`). A `[DECIDED]` row changes only on purpose, with its date.
-- Status lines in README and CLAUDE.md name what is built, no more. Links resolve. No private
-  planning material (`docs/plans/`, `docs/evidence/`).
+- **RV-DOC-1** (WARN) A config key or numeric threshold stated in a second place. Gate: GATE-13.
+- **RV-DOC-2** (WARN) A status line in README or `CLAUDE.md` that names more than is built, or a
+  link that does not resolve.
 
 ### Security-sensitive changes: label `security`
 
-This profile also applies to any change to tokens, authentication, parsing of external input
-or workflows, with or without the label.
+This profile also applies to any change to tokens, authentication, parsing of external input or
+workflows, with or without the label.
 
-- Name the attacker-controlled input (calendar data, an HTTP request, pull-request content),
-  follow it to every sink, and check that the failure path stays closed. A finding here is
-  never `INFO`.
+- **RV-SEC-1** (BLOCK P1) Name the attacker-controlled input (calendar data, an HTTP request,
+  pull-request content), follow it to every sink and check that the failure path stays closed.
+  A finding here is never `INFO`. It is P0 when the sink is event content or a secret reaching an
+  output (RV-CORE-1, RV-8), the token check (RV-WEB-1) or a gate (RV-CI-4).
 
 ## Automated reviewers
 
