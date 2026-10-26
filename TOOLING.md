@@ -1,8 +1,10 @@
 # Tooling — `python` stack
 
 **Single version source:** every Python tool (ruff, mypy, ty, pytest, pytest-cov,
-hypothesis) is an entry of the `dev` dependency group, pinned by `uv.lock`. Hooks and CI
-call them via `uv run --frozen`, so hook, terminal and CI run the identical version.
+hypothesis) is an entry of the `dev` dependency group, pinned by `uv.lock`. mutmut, which
+only the weekly mutation run needs, sits in the `mutation` group of the same lock, so a
+plain `uv sync` stays lean. Hooks and CI call them via `uv run --frozen`, so hook,
+terminal and CI run the identical version.
 Bump with `uv lock --upgrade-package <tool>`, never via a hook `rev:`. Remote `rev:`
 pins remain only for the non-Python tools below (`pre-commit autoupdate`); Dependabot
 bumps `uv.lock` and the SHA-pinned GitHub Actions weekly.
@@ -59,6 +61,7 @@ permissions and grants per job only what it needs.
 |---|---|---|
 | `ci.yml` | push to `main`, pull requests | `lint`, `typecheck`, `test`, `public-guard`, `secret-scan`, `osv-scan`, `dependency-review` (PRs), `zizmor` (workflow security lint) — all required checks |
 | `codeql.yml` | push, pull requests, weekly | CodeQL for Python and Actions; the `main` ruleset blocks a merge on an alert of severity error or a security alert of high or above |
+| `mutation.yml` | weekly, on demand | mutmut mutates `src/milchglas/`, runs the unit tests against each mutant and lists the survivors in the job summary; advisory, not a required check (see below) |
 | `pr-triage.yml` | pull requests from this repository | path labels (`.github/labeler.yml`) and the author as assignee; Dependabot does the same through `dependabot.yml`, fork PRs are triaged by hand |
 | `scorecard.yml` | push to `main`, weekly | OpenSSF Scorecard, results to code scanning + badge |
 | `release-please.yml` | push to `main` | release PR with changelog and version bump from conventional commits; on a release, sdist and wheel with their provenance (`.sigstore.json`, `.intoto.jsonl`) as release assets |
@@ -84,6 +87,26 @@ For an organization owner it first reads the organization's Actions policy and s
 before any write when the organization withholds pull-request creation from GitHub
 Actions: the repository setting cannot override it, and release-please could not open
 release PRs.
+
+## Mutation testing (advisory)
+
+Coverage says a line ran; mutmut asks whether a test would notice if it were wrong. It
+changes `src/milchglas/` one small edit at a time (a `<` to `<=`, a dropped argument) and
+runs the unit tests that reach the changed function against each mutant. When the
+workflow was added: 1506 mutants, 87.6 % killed, about 8 minutes on four cores with the
+`ci` Hypothesis profile.
+
+```bash
+uv run --group mutation mutmut run          # working copy in mutants/ (git-ignored)
+uv run --group mutation mutmut results      # the survivors
+uv run --group mutation mutmut show <name>  # the diff of one survivor
+```
+
+A survivor is a question, not a failure: most change only a message text, change nothing
+observable or are rejected by mypy; the rest are test gaps worth a test. The run skips
+`tests/unit/test_core_purity.py`, because mutmut's trampolines add imports to `core/`, and
+copies `config.example.json`, which the config tests read. It is no required check: the
+score moves with every message edit, and a gate on it would reward tests of wording.
 
 ## Maintainer operations (`gh`)
 
