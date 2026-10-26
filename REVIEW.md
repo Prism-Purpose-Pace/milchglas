@@ -35,16 +35,16 @@ rule's default level is its ceiling; evidence can lower a finding, never raise i
 |---|---|---|---|
 | `BLOCK` (P0) | Private content, a token or a secret can leak, or the token check or a CI gate is weakened | Important | P0 |
 | `BLOCK` (P1) | Any other broken invariant, a re-decided `[DECIDED]` item, or a fix without its regression test | Important | P1 |
-| `WARN` | Should be fixed: hard to maintain, under-tested or under-documented | Nit, text starts with `WARN` | P2 (not shown) |
-| `INFO` | Optional, at most three per review | Nit, text starts with `INFO` | P3 (not shown) |
+| `WARN` | Should be fixed: hard to maintain, under-tested or under-documented | Nit, marked `WARN` after the rule ID | P2 (not shown) |
+| `INFO` | Optional, at most three per review | Nit, marked `INFO` after the rule ID | P3 (not shown) |
 | Pre-existing | A problem on a line the pull request did not touch; report it only when the change depends on it | Pre-existing | not reported |
 
 Evidence decides how a finding is reported:
 
 - **Shown:** the input, the line that handles it and the effect, each with `file:line`, or a
   test case that fails. A `BLOCK` needs this.
-- **Plausible:** one step is not verified. Report it as `WARN`, start the text with `Verify:` and
-  name the missing step.
+- **Plausible:** one step is not verified. Report it as `WARN`, put `Verify:` right after the
+  level and name the missing step.
 - **Suspicion:** a pattern match without a path. Do not report it.
 
 ## Every pull request
@@ -261,7 +261,10 @@ a list of rule IDs. List the findings by level, each as `[RULE-ID] file:line pro
 inline comment carries the detail; the summary only lists.
 
 A tool that keeps its own format (Claude Code Review, Codex) still starts every inline comment with
-the `[RULE-ID]`, so a finding can be traced to its rule.
+the `[RULE-ID]`, so a finding can be traced to its rule. One order, left to right: the `[RULE-ID]`;
+`WARN` or `INFO` on a Nit only (a `BLOCK` shows its level through the tool, Important or P0/P1);
+`Verify:` on a Plausible finding only, which is always a `WARN`; then the text. For example
+`[RV-WEB-1] WARN Verify: the compare may not run in constant time; the helper is not in the diff.`
 
 - Name the head commit the review covers. If the head moves during the review, say which commit
   was reviewed and that the new head is not.
