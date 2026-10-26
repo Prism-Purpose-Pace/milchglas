@@ -262,3 +262,12 @@ inline comment carries the detail; the summary only lists.
 
 A tool that keeps its own format (Claude Code Review, Codex) still starts every inline comment with
 the `[RULE-ID]`, so a finding can be traced to its rule.
+
+- One finding per root cause: when the same flaw appears in several places, report it once and
+  list the locations.
+- A cap limits what is shown, never what is checked. Do not stop at a cap and do not add findings
+  to reach one.
+- A `BLOCK` rule that applies to the changed paths but could not be checked goes under
+  `Not checked:` with the reason; do not write `PASS` while one is open.
+- With nothing to report, write `No findings within the reviewed scope`, never that the code is
+  correct or free of defects.
