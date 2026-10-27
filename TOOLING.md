@@ -110,8 +110,9 @@ score moves with every message edit, and a gate on it would reward tests of word
 
 ## Maintainer operations (`gh`)
 
-Commands only the maintainer runs; agents never push or merge. `N` is a pull request
-number, `ID` a workflow run id, `<owner>` the account or organization.
+Commands only the maintainer runs; an agent does not run them (what an agent may push is
+in CLAUDE.md, Working agreements). `N` is a pull request number, `ID` a workflow run id,
+`<owner>` the account or organization.
 
 Merge your own pull request once every required check is green. `--admin` uses the
 bypass of the `review` ruleset and skips only the approval; the `main` ruleset has no
