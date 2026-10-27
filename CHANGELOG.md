@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.3.1](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.3.0...v0.3.1) (2026-10-27)
+
+
+### Documentation
+
+* **agents:** Carry the FR-1 request limits in the RV-SRC-3 line ([224518e](https://github.com/Prism-Purpose-Pace/milchglas/commit/224518ebabc7b6d0dc19db1891c0e000c2ec32a9))
+* **agents:** Let agents push topic branches and open draft PRs ([34bc4d3](https://github.com/Prism-Purpose-Pace/milchglas/commit/34bc4d388992674d30a306433aae418a706053a1))
+* **agents:** List every blocking review rule by priority ([ed61e32](https://github.com/Prism-Purpose-Pace/milchglas/commit/ed61e324413442456ddefd6bf817bd4ede0e92c1))
+* **contributing:** Add the ready and done rules for issues ([d28a668](https://github.com/Prism-Purpose-Pace/milchglas/commit/d28a668cc8e6f90b3f11b9315efd054ae7c8053d))
+* **review:** Fix one order for the parts of an inline comment ([73337db](https://github.com/Prism-Purpose-Pace/milchglas/commit/73337db3512b881a3599aabca35c2ebb870cc5c3))
+* **review:** Give the core, web and configuration checks IDs ([39d70f0](https://github.com/Prism-Purpose-Pace/milchglas/commit/39d70f086267d0192074426d131fcc3b87b174a4))
+* **review:** Give the general review checks IDs ([da83508](https://github.com/Prism-Purpose-Pace/milchglas/commit/da83508026f1e8efce84cfead0d204b5f0a2ee6e))
+* **review:** Give the remaining profile checks IDs ([37fe6d1](https://github.com/Prism-Purpose-Pace/milchglas/commit/37fe6d1e2b6bd8f7b513a6f355ccb377925b24b9))
+* **review:** Group findings by root cause and bound the claims ([1277699](https://github.com/Prism-Purpose-Pace/milchglas/commit/1277699536336697a03e9861e958c81461df20dc))
+* **review:** Keep the FR-1 request limits in RV-SRC-3 ([1dbf502](https://github.com/Prism-Purpose-Pace/milchglas/commit/1dbf5023de800e5f2ac44eef6bbce401afe6bf6b))
+* **review:** Map levels to reviewer output and require evidence ([6a3c756](https://github.com/Prism-Purpose-Pace/milchglas/commit/6a3c7568cddb73df4ad15af2d2b50611d988a921))
+* **review:** Name the reviewed commit in every review ([8f4383b](https://github.com/Prism-Purpose-Pace/milchglas/commit/8f4383b5b31cd41c3f4d657fe4f733c0f9e47293))
+* **security:** Add a good-faith research statement ([fbcfc85](https://github.com/Prism-Purpose-Pace/milchglas/commit/fbcfc85ddeb89b6e1d2ba959fb7a44398fc55029))
+* **security:** Add severity, report quality and pipeline scope ([4f278d1](https://github.com/Prism-Purpose-Pace/milchglas/commit/4f278d10e5cd2faeda350aa95b3840589c1dffd6))
+* **tooling:** Drop the claim that a dynamic import is review-only ([95a1adc](https://github.com/Prism-Purpose-Pace/milchglas/commit/95a1adc0607eabca5670a4d1d87b44558a7cb0b6))
+
 ## [0.3.0](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.2.0...v0.3.0) (2026-10-26)
 
 
