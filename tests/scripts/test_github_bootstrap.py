@@ -305,26 +305,17 @@ def test_apply_updates_existing_ruleset_and_reuses_project() -> None:
     assert ["gh", "project", "link", "3", "--owner", "octo", "--repo", "milchglas"] in gh.calls
 
 
-PRIORITY_FIELD = [
-    "gh", "project", "field-create", "7", "--owner", "octo", "--name", "Priority",
-    "--data-type", "SINGLE_SELECT", "--single-select-options", "High,Medium,Low",
-]  # fmt: skip
-
-
-def test_priority_is_a_project_field_not_a_label() -> None:
+def test_priority_is_neither_a_label_nor_a_project_field() -> None:
+    # Priority is the organization's issue field, so the board needs no copy of it.
     assert not [name for name, _, _ in gb.LABELS if name.startswith("priority")]
-
-
-def test_apply_adds_the_priority_field_to_a_project_without_one() -> None:
     gh = FakeGh(existing_fields='[{"name": "Status"}]')
     assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
-    assert PRIORITY_FIELD in gh.calls
-
-
-def test_apply_keeps_an_existing_priority_field() -> None:
-    gh = FakeGh(existing_fields='[{"name": "Status"}, {"name": "Priority"}]')
-    assert gb.main(["--owner", "octo", "--repo", "milchglas"], runner=gh) == 0
     assert not any(call[:3] == ["gh", "project", "field-create"] for call in gh.calls)
+
+
+def test_backlog_state_labels_exist() -> None:
+    names = {name for name, _, _ in gb.LABELS}
+    assert {"maintainer-action", "later"} <= names
 
 
 def _writes(gh: FakeGh) -> list[list[str]]:

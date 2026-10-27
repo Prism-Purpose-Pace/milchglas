@@ -90,6 +90,8 @@ there), `config.py` (loader, minimal digest reader), `state.py` (atomic writes, 
 ## Working agreements
 
 - Smallest change that serves the task; tests first (see CONTRIBUTING.md § Tests).
-- Conventional commits; never push, never `--no-verify`.
+- Conventional commits; never `--no-verify`. An agent pushes only a topic branch and opens a
+  draft pull request; it never pushes to `main`, never force-pushes over pushed history and
+  merges only as CONTRIBUTING.md § Pull requests describes. A release needs the maintainer's go.
 - `.claude/` and `.local/` are git-ignored maintainer space: never add files from there
   (the public-tree guard rejects them in pre-commit and CI).
