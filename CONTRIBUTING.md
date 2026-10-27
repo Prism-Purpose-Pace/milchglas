@@ -14,6 +14,41 @@ Contributions that keep it that way are the easiest to merge.
   questions `[OPEN Q-n]` (implement the stated default, keep it configurable) and
   unverified assumptions `[VERIFY V-n]` (do not build irreversibly on them).
 
+## Issues and the backlog
+
+Work is planned in issues on the Milchglas project board. Each issue has an issue type
+(`Feature`, `Task` or `Bug`), a Priority, a milestone (`MVP`, `Pilot run` or `Later`) and,
+once planned, a sprint. Labels name the area (`area: …`), cross-cutting concerns
+(`security`, `ci`, `documentation`, `dependencies`) and two states: `maintainer-action`
+for steps that need the maintainer's accounts or platform, and `later` for work outside
+the MVP that waits for a maintainer decision. Priorities are not labels.
+
+**Ready.** An issue enters a sprint only when all of these hold:
+
+1. Type, Priority and milestone are set.
+2. The context names the spec items it serves (FR, NFR, AC, D, Q, V) and whether they are
+   MVP or later.
+3. The scope lists what is in and what is out.
+4. Every acceptance criterion is one checkbox that cites its ID in
+   [docs/test-catalogue.md](docs/test-catalogue.md); new behaviour gets a `planned` row
+   there first.
+5. Dependencies are linked as "blocked by" or as a parent, not only named in the text.
+6. A step that needs the maintainer's accounts, hands or platform carries
+   `maintainer-action` and names the exact step.
+7. It fits into one sprint; larger work is split into sub-issues.
+
+**Done.** An issue is closed as completed only when all of these hold:
+
+1. Every checkbox is ticked, and each cited test ID has the status `exists` in the
+   catalogue; a manual ID has its record in `docs/consumers.md` or the runbook.
+2. CI is green on `main`: lint, strict type check, tests with branch coverage of at
+   least 90 %, the gates and the pure-wheel check.
+3. No event content reaches the feed, a log line or test output (see below).
+4. The pull request was rebase-merged after an approval of its last push.
+5. `docs/spec.md`, the catalogue and the README match any changed behaviour.
+6. A criterion that was not finished lives in a linked follow-up issue, and the unticked
+   checkbox says where it moved.
+
 ## Privacy rules for every contribution
 
 Milchglas handles private calendars. These rules are not negotiable:
