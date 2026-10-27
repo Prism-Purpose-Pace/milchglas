@@ -24,6 +24,7 @@ Toolchain rationale: [TOOLING.md](TOOLING.md).
 | Test | `uv run pytest` (branch coverage ≥ 90 %; `contract` tests excluded) · single: `uv run pytest --no-cov tests/unit/test_package.py` · contract only: `uv run pytest -m contract --no-cov` |
 | Lint / format | `uv run ruff check` · `uv run ruff format` |
 | Type-check | `uv run mypy` (strict, blocking) · advisory: `uv run ty check` |
+| Mutation (advisory) | `uv run --group mutation mutmut run` · survivors: `uv run --group mutation mutmut results` |
 | Token | `uv run python -m milchglas init` (once: token, `uid_salt`, `token_sha256`) · `rotate-token` (both print only) |
 | Run (planned) | `uv run python -m milchglas refresh` (one idempotent run) · `--loop --interval 900` (refresher) |
 | Gates | commit stage `python3 scripts/gates.py` · push stage `python3 scripts/gates.py run --hook-stage pre-push --all-files` — green means both |
@@ -63,7 +64,8 @@ there), `config.py` (loader, minimal digest reader), `state.py` (atomic writes, 
 - **No private content anywhere.** Titles, descriptions, locations and attendees never
   reach disk, logs, metrics, exception messages or test output. Reduce each event to
   `(start, end, tentative, allday)` immediately after parsing. Tests grep the feed and
-  every log line for fixture titles.
+  every log line for fixture titles, and GATE-21 fails when `src/` names a content
+  property such as `SUMMARY` at all (only ATTENDEE's PARTSTAT is read).
 - **Redaction lives only in Milchglas.** Never rely on the server's `CLASS`; a
   `CLASS:PRIVATE` event that reaches Milchglas still produces a block (the read-only
   service user never receives one; confidential ones arrive stripped, spec D-3).

@@ -86,6 +86,7 @@ ref at most, so this entry reads git's own list and scans every ref of a push
 | Format | `uv run ruff format` |
 | Type-check (strict, blocking) | `uv run mypy` |
 | Type-check (advisory) | `uv run ty check` |
+| Mutation testing (advisory) | `uv run --group mutation mutmut run` · survivors: `uv run --group mutation mutmut results` |
 | All local gates (commit stage, then push stage) | `python3 scripts/gates.py` · `python3 scripts/gates.py run --hook-stage pre-push --all-files` |
 
 Always call the Python tools through `uv run`: the lock file pins the exact versions
