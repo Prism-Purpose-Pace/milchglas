@@ -184,6 +184,18 @@ fail_under = 90
 show_missing = true
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
 
+# ---------------------------------------------------------------------------
+# mutmut — mutation testing, advisory (.github/workflows/mutation.yml)
+# ---------------------------------------------------------------------------
+[tool.mutmut]
+source_paths = ["src/milchglas/"]
+# The purity test reads core/'s imports, and mutmut's trampolines add their own there.
+pytest_add_cli_args = ["--no-cov", "--ignore=tests/unit/test_core_purity.py"]
+pytest_add_cli_args_test_selection = ["tests/unit"]
+use_git_change_detection = false
+# The one file the unit tests read beside the package.
+also_copy = ["config.example.json"]
+
 [dependency-groups]
 dev = [
     "hypothesis>=6.168.0",
@@ -192,4 +204,7 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.16.7",
     "ty>=0.0.80",
+]
+mutation = [
+    "mutmut>=3.8.0",
 ]

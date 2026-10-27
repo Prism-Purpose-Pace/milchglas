@@ -24,6 +24,7 @@ Toolchain rationale: [TOOLING.md](TOOLING.md).
 | Test | `uv run pytest` (branch coverage ≥ 90 %; `contract` tests excluded) · single: `uv run pytest --no-cov tests/unit/test_package.py` · contract only: `uv run pytest -m contract --no-cov` |
 | Lint / format | `uv run ruff check` · `uv run ruff format` |
 | Type-check | `uv run mypy` (strict, blocking) · advisory: `uv run ty check` |
+| Mutation (advisory) | `uv run --group mutation mutmut run` · survivors: `uv run --group mutation mutmut results` |
 | Token | `uv run python -m milchglas init` (once: token, `uid_salt`, `token_sha256`) · `rotate-token` (both print only) |
 | Run (planned) | `uv run python -m milchglas refresh` (one idempotent run) · `--loop --interval 900` (refresher) |
 | Gates | commit stage `python3 scripts/gates.py` · push stage `python3 scripts/gates.py run --hook-stage pre-push --all-files` — green means both |
