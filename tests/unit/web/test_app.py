@@ -150,6 +150,9 @@ def test_every_miss_is_the_identical_404_web_2_web_9(site: Site, method: str, pa
     app = site.app()
     baseline = call(app, method, "/no/such/path")
     assert baseline[0] == "404 Not Found"
+    # Every other check compares with this baseline, so the baseline itself is pinned here.
+    assert baseline[2] == (b"" if method == "HEAD" else b"Not Found\n")
+    assert header(baseline, "Content-Length") == "10"
     assert header(baseline, "X-Content-Type-Options") == "nosniff"
     assert header(baseline, "Cache-Control") == "private, max-age=0"
     assert header(baseline, "Server") is None
@@ -327,6 +330,15 @@ def test_health_follows_the_last_success_web_5(site: Site, recorded: State, stat
     assert response[0] == status
     assert response[2] == b""
     assert header(response, "Content-Length") == "0"
+
+
+def test_health_reads_the_wall_clock_without_an_injected_one_web_5(site: Site) -> None:
+    # Production builds the app without a clock (wsgi.create); every other test injects one.
+    app = FeedApp(var_dir=site.var, config=site.config)
+    write_state(site.var, State(datetime.now(UTC) - timedelta(minutes=5), None))
+    assert call(app, "GET", "/healthz")[0] == "200 OK"
+    write_state(site.var, State(datetime.now(UTC) - timedelta(hours=2), None))
+    assert call(app, "GET", "/healthz")[0] == "503 Service Unavailable"
 
 
 @pytest.mark.parametrize("content", [None, b"", b"{", b"[]"])
