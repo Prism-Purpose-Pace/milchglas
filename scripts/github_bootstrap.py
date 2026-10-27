@@ -5,8 +5,7 @@
 """Apply the GitHub repository settings that files in .github/ cannot express.
 
 Security features, workflow-token permissions, the default-branch ruleset, labels
-and the Projects v2 board with its Priority field - idempotent, so re-running converges instead of
-duplicating. Needs `gh auth login` with the `repo` and `project` scopes
+and the Projects v2 board - idempotent, so re-running converges instead of duplicating. Needs `gh auth login` with the `repo` and `project` scopes
 (`gh auth refresh -s project`). Preview with --dry-run.
 """
 
@@ -45,12 +44,18 @@ RULESET_NAME = "main"
 REVIEW_RULESET_NAME = "review"
 TAG_RULESET_NAME = "tags"
 PROJECT_TITLE = "Milchglas"
-# Issue priority is this single-select project field; there are no priority labels.
-PRIORITIES = ("High", "Medium", "Low")
+# Issue priority is the organization's issue field `Priority`, set on the issue itself;
+# there are no priority labels and no project field of that name.
 # GitHub's default labels (bug, enhancement, documentation, good first issue, ...) stay.
 LABELS = (
     ("needs-triage", "fbca04", "New issue, not yet assessed"),
     ("blocked", "b60205", "Waiting on something outside this issue"),
+    ("maintainer-action", "e99695", "Needs the maintainer's accounts, hands or platform"),
+    (
+        "later",
+        "bfd4f2",
+        "Not MVP: spec backlog (section 12) or out-of-scope work; needs a maintainer decision",
+    ),
     ("security", "d93f0b", "Hardening; report vulnerabilities privately (SECURITY.md)"),
     ("dependencies", "0366d6", "Dependency updates"),
     ("ci", "5319e7", "Workflows, gates and tooling"),
@@ -287,19 +292,6 @@ def _ensure_project(step: Step, owner: str, repo: str, runner: Runner) -> None:
         number = json.loads(runner(step.argv, None))["number"]
     # `gh project link --repo` takes the bare repository name; the owner comes from --owner.
     runner(["gh", "project", "link", str(number), "--owner", owner, "--repo", repo], None)
-    listing = runner(
-        ["gh", "project", "field-list", str(number), "--owner", owner, "--format", "json"], None
-    )
-    fields: list[dict[str, Any]] = json.loads(listing or "{}").get("fields", [])
-    if not any(f.get("name") == "Priority" for f in fields):
-        runner(
-            [
-                "gh", "project", "field-create", str(number), "--owner", owner,
-                "--name", "Priority", "--data-type", "SINGLE_SELECT",
-                "--single-select-options", ",".join(PRIORITIES),
-            ],
-            None,
-        )  # fmt: skip
 
 
 def apply(steps: Sequence[Step], owner: str, repo: str, runner: Runner) -> None:
