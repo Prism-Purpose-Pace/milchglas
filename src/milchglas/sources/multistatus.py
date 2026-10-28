@@ -8,8 +8,11 @@ one character, and each object is unfolded on its bytes before icalendar decodes
 """
 
 import hashlib
+import logging
 import re
+import warnings
 from collections.abc import Collection
+from datetime import datetime
 from io import BytesIO
 from typing import ClassVar, NoReturn, override
 from xml.parsers import expat
@@ -17,9 +20,12 @@ from zoneinfo import ZoneInfo
 
 from icalendar import Calendar, Component, vText
 from icalendar.prop.factory import TypesFactory
+from icalendar.timezone import tzp
 
 from milchglas.core.model import Block
 from milchglas.core.reduce import MalformedEventError, Skip, reduce_event
+
+_LOG = logging.getLogger(__name__)
 
 _MULTISTATUS = "DAV: multistatus"
 _RESPONSE = "DAV: response"
@@ -34,6 +40,11 @@ _OK = re.compile(rb"\s*HTTP/\d\.\d 200\b")
 # Left in an instance, these mean the server did not expand it; while local expansion
 # is off, every later instance would be a free slot (FR-2, Q-14).
 _UNEXPANDED = ("RRULE", "RDATE")
+_TIMES = ("DTSTART", "DTEND")  # the times reduce_event reads
+# RFC 5545 section 3.1: a component name is an iana-token or x-name.
+_NAME = re.compile(r"[A-Za-z0-9-]+")
+# One object per response: a second calendar-data would replace the first unseen.
+_TWICE = "more than one calendar-data in a response"
 
 
 class _TextDuration(TypesFactory):
@@ -71,6 +82,9 @@ def parse(
     """
     blocks: list[Block] = []
     for href, data in _Answer(body, status).read():
+        # An href names the calendar and the event file, so only its hash is shown (NFR-P4).
+        where = f"calendar {calendar}, object {hashlib.sha256(href).hexdigest()[:16]}"
+        failure = None
         try:
             for event in _events(data):
                 duration = event.get("DURATION")
@@ -80,40 +94,71 @@ def parse(
                     owner_emails=owner_emails,
                     duration=None if duration is None else str(duration),
                 )
-                if not isinstance(block, Skip):
+                if block is Skip.NEGATIVE:
+                    _LOG.warning("%s: ends before it starts, dropped", where)
+                elif not isinstance(block, Skip):
                     blocks.append(block)
         except MalformedEventError as error:
-            # An href names the calendar and the event file, so only its hash is shown;
-            # the reasons are this package's own texts, which quote no value (NFR-P4).
-            digest = hashlib.sha256(href).hexdigest()[:16]
-            msg = f"calendar {calendar}, object {digest}: {error}"
-            raise MalformedEventError(msg) from None
+            failure = str(error)  # this package's own texts, which quote no value
+        if failure is not None:
+            # Raised outside the except block, so no library exception stays attached.
+            msg = f"{where}: {failure}"
+            raise MalformedEventError(msg)
     return blocks
 
 
 def _events(data: bytes | None) -> list[Component]:
-    """The VEVENTs of one object, or MalformedEventError if the parser reports any error."""
+    """The VEVENTs of one object, or MalformedEventError if any of them cannot be trusted."""
     if data is None:
         msg = "no calendar-data with status 200"
         raise MalformedEventError(msg)
+    events = [component for component in _components(data) if component.name == "VEVENT"]
+    if any(name in event for event in events for name in _UNEXPANDED):
+        msg = "an instance is not expanded"
+        raise MalformedEventError(msg)
+    for event in events:
+        for name in _TIMES:
+            value = getattr(event.get(name), "dt", None)
+            # Any IANA, Windows or vendor TZID resolves to zoneinfo. Only a zone the object
+            # defines itself runs through dateutil, whose rules a hostile VTIMEZONE can make
+            # spin for hours; it fails before reduce_event asks it for an offset.
+            if isinstance(value, datetime) and not isinstance(value.tzinfo, ZoneInfo | None):
+                msg = f"{name} has a TZID outside the IANA database"
+                raise MalformedEventError(msg)
+    return events
+
+
+def _components(data: bytes) -> list[Component]:
+    """Every component of one object, or MalformedEventError if icalendar reports any error."""
+    components: list[Component] = []
     try:
-        # Bytes, never str: icalendar reads a str without a line break as a file path.
-        components = _Calendar.from_ical(_FOLD.sub(b"", data)).walk()
+        # Its warnings quote raw values, such as a TZID it had to guess.
+        with warnings.catch_warnings(action="ignore"):
+            # Bytes, never str: icalendar reads a str without a line break as a file path.
+            components = _Calendar.from_ical(_FOLD.sub(b"", data)).walk()
     except Exception as error:
         # Untrusted input: icalendar fails with ValueError, TypeError, AttributeError,
         # AssertionError, OverflowError and OSError among others, and its messages quote
         # the value. Whatever the class, the object is unparsable (Q-14, PARSE-9).
-        msg = f"unparsable ({type(error).__name__})"
-        raise MalformedEventError(msg) from None
+        failure = f"unparsable ({type(error).__name__})"
+    else:
+        failure = ""
+    finally:
+        # icalendar keeps every zone an object defines in one cache for the whole process,
+        # where the first definition of a TZID wins for every later object and run.
+        tzp.use_zoneinfo()
+    if failure:
+        # Raised outside the except block, so the library's exception does not stay attached.
+        raise MalformedEventError(failure)
     # In lenient mode icalendar keeps a broken value and only lists the error (Q-14).
     if any(component.errors for component in components):
-        msg = "the parser reported an error"
-        raise MalformedEventError(msg)
-    events = [component for component in components if component.name == "VEVENT"]
-    if any(name in event for event in events for name in _UNEXPANDED):
-        msg = "an instance is not expanded"
-        raise MalformedEventError(msg)
-    return events
+        failure = "the parser reported an error"
+    # "BEGIN:VEVENT " becomes a component named "VEVENT ", with no error listed.
+    elif not all(_NAME.fullmatch(component.name or "") for component in components):
+        failure = "a component name outside RFC 5545"
+    if failure:
+        raise MalformedEventError(failure)
+    return components
 
 
 class _Answer:
@@ -144,9 +189,10 @@ class _Answer:
         try:
             parser.ParseFile(BytesIO(self.body))
         except expat.ExpatError as error:
-            msg = f"not well-formed XML ({expat.ErrorString(error.code)})"
-            raise self.refused(msg) from None
-        return self.found
+            reason = f"not well-formed XML ({expat.ErrorString(error.code)})"
+        else:
+            return self.found
+        raise self.refused(reason)
 
     def refused(self, reason: str) -> ParseError:
         return ParseError(reason, status=self.status, size=len(self.body))
@@ -172,6 +218,8 @@ class _Answer:
     def end(self, name: str) -> None:
         self.path.pop()
         if name == _DATA:
+            if self.data is not None:
+                raise self.refused(_TWICE)
             self.data = self.captured()
         elif name == _HREF and self.path[-1:] == [_RESPONSE]:
             self.href = self.captured()
@@ -179,6 +227,8 @@ class _Answer:
             self.state = self.captured()
         elif name == _PROPSTAT:
             if self.data is not None and _OK.match(self.state):
+                if self.kept is not None:
+                    raise self.refused(_TWICE)
                 self.kept = self.data
             self.data, self.state = None, b""
         elif name == _RESPONSE:
@@ -187,6 +237,10 @@ class _Answer:
 
     def captured(self) -> bytes:
         """The bytes of the element that just closed, as the server sent them."""
-        text = "".join(self.chunks or ()).encode("latin-1")
+        text = "".join(self.chunks or ())
         self.chunks = None
-        return text
+        if max(text, default="") > "\xff":
+            # A character reference such as &#8364; stands for no byte the server sent.
+            msg = "a character reference beyond Latin-1"
+            raise self.refused(msg)
+        return text.encode("latin-1")

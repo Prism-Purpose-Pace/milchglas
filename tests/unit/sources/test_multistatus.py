@@ -10,8 +10,10 @@ and an audit hook records every file the process opens while it reads an answer.
 import hashlib
 import logging
 import re
+import signal
 import sys
-from collections.abc import Collection
+from collections.abc import Collection, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from icalendar import Component
+from icalendar.timezone import tzp
 from pytest_bdd import given, parsers, scenario, then, when
 
 from milchglas.core.model import Block, TimedBlock
@@ -398,7 +401,7 @@ def error_holds_nothing(world: World) -> None:
     assert "BBX" not in str(world.error)
     # The library's message is gone, not only hidden behind ours.
     assert world.error.__cause__ is None
-    assert world.error.__context__ is None or world.error.__suppress_context__
+    assert world.error.__context__ is None
 
 
 @then("reading fails as a refused declaration")
@@ -429,7 +432,7 @@ def fails_as_malformed_event(world: World, href: str) -> None:
 def nothing_holds(world: World, values: str) -> None:
     assert world.error is not None
     assert world.error.__cause__ is None
-    assert world.error.__context__ is None or world.error.__suppress_context__
+    assert world.error.__context__ is None
     for value in re.findall(r'"([^"]+)"', values):
         assert value not in str(world.error)
         assert not any(value in line for line in world.logged)
@@ -442,3 +445,148 @@ def test_parse_2_reads_calendar_data_only_from_a_200_propstat() -> None:
     body = answer(response(HREF, None, propstat(data, NOT_FOUND)))
     with pytest.raises(MalformedEventError, match="no calendar-data with status 200"):
         multistatus.parse(body, calendar=1, status=207, tz=ZoneInfo("UTC"), owner_emails=())
+
+
+# --- Security regressions (review of 2026-10-28); plain tests, no scenario of their own ---
+
+
+def parse_one(data: bytes, href: str = HREF) -> list[Block]:
+    return multistatus.parse(
+        answer(response(href, data)),
+        calendar=1,
+        status=207,
+        tz=ZoneInfo("Europe/Berlin"),
+        owner_emails=(),
+    )
+
+
+def zoned(zone: bytes, *rules: bytes) -> bytes:
+    """An object whose event lives in a zone that the object defines itself."""
+    return (
+        b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTIMEZONE\r\nTZID:BBX-zone\r\n"
+        + zone
+        + b"END:VTIMEZONE\r\nBEGIN:VEVENT\r\nUID:ev-1@example.org\r\n"
+        b"DTSTART;TZID=BBX-zone:20261102T080000\r\nDTEND;TZID=BBX-zone:20261102T090000\r\n"
+        + b"".join(rules)
+        + b"END:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+
+
+def standard(offset: bytes, rule: bytes = b"") -> bytes:
+    return (
+        b"BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\n"
+        + rule
+        + b"TZOFFSETFROM:"
+        + offset
+        + b"\r\nTZOFFSETTO:"
+        + offset
+        + b"\r\nEND:STANDARD\r\n"
+    )
+
+
+@contextmanager
+def deadline(seconds: int) -> Iterator[None]:
+    def expire(*_args: object) -> None:
+        msg = f"still running after {seconds} s"
+        raise TimeoutError(msg)
+
+    previous = signal.signal(signal.SIGALRM, expire)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        HEAD + b"<d:response><d:href>BBX-&#8364;</d:href></d:response></d:multistatus>",
+        answer(response(HREF, None, propstat(b"<d:getetag/>", b"BBX-&#8364;"))),
+        answer(response(HREF, vcalendar(b"SUMMARY:BBX-&#8364;"))).replace(
+            b"&amp;#8364;", b"&#8364;"
+        ),
+    ],
+    ids=["href", "status", "calendar-data"],
+)
+def test_parse_8_character_beyond_latin_1_fails_without_quoting_it(body: bytes) -> None:
+    """A reference such as &#8364; has no byte to stand for; the read fails, quoting nothing."""
+    with pytest.raises(multistatus.ParseError) as caught:
+        multistatus.parse(body, calendar=1, status=207, tz=ZoneInfo("UTC"), owner_emails=())
+    assert "BBX" not in str(caught.value)
+    assert "\u20ac" not in str(caught.value)
+    assert caught.value.__context__ is None
+
+
+def test_parse_11_zone_defined_in_the_object_fails_at_once() -> None:
+    """A VTIMEZONE of its own runs through dateutil, whose rules can spin for hours.
+
+    Every IANA, Windows and vendor TZID resolves to zoneinfo; only a zone the object
+    defines does not. That zone fails the read before any of its rules is evaluated.
+    """
+    dense = standard(b"+0100", b"RRULE:FREQ=SECONDLY\r\n")
+    with deadline(5), pytest.raises(MalformedEventError, match="outside the IANA"):
+        parse_one(zoned(dense))
+
+
+def test_parse_11_zone_of_one_object_never_reads_another() -> None:
+    """icalendar caches a zone process-wide by TZID: the first definition would win."""
+    with pytest.raises(MalformedEventError):
+        parse_one(zoned(standard(b"+0100")))
+    assert tzp.timezone("BBX-zone") is None  # the answer left no zone behind
+    later = vcalendar(
+        b"DTSTART;TZID=BBX-zone:20261102T080000", b"DTEND;TZID=BBX-zone:20261102T090000"
+    )
+    with pytest.raises(MalformedEventError, match="unknown TZID"):
+        parse_one(later)
+
+
+def test_parse_11_vendor_tzid_reads_without_a_warning(capsys: pytest.CaptureFixture[str]) -> None:
+    """icalendar warns about a guessed vendor TZID and quotes it; the guess itself is right."""
+    tzid = b"/BBX-vendor.example/20050126_1/Europe/Berlin"
+    event = vcalendar(
+        b"DTSTART;TZID=" + tzid + b":20261102T090000", b"DTEND;TZID=" + tzid + b":20261102T100000"
+    )
+    assert parse_one(event) == [TimedBlock(utc("2026-11-02 08:00"), utc("2026-11-02 09:00"))]
+    assert "BBX" not in capsys.readouterr().err
+
+
+def test_parse_11_vevent_with_a_trailing_blank_fails_the_read() -> None:
+    """icalendar names the component "VEVENT " and records no error; the event would vanish."""
+    data = vcalendar(b"DTSTART:20261102T080000Z", b"DTEND:20261102T090000Z")
+    with pytest.raises(MalformedEventError, match="component name"):
+        parse_one(data.replace(b"BEGIN:VEVENT\r\n", b"BEGIN:VEVENT \r\n"))
+
+
+@pytest.mark.parametrize("shape", ["one propstat", "two propstats"])
+def test_parse_2_second_calendar_data_in_a_response_fails_the_read(shape: str) -> None:
+    """Only one object per response; the second would replace the first unseen."""
+    first, second = (
+        b"<cal:calendar-data>"
+        + vcalendar(
+            b"DTSTART:202611" + day + b"T080000Z", b"DTEND:202611" + day + b"T090000Z"
+        ).replace(b"\r", b"&#13;")
+        + b"</cal:calendar-data>"
+        for day in (b"02", b"03")
+    )
+    props = (
+        [propstat(first + second)]
+        if shape == "one propstat"
+        else [propstat(first), propstat(second)]
+    )
+    body = answer(response(HREF, None, *props))
+    with pytest.raises(multistatus.ParseError, match="more than one calendar-data"):
+        multistatus.parse(body, calendar=1, status=207, tz=ZoneInfo("UTC"), owner_emails=())
+
+
+def test_parse_16_event_ending_before_it_starts_is_dropped_with_a_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """reduce drops it and leaves the warning to its caller; the warning names no value."""
+    data = vcalendar(b"DTSTART:20261102T080000Z", b"DTEND:20261102T070000Z", b"SUMMARY:BBX-x")
+    with caplog.at_level(logging.WARNING, logger="milchglas.sources.multistatus"):
+        assert parse_one(data) == []
+    [record] = caplog.records
+    digest = hashlib.sha256(HREF.encode()).hexdigest()[:16]
+    assert record.getMessage() == f"calendar 1, object {digest}: ends before it starts, dropped"
