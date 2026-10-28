@@ -1,5 +1,6 @@
 """check_public_tree.py: private paths and denylisted terms never reach the public tree."""
 
+import errno
 import io
 import os
 import shutil
@@ -202,16 +203,24 @@ def test_private_use_or_unassigned_code_point_does_not_hide_a_term(code_point: i
     assert cpt.term_violations("a.md", text, PATTERNS) == [cpt.Hit("a.md", 1, 0)]
 
 
-def test_unreadable_file_is_reported_not_crashed(tmp_path: Path) -> None:
+def test_unreadable_file_is_reported_not_crashed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # chmod(0) does not keep root out, so the read itself fails: the same except branch
+    # runs whoever runs the suite.
     locked = tmp_path / "locked.md"
     locked.write_text("fine\n", encoding="utf-8")
-    locked.chmod(0)
-    try:
-        assert cpt.run(["locked.md"], PATTERNS, tmp_path) == [
-            "locked.md: unreadable, cannot be checked"
-        ]
-    finally:
-        locked.chmod(0o600)
+    read_bytes = Path.read_bytes
+
+    def deny(self: Path) -> bytes:
+        if self == locked:
+            raise PermissionError(errno.EACCES, "denied")
+        return read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", deny)
+    assert cpt.run(["locked.md"], PATTERNS, tmp_path) == [
+        "locked.md: unreadable, cannot be checked"
+    ]
 
 
 def test_ci_scans_only_the_commits_a_change_adds() -> None:
