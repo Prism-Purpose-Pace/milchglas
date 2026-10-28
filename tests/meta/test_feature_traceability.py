@@ -10,14 +10,16 @@ scenario under `tests/features/`:
 - tags: exactly one catalogue-shaped tag among its own, its rule's and its feature's tags
   (pytest-bdd applies all three), and that tag is a row ID.
 - unbound: a function under `tests/` binds it as `@scenario("<path>", "<name>")`, both
-  arguments literal strings and the path relative to `tests/features/`.
+  arguments literal strings and the path relative to `tests/features/`; a scenario tagged
+  `@backlog` (specified, not built yet) may stay unbound, and the hook skips it when bound.
 - bound_twice: no second function binds it.
 - misnamed: the binding function is `test_<id>` or `test_<id>_…`, the ID lower-cased with
   dashes as underscores, so pytest collects it and GATE-17 counts it as a citation.
 
 A binding the check cannot read (`scenarios()`, a computed path) leaves its scenario
 unbound, so the gap is reported, never hidden. The hook in `tests/conftest.py` keeps the
-ID tags out of the markers; any other tag still meets `--strict-markers`.
+ID tags and the feature's `@id:<ticket>` out of the markers; any other tag still meets
+`--strict-markers`.
 """
 
 import ast
@@ -35,17 +37,16 @@ type Key = tuple[str, str]  # (path under tests/features/, scenario name)
 type Problems = dict[str, list[str]]
 
 
-def scenario_ids(root: Path) -> dict[Key, list[str]]:
-    """The catalogue-shaped tags of every scenario, its rule's and its feature's included."""
+def scenario_tags(root: Path) -> dict[Key, set[str]]:
+    """The tags of every scenario, its rule's and its feature's included."""
     base = root / FEATURES
-    found: dict[Key, list[str]] = {}
+    found: dict[Key, set[str]] = {}
     for path in sorted(base.rglob("*.feature")):
         relative = path.relative_to(base).as_posix()
         feature = FeatureParser(str(base), relative).parse()
         for name, template in feature.scenarios.items():
             rule = template.rule.tags if template.rule else set()
-            tags = template.tags | rule | feature.tags
-            found[relative, name] = sorted(tag for tag in tags if CATALOGUE_ID.fullmatch(tag))
+            found[relative, name] = template.tags | rule | feature.tags
     return found
 
 
@@ -73,7 +74,10 @@ def bindings(root: Path) -> list[tuple[Key, str]]:
 
 def problems(root: Path) -> Problems:
     rows = parse_catalogue((root / CATALOGUE).read_text(encoding="utf-8"))
-    ids = scenario_ids(root)
+    tags = scenario_tags(root)
+    ids = {
+        key: sorted(t for t in found if CATALOGUE_ID.fullmatch(t)) for key, found in tags.items()
+    }
     bound: dict[Key, list[str]] = {key: [] for key in ids}
     for key, function in bindings(root):
         if key in bound:  # a binding to no scenario: pytest-bdd itself refuses it at import
@@ -90,7 +94,11 @@ def problems(root: Path) -> Problems:
         "tags": [
             label(key) for key, found in ids.items() if len(found) != 1 or found[0] not in rows
         ],
-        "unbound": [label(key) for key, functions in bound.items() if not functions],
+        "unbound": [
+            label(key)
+            for key, functions in bound.items()
+            if not functions and "backlog" not in tags[key]
+        ],
         "bound_twice": [label(key) for key, functions in bound.items() if len(functions) > 1],
         "misnamed": [
             f"{label(key)}: {function}"
@@ -190,6 +198,25 @@ def test_scenario_nobody_binds_is_reported(tmp_path: Path, bindings: str) -> Non
     ]
 
 
+@pytest.mark.parametrize(
+    "feature",
+    [
+        FEATURE.replace("    @ALPHA-1\n", "    @backlog @ALPHA-1\n"),
+        FEATURE.replace("  Rule: One rule", "  @backlog\n  Rule: One rule"),
+        FEATURE.replace("Feature: Sample", "@backlog\nFeature: Sample"),
+    ],
+    ids=["own-tag", "from-rule", "from-feature"],
+)
+def test_backlog_scenario_nobody_binds_is_silent(tmp_path: Path, feature: str) -> None:
+    bindings = BINDINGS.split("\n\n\n")[1]
+    assert problems(features(tmp_path, feature, bindings))["unbound"] == []
+
+
+def test_ticket_tag_is_no_catalogue_id(tmp_path: Path) -> None:
+    feature = FEATURE.replace("Feature: Sample", "@id:23\nFeature: Sample")
+    assert problems(features(tmp_path, feature))["tags"] == []
+
+
 def test_scenario_bound_twice_is_reported(tmp_path: Path) -> None:
     root = features(tmp_path)
     (root / "tests/unit/test_again.py").write_text(
@@ -213,11 +240,22 @@ def test_binding_whose_name_does_not_lead_with_the_id_is_reported(
 # --- the marker hook ---------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("tag", ["ALPHA-1", "BETA-SUB-1", "AREA-12"])
+def _bound() -> None: ...
+
+
+@pytest.mark.parametrize("tag", ["ALPHA-1", "BETA-SUB-1", "AREA-12", "id:23"])
 def test_id_tag_is_no_marker(tag: str) -> None:
-    assert pytest_bdd_apply_tag(tag) is True
+    assert pytest_bdd_apply_tag(tag, _bound) is True
+    assert not hasattr(_bound, "pytestmark")
 
 
-@pytest.mark.parametrize("tag", ["slow", "backlog", "alpha-1", "ALPHA", "ALPHA-1x"])
+def test_backlog_tag_skips_the_scenario() -> None:
+    def bound() -> None: ...
+
+    assert pytest_bdd_apply_tag("backlog", bound) is True
+    assert [mark.name for mark in getattr(bound, "pytestmark", [])] == ["skip"]
+
+
+@pytest.mark.parametrize("tag", ["slow", "alpha-1", "ALPHA", "ALPHA-1x", "id", "backlogged"])
 def test_other_tag_stays_a_marker(tag: str) -> None:
-    assert pytest_bdd_apply_tag(tag) is None
+    assert pytest_bdd_apply_tag(tag, _bound) is None

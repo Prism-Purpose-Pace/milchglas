@@ -7,6 +7,7 @@ failing example reproduces from the printed blob. HYPOTHESIS_PROFILE overrides e
 import os
 import re
 import time
+from collections.abc import Callable
 
 import pytest
 from hypothesis import settings
@@ -35,10 +36,15 @@ def _no_inherited_git_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name)
 
 
-def pytest_bdd_apply_tag(tag: str) -> bool | None:
-    """Keep a scenario's catalogue ID out of the markers (GATE-22).
+def pytest_bdd_apply_tag(tag: str, function: Callable[..., object]) -> bool | None:
+    """Give the feature-file tags that are no markers their meaning (GATE-22).
 
-    The ID tag names the scenario's catalogue row, so `--strict-markers` must not refuse it.
-    Any other tag stays a marker and has to be registered in `pyproject.toml`.
+    A catalogue ID names the scenario's row and `@id:<ticket>` the feature's ticket, so
+    `--strict-markers` must not refuse them. `@backlog` marks a scenario as specified but not
+    built yet: it is skipped. Any other tag stays a marker and has to be registered in
+    `pyproject.toml`.
     """
-    return True if CATALOGUE_ID.fullmatch(tag) else None
+    if tag == "backlog":
+        pytest.mark.skip(reason="@backlog: specified, not built yet")(function)
+        return True
+    return True if CATALOGUE_ID.fullmatch(tag) or tag.startswith("id:") else None
