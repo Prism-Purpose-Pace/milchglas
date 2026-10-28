@@ -1,7 +1,7 @@
 # Tooling — `python` stack
 
 **Single version source:** every Python tool (ruff, mypy, ty, pytest, pytest-cov,
-hypothesis) is an entry of the `dev` dependency group, pinned by `uv.lock`. mutmut, which
+pytest-bdd, hypothesis) is an entry of the `dev` dependency group, pinned by `uv.lock`. mutmut, which
 only the weekly mutation run needs, sits in the `mutation` group of the same lock, so a
 plain `uv sync` stays lean. Hooks and CI call them via `uv run --frozen`, so hook,
 terminal and CI run the identical version.
