@@ -7,6 +7,7 @@ one character, and each object is unfolded on its bytes before icalendar decodes
 (RFC 5545 section 3.1, NFR-C1).
 """
 
+import hashlib
 import re
 from collections.abc import Collection
 from io import BytesIO
@@ -14,13 +15,15 @@ from typing import ClassVar, NoReturn, override
 from xml.parsers import expat
 from zoneinfo import ZoneInfo
 
-from icalendar import Calendar, vText
+from icalendar import Calendar, Component, vText
 from icalendar.prop.factory import TypesFactory
 
 from milchglas.core.model import Block
-from milchglas.core.reduce import Skip, reduce_event
+from milchglas.core.reduce import MalformedEventError, Skip, reduce_event
 
 _MULTISTATUS = "DAV: multistatus"
+_RESPONSE = "DAV: response"
+_HREF = "DAV: href"
 _DATA = "urn:ietf:params:xml:ns:caldav calendar-data"
 # A line break followed by one space or tab continues the line (RFC 5545 section 3.1);
 # sabre writes CRLF in expanded answers and LF in unexpanded ones (NFR-C1).
@@ -52,35 +55,67 @@ class ParseError(Exception):
         super().__init__(f"HTTP {status}, {size} bytes: {reason}")
 
 
-def parse(body: bytes, *, status: int, tz: ZoneInfo, owner_emails: Collection[str]) -> list[Block]:
-    """The busy blocks of every object in one calendar's multistatus `body`."""
+def parse(
+    body: bytes, *, calendar: int, status: int, tz: ZoneInfo, owner_emails: Collection[str]
+) -> list[Block]:
+    """The busy blocks of every object in one calendar's multistatus `body`.
+
+    Q-14 is decided here, before `reduce_event` sees an event: an object the parser reports
+    any error for fails the read, even a cancelled one whose times reduce never reads.
+    """
     blocks: list[Block] = []
-    for data in _Answer(body, status).read():
-        # Bytes, never str: icalendar reads a str without a line break as a file path.
-        for event in _Calendar.from_ical(_FOLD.sub(b"", data)).walk("VEVENT"):
-            duration = event.get("DURATION")
-            block = reduce_event(
-                event,
-                tz=tz,
-                owner_emails=owner_emails,
-                duration=None if duration is None else str(duration),
-            )
-            if not isinstance(block, Skip):
-                blocks.append(block)
+    for href, data in _Answer(body, status).read():
+        try:
+            for event in _events(data):
+                duration = event.get("DURATION")
+                block = reduce_event(
+                    event,
+                    tz=tz,
+                    owner_emails=owner_emails,
+                    duration=None if duration is None else str(duration),
+                )
+                if not isinstance(block, Skip):
+                    blocks.append(block)
+        except MalformedEventError as error:
+            # An href names the calendar and the event file, so only its hash is shown;
+            # the reasons are this package's own texts, which quote no value (NFR-P4).
+            digest = hashlib.sha256(href).hexdigest()[:16]
+            msg = f"calendar {calendar}, object {digest}: {error}"
+            raise MalformedEventError(msg) from None
     return blocks
 
 
+def _events(data: bytes) -> list[Component]:
+    """The VEVENTs of one object, or MalformedEventError if the parser reports any error."""
+    try:
+        # Bytes, never str: icalendar reads a str without a line break as a file path.
+        components = _Calendar.from_ical(_FOLD.sub(b"", data)).walk()
+    except Exception as error:
+        # Untrusted input: icalendar fails with ValueError, TypeError, AttributeError,
+        # AssertionError, OverflowError and OSError among others, and its messages quote
+        # the value. Whatever the class, the object is unparsable (Q-14, PARSE-9).
+        msg = f"unparsable ({type(error).__name__})"
+        raise MalformedEventError(msg) from None
+    # In lenient mode icalendar keeps a broken value and only lists the error (Q-14).
+    if any(component.errors for component in components):
+        msg = "the parser reported an error"
+        raise MalformedEventError(msg)
+    return [component for component in components if component.name == "VEVENT"]
+
+
 class _Answer:
-    """The expat handlers that collect every `calendar-data` of a multistatus as bytes."""
+    """The expat handlers that collect each response's href and `calendar-data` as bytes."""
 
     def __init__(self, body: bytes, status: int) -> None:
         self.body = body
         self.status = status
-        self.found: list[bytes] = []
+        self.found: list[tuple[bytes, bytes]] = []
+        self.path: list[str] = []
         self.chunks: list[str] | None = None
-        self.rooted = False
+        self.href = b""
+        self.data: bytes | None = None
 
-    def read(self) -> list[bytes]:
+    def read(self) -> list[tuple[bytes, bytes]]:
         parser = expat.ParserCreate(encoding="ISO-8859-1", namespace_separator=" ")
         parser.StartDoctypeDeclHandler = self.declaration
         parser.EntityDeclHandler = self.declaration
@@ -103,12 +138,12 @@ class _Answer:
         raise self.refused(msg)
 
     def start(self, name: str, _attributes: dict[str, str]) -> None:
-        if not self.rooted and name != _MULTISTATUS:
+        if not self.path and name != _MULTISTATUS:
             # Any other XML holds no calendar-data and would read as an empty calendar.
             msg = "not a multistatus"
             raise self.refused(msg)
-        self.rooted = True
-        if name == _DATA:
+        self.path.append(name)
+        if name == _DATA or self.path[-2:] == [_RESPONSE, _HREF]:
             self.chunks = []
 
     def text(self, data: str) -> None:
@@ -116,6 +151,17 @@ class _Answer:
             self.chunks.append(data)
 
     def end(self, name: str) -> None:
-        if name == _DATA and self.chunks is not None:
-            self.found.append("".join(self.chunks).encode("latin-1"))
-            self.chunks = None
+        self.path.pop()
+        if name == _DATA:
+            self.data = self.captured()
+        elif name == _HREF and self.path[-1:] == [_RESPONSE]:
+            self.href = self.captured()
+        elif name == _RESPONSE and self.data is not None:
+            self.found.append((self.href, self.data))
+            self.href, self.data = b"", None
+
+    def captured(self) -> bytes:
+        """The bytes of the element that just closed, as the server sent them."""
+        text = "".join(self.chunks or ()).encode("latin-1")
+        self.chunks = None
+        return text

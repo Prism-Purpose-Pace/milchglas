@@ -75,21 +75,21 @@ Feature: Read the calendar server's answer
 
   Rule: An object that does not read cleanly fails the read (Q-14, NFR-P4)
 
-    @backlog @PARSE-11
+    @PARSE-11
     Scenario: A garbage start among valid events fails the read
       Given calendar 1 answers with 3 events, the second at "/calendars/svc/BBX-team/ev-2.ics" starting "BBY-tomorrow"
       When Milchglas reads the answer
       Then reading fails as a malformed event naming calendar 1 and the hash of "/calendars/svc/BBX-team/ev-2.ics"
       And no error or log line holds "BBY-tomorrow", "BBX-team" or "ev-2"
 
-    @backlog @PARSE-11
+    @PARSE-11
     Scenario: A cancelled event with a garbage start still fails the read
       Given calendar 1 answers with a cancelled event at "/calendars/svc/BBX-team/ev-9.ics" starting "BBY-never"
       When Milchglas reads the answer
       Then reading fails as a malformed event naming calendar 1 and the hash of "/calendars/svc/BBX-team/ev-9.ics"
       And no error or log line holds "BBY-never"
 
-    @backlog @PARSE-14
+    @PARSE-14
     Scenario Outline: A duration beyond any date fails the read
       Given calendar 1 answers with an event at "/calendars/svc/BBX-team/ev-4.ics" whose <property> is "-P999999999DT1S"
       When Milchglas reads the answer
