@@ -19,7 +19,8 @@ the same files with:
   order, as pytest-bdd runs them first, but not for the five: novibe caps a Background at four
   steps of its own, which five steps in total would leave no room for.
 - background-form: a Background holds one to four steps, all of them Given.
-- empty-rule: a Rule holds at least one scenario.
+- rule-scenarios: a Rule holds two scenarios or more (novibe: add a Rule once two or more
+  scenarios illustrate it); a single scenario stands without a Rule.
 - restricted-pattern: no name, description or step text names a screen element, a protocol or
   a data format; novibe's linter (gherkin-lint-plus) reads all of them.
 - outline-without-examples, unused-example-column, undefined-variable: an outline has
@@ -61,6 +62,7 @@ ID_TAG = re.compile(r"id:\d+")
 ALLOWED_TAG = re.compile(rf"{ID_TAG.pattern}|backlog|long-running|{CATALOGUE_ID.pattern}")
 MAX_STEPS = 5
 MAX_BACKGROUND = 4
+MIN_RULE_SCENARIOS = 2
 ORDER = {"Context": 0, "Action": 1, "Outcome": 2}  # Given, When, Then
 # novibe's `.gherkin-lintrc` (Global): screen elements and protocols say how, not what.
 # gherkin-lint compiles them case-insensitively.
@@ -244,8 +246,10 @@ def head(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
 def body(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
     """Rules that hold scenarios, backgrounds that hold only a few Givens, and plain names."""
     for rule in parts(feature, "rule"):
-        if not any("scenario" in child for child in rule["children"]):
-            yield at(rule["location"]["line"], "empty-rule", "a Rule without scenarios")
+        count = sum("scenario" in child for child in rule["children"])
+        if count < MIN_RULE_SCENARIOS:
+            message = f"holds {count}, needs 2; a single scenario stands without a Rule"
+            yield at(rule["location"]["line"], "rule-scenarios", message)
     for background in parts(feature, "background"):
         steps = background["steps"]
         if len(steps) > MAX_BACKGROUND or set(kinds(steps)) != {"Context"}:  # empty: set()
@@ -320,6 +324,12 @@ Feature: Sample
       Given a thing
       When it runs
       Then it is done
+
+    @ALPHA-2
+    Scenario: Second
+      Given another thing
+      When it stops
+      Then it is over
 """
 
 
@@ -344,13 +354,15 @@ BAD = {
         GOOD.replace("Given a thing\n", "Given a thing\n      | a | b |\n      | c |\n"),
         [(10, "parse")],
     ),
-    "parse-docstring": (GOOD + '      """\n      open\n', [(13, "parse")]),
+    "parse-docstring": (GOOD + '      """\n      open\n', [(19, "parse")]),
     "parse-language": ("# language: xx\n" + GOOD, [(1, "parse")]),
     "no-scenario-empty": ("", [(1, "no-scenario")]),
     "no-scenario-comment-only": ("# nothing\n", [(1, "no-comments"), (1, "no-scenario")]),
     "no-scenario-misspelt": (
-        GOOD.replace("    @ALPHA-1\n    Scenario:", "    Scenaro:"),
-        [(2, "no-scenario"), (4, "empty-rule")],
+        GOOD.replace("    @ALPHA-1\n    Scenario:", "    Scenaro:").replace(
+            "    @ALPHA-2\n    Scenario:", "    Scenaro:"
+        ),
+        [(2, "no-scenario"), (4, "rule-scenarios")],
     ),
     "parse-misspelt-after-tag": (GOOD.replace("Scenario:", "Scenaro:"), [(7, "parse")]),
     "feature-id-missing": (GOOD.replace("@id:80\n", ""), [(1, "feature-id")]),
@@ -363,13 +375,18 @@ BAD = {
     "tag-rule": (GOOD.replace("  Rule:", "  @wip\n  Rule:"), [(4, "tag-allowed")]),
     "tag-scenario": (GOOD.replace("@ALPHA-1", "@ALPHA-1 @wip"), [(6, "tag-allowed")]),
     "tag-examples": (
-        GOOD.replace("Scenario:", "Scenario Outline:").replace("a thing", "<x>")
-        + "\n      @wip\n      Examples:\n        | x |\n        | 1 |\n",
+        GOOD.replace("Scenario: First", "Scenario Outline: First")
+        .replace("a thing\n", "<x>\n")
+        .replace(
+            "Then it is done\n",
+            "Then it is done\n\n      @wip\n      Examples:\n        | x |\n        | 1 |\n",
+        ),
         [(12, "tag-allowed")],
     ),
     "step-count": (
-        GOOD.replace("Given a thing\n", "Given a thing\n      And a second\n      And a third\n")
-        + "      And more\n",
+        GOOD.replace(
+            "Given a thing\n", "Given a thing\n      And a second\n      And a third\n"
+        ).replace("Then it is done\n", "Then it is done\n      And more\n"),
         [(7, "step-count")],
     ),
     "when-missing": (GOOD.replace("      When it runs\n", ""), [(7, "when-count")]),
@@ -391,7 +408,13 @@ BAD = {
     ),
     "when-in-background": (
         GOOD.replace("  Rule:", "  Background:\n    When it starts\n\n  Rule:"),
-        [(4, "background-form"), (10, "when-count"), (11, "keyword-order")],
+        [
+            (4, "background-form"),
+            (10, "when-count"),
+            (11, "keyword-order"),
+            (16, "when-count"),
+            (17, "keyword-order"),
+        ],
     ),
     "feature-description-missing": (
         GOOD.replace("  A sample.\n", "\n"),
@@ -407,7 +430,13 @@ BAD = {
     ),
     "then-in-the-background": (
         GOOD.replace("  Rule:", "  Background:\n    Then it was ready\n\n  Rule:"),
-        [(4, "background-form"), (11, "keyword-order"), (12, "keyword-order")],
+        [
+            (4, "background-form"),
+            (11, "keyword-order"),
+            (12, "keyword-order"),
+            (17, "keyword-order"),
+            (18, "keyword-order"),
+        ],
     ),
     "background-of-five-steps": (
         GOOD.replace(
@@ -423,12 +452,22 @@ BAD = {
     ),
     "rule-background-with-when": (
         GOOD.replace("    @ALPHA-1\n", "    Background:\n      When it starts\n\n    @ALPHA-1\n"),
-        [(6, "background-form"), (10, "when-count"), (11, "keyword-order")],
+        [
+            (6, "background-form"),
+            (10, "when-count"),
+            (11, "keyword-order"),
+            (16, "when-count"),
+            (17, "keyword-order"),
+        ],
     ),
-    "rule-without-scenario": (GOOD + "\n  Rule: Empty rule\n", [(12, "empty-rule")]),
+    "rule-without-scenario": (GOOD + "\n  Rule: Empty rule\n", [(18, "rule-scenarios")]),
+    "rule-with-one-scenario": (
+        GOOD.split("\n\n    @ALPHA-2", maxsplit=1)[0] + "\n",
+        [(4, "rule-scenarios")],
+    ),
     "rule-with-only-a-background": (
         GOOD + "\n  Rule: Empty rule\n\n    Background:\n      Given a base\n",
-        [(12, "empty-rule")],
+        [(18, "rule-scenarios")],
     ),
     "restricted-in-the-feature-name": (
         GOOD.replace("Sample", "Sample JSON"),
@@ -631,8 +670,8 @@ SECOND = "\n    @ALPHA-2\n    Scenario: First\n      Given a thing\n      When i
 @pytest.mark.parametrize(
     ("text", "line"),
     [
-        (GOOD + SECOND, 13),
-        (GOOD + "\n  Rule: Other rule\n" + SECOND, 15),
+        (GOOD + SECOND, 19),
+        (GOOD + "\n  Rule: Other rule\n" + SECOND + SECOND.replace("First", "Third"), 21),
     ],
     ids=["same-rule", "other-rule"],
 )
@@ -643,7 +682,7 @@ def test_scenario_name_used_twice_is_reported_on_the_second(
 
 
 def test_scenario_names_that_differ_or_sit_in_two_files_are_silent(tmp_path: Path) -> None:
-    other = GOOD + SECOND.replace("First", "Second")
+    other = GOOD + SECOND.replace("First", "Third")
     root = tree(
         tmp_path,
         {
@@ -717,12 +756,12 @@ COMMENT_BAD = {
         GOOD.replace("      When it runs\n", "      # why\n      When it runs\n"),
         [(9, "no-comments")],
     ),
-    "at-the-end": (GOOD + "    # done\n", [(11, "no-comments")]),
+    "at-the-end": (GOOD + "    # done\n", [(17, "no-comments")]),
     "in-an-examples-table": (
         OUTLINE.replace("      | cat   | done  |\n", "      # why\n      | cat   | done  |\n"),
         [(12, "no-comments")],
     ),
-    "two-comments": ("# one\n" + GOOD + "# two\n", [(1, "no-comments"), (12, "no-comments")]),
+    "two-comments": ("# one\n" + GOOD + "# two\n", [(1, "no-comments"), (18, "no-comments")]),
 }
 
 
