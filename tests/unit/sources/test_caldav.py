@@ -19,6 +19,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from http.client import HTTPResponse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BufferedIOBase
 from typing import NoReturn, override
 
 import pytest
@@ -28,6 +29,8 @@ from milchglas.sources.caldav import FetchError, build_opener, fetch
 
 SHORT_TIMEOUT = 0.25  # what reaches the socket; the recorder keeps what `fetch` asked for
 HANG = None  # a script entry: read the request, never answer
+MIB = 2**20
+CHUNK = b"x" * 2**16  # filler: the client must stop by size, before it parses anything
 USER = "svc-milchglas"
 SECRET = "synthetic-app-password"
 CREDENTIALS = "Basic " + base64.b64encode(f"{USER}:{SECRET}".encode()).decode("ascii")
@@ -43,6 +46,10 @@ class World:
     cookies: list[str | None] = field(default_factory=list)
     set_cookie: bool = False
     location: str | None = None
+    body_size: int = 0
+    sent_all: bool | None = None
+    done: threading.Event = field(default_factory=threading.Event)
+    body: bytes | None = field(default=None, repr=False)
     timeouts: list[float] = field(default_factory=list)
     waits: list[float] = field(default_factory=list)
     error: FetchError | None = None
@@ -80,6 +87,12 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Set-Cookie", "nc_session_id=synthetic; Path=/; HttpOnly")
         if world.location:
             self.send_header("Location", world.location)
+        if world.body_size:
+            # No length: the body ends when the server closes the connection.
+            self.end_headers()
+            world.sent_all = _stream(self.wfile, world.body_size)
+            world.done.set()
+            return
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -90,6 +103,15 @@ class _Handler(BaseHTTPRequestHandler):
     @override
     def log_message(self, *args: object) -> None:
         """Keep the server out of the test output."""
+
+
+def _stream(wfile: BufferedIOBase, size: int) -> bool:
+    """Write `size` bytes of filler; False when the client hung up first."""
+    try:
+        wfile.writelines(CHUNK for _ in range(size // len(CHUNK)))
+    except OSError:
+        return False
+    return True
 
 
 class _RecordingOpener:
@@ -152,6 +174,16 @@ def test_orch_fetch_9_first_request_carries_the_credentials() -> None:
 @scenario("caldav/fetch.feature", "A cookie the server sets is not sent back")
 def test_orch_fetch_9_cookie_is_not_sent_back() -> None:
     """The HTTP client keeps no cookies (FR-1): the same opener serves the whole run."""
+
+
+@scenario("caldav/fetch.feature", "An answer over 16 MiB is cut off mid-stream")
+def test_orch_fetch_4_answer_over_16_mib_is_cut_off() -> None:
+    """An endless body must neither exhaust memory nor hold the run (Q-15, T-04)."""
+
+
+@scenario("caldav/fetch.feature", "An answer of exactly 16 MiB is read whole")
+def test_orch_fetch_4_answer_of_16_mib_is_read_whole() -> None:
+    """The limit is 16 MiB, not less (Q-15)."""
 
 
 @scenario("caldav/fetch.feature", "A redirect ends the fetch without following it")
@@ -217,6 +249,18 @@ def server_redirects(world: World, second: World, status: int) -> None:
     world.location = second.url.replace("127.0.0.1", "localhost")
 
 
+@given("the server answers 207 with 64 MiB of calendar data and no length")
+def server_streams_64_mib(world: World) -> None:
+    world.script = [207]
+    world.body_size = 64 * MIB
+
+
+@given("the server answers 207 with 16 MiB of calendar data and no length")
+def server_streams_16_mib(world: World) -> None:
+    world.script = [207]
+    world.body_size = 16 * MIB
+
+
 @given("the server refuses every connection")
 def server_refuses(world: World) -> None:
     with socket.socket() as probe:
@@ -228,7 +272,7 @@ def server_refuses(world: World) -> None:
 @when("the client fetches one calendar")
 def client_fetches(world: World) -> None:
     try:
-        fetch(
+        world.body = fetch(
             world.url,
             user=USER,
             secret=SECRET,
@@ -255,6 +299,25 @@ def fails_naming_status_and_host(world: World, status: int) -> None:
 @then("the second server received no request")
 def second_received_none(second: World) -> None:
     assert second.received == 0
+
+
+@then("the fetch fails naming the 16 MiB limit")
+def fails_naming_limit(world: World) -> None:
+    assert world.error is not None
+    assert "16 MiB" in str(world.error)
+
+
+@then("the fetch succeeds with all 16 MiB")
+def succeeds_with_16_mib(world: World) -> None:
+    assert world.error is None
+    assert world.body is not None
+    assert len(world.body) == 16 * MIB
+
+
+@then("the server could not send the whole answer")
+def server_cut_off(world: World) -> None:
+    assert world.done.wait(5)
+    assert world.sent_all is False
 
 
 @then("the server received exactly 1 request")
