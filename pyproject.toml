@@ -136,11 +136,16 @@ strict = true
 files = ["src", "tests"]
 mypy_path = "scripts"
 warn_unreachable = true
+strict_equality_for_none = true
+local_partial_types = true
 # Beyond --strict: codes that catch real bugs in interval/rounding logic (truthy tests
 # on possibly-empty values, redundant or unreachable branches, unmatched cases) and
-# keep suppressions narrow (ignore-without-code forbids a bare `# type: ignore`).
+# keep suppressions narrow (ignore-without-code forbids a bare `# type: ignore`,
+# unused-ignore a stale one). Together: every error code mypy leaves off by default.
 enable_error_code = [
     "ignore-without-code",
+    "unused-ignore",
+    "unimported-reveal",
     "redundant-expr",
     "truthy-bool",
     "truthy-iterable",
