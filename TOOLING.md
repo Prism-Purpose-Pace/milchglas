@@ -1,7 +1,7 @@
 # Tooling — `python` stack
 
-**Single version source:** every Python tool (ruff, mypy, ty, pytest, pytest-cov,
-pytest-bdd, hypothesis) is an entry of the `dev` dependency group, pinned by `uv.lock`. mutmut, which
+**Single version source:** every Python tool (ruff, mypy, basedpyright, ty, pytest,
+pytest-cov, pytest-bdd, hypothesis) is an entry of the `dev` dependency group, pinned by `uv.lock`. mutmut, which
 only the weekly mutation run needs, sits in the `mutation` group of the same lock, so a
 plain `uv sync` stays lean. Hooks and CI call them via `uv run --frozen`, so hook,
 terminal and CI run the identical version.
@@ -26,6 +26,7 @@ bumps `uv.lock` and the SHA-pinned GitHub Actions weekly.
 | PEP 723 script-deps CVE audit | pre-commit (warn) + pre-push (block) | `scripts/audit_script_deps.py` (stdlib) |
 | Commit message convention (title ≤72, body ≤80/line) | commit-msg | `scripts/check_commit_msg.py` (stdlib) |
 | Type-check (`--strict` + extra error codes, spec AC-12) | pre-push | mypy (`uv.lock`) |
+| Second type-check (recommended mode; findings in `.basedpyright/baseline.json` pass, a new one fails) | pre-push | basedpyright (`uv.lock`) |
 | Unit tests + branch coverage ≥ 90 % (marker `contract` excluded); includes the purity allowlist of `src/milchglas/core/` (GATE-14), whose known limits, such as a renamed `__import__`, are review-only | pre-push | pytest + pytest-cov (`uv.lock`) |
 | Deep secret scan (full history, verified) | pre-push | trufflehog (installed binary; `rev:` informational) |
 | Dependency CVE scan (blocking) | pre-push | osv-scanner v2.3.8 |
