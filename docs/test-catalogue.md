@@ -223,6 +223,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-CFG-10 | Hrefs `https://other/x`, `//other/x`, `file:///etc/passwd`, `/a/../b`, `/a/%2e%2e/b` → configuration error with zero outbound requests; a valid href with percent-encoding is requested byte for byte | NFR-S7, AC-22 | unit | planned |
 | ORCH-CFG-11 | A changed configuration logs the names of the changed keys, never values (toggling `enabled` logs one line naming the key) | AC-22 | unit | planned |
 | ORCH-CFG-12 | `MILCHGLAS_CONFIG` names the configuration file for `refresh` and `web`; unset, it is `./config.json` | D-16 | unit | planned |
+| ORCH-CFG-13 | `ttl_seconds` 0 and below is rejected naming the key; 1, the smallest positive value, and 900 are accepted | AC-22, FR-7 | unit | exists |
 | ORCH-EMPTY-1 | Every enabled calendar passes the guard and returns zero events → valid header-only feed written, invariants pass, `last_success` set; distinct from a failure | Q-16, NFR-R1 | unit | planned |
 | ORCH-EMPTY-2 | State records the returned object count per calendar; a calendar dropping from non-zero to zero, and a feed dropping from non-empty to zero blocks, each record one warning with counts only in state and log | Q-16 | unit | planned |
 | ORCH-LOG-1 | Full refresh over fixtures with sentinels (also malformed SUMMARY, DESCRIPTION, LOCATION) at `MILCHGLAS_LOG_LEVEL=DEBUG` → no log record (message, args, exception text), no stdout or stderr line, no state field holds a sentinel | AC-8, NFR-P1 | unit | planned |
