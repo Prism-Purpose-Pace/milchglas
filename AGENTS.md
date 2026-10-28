@@ -49,7 +49,7 @@ version of them.
   default. (RV-CFG-2)
 - The last good feed can be lost: not replaced atomically, or overwritten when a refresh fails.
   (RV-CFG-3)
-- Once `sources/` exists: a write method or a request outside FR-1, or a CalDAV client library
+- In `sources/`: a write method or a request outside FR-1, or a CalDAV client library
   (RV-SRC-1); a `DOCTYPE` or entity not rejected, or an unparsable object that becomes a free slot
   (RV-SRC-2); a credential over anything but HTTPS, to another host, after a redirect or in a
   cookie, or request limits outside FR-1 and Q-15: no 10 s timeout, a retry count or backoff other
