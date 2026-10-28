@@ -1,4 +1,9 @@
+@id:23
 Feature: Fetch from the CalDAV server
+  A booking page shows the owner as busy only if Milchglas can
+  read the owner's calendars. A server that is slow or overloaded
+  for a moment gets another try; an answer that a retry cannot
+  change ends the fetch at once.
 
   Rule: Retry only what can recover (FR-1, Q-15)
 
@@ -30,10 +35,22 @@ Feature: Fetch from the CalDAV server
         | 502    |
         | 503    |
 
-    @ORCH-FETCH-1
-    Scenario: A timeout is retried three times, then fails
-      Given the server never answers within the timeout
+    @backlog @ORCH-FETCH-1
+    Scenario Outline: A timeout is retried three times, then fails
+      Given the server lets every <stage> time out
       When the client fetches one calendar
       Then the fetch fails as a timeout
-      And the server received 4 requests, each with a 10 s timeout
+      And the client tried 4 times, each with a 10 s timeout
       And the client waited 1 s, 2 s and 4 s
+
+      Examples:
+        | stage      |
+        | connection |
+        | answer     |
+
+    @backlog @ORCH-FETCH-11
+    Scenario: A refused connection ends the fetch after one attempt
+      Given the server refuses every connection
+      When the client fetches one calendar
+      Then the fetch fails naming the refused connection
+      And the client tried 1 time
