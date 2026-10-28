@@ -47,8 +47,8 @@ Every finding names file, line and rule. A rule fails on its own bad case and st
 on its near-miss, so a check that cannot fail would show here.
 
 Limits, kept on purpose: whether a scenario states an outcome, whether a `Then` can be seen
-from outside, and whether an Examples cell is a value rather than a phrase stay review in the
-requirements step; `@long-running` passes tag-allowed but is a pytest marker that
+from outside, and whether an Examples cell is a value rather than a phrase are prose; the
+judges of D-18 read them (`scripts/judge_features.py`, rubric `tests/meta/judges.md`); `@long-running` passes tag-allowed but is a pytest marker that
 `pyproject.toml` does not register yet.
 """
 
