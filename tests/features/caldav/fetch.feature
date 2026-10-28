@@ -93,7 +93,7 @@ Feature: Fetch from the CalDAV server
   @id:77
   Rule: Stop reading an answer that grows past 16 MiB (Q-15)
 
-    @backlog @ORCH-FETCH-4
+    @ORCH-FETCH-4
     Scenario: An answer over 16 MiB is cut off mid-stream
       Given the server answers 207 with 64 MiB of calendar data and no length
       When the client fetches one calendar
@@ -101,7 +101,7 @@ Feature: Fetch from the CalDAV server
       And the server could not send the whole answer
       And the server received exactly 1 request
 
-    @backlog @ORCH-FETCH-4
+    @ORCH-FETCH-4
     Scenario: An answer of exactly 16 MiB is read whole
       Given the server answers 207 with 16 MiB of calendar data and no length
       When the client fetches one calendar

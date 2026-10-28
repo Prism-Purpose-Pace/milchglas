@@ -13,6 +13,7 @@ from typing import Protocol
 
 TIMEOUT_SECONDS = 10
 BACKOFF_SECONDS = (1, 2, 4)  # Q-15: the waits before the three retries
+MAX_BYTES = 16 * 2**20  # Q-15: the largest answer read
 # A host name or IP address as `urlsplit` lower-cases it; anything else stays out of the error.
 _HOST = re.compile(r"[a-z0-9.:-]{1,253}")
 
@@ -77,7 +78,8 @@ def _request(opener: Opener, url: str, authorization: str) -> bytes:
     request.add_unredirected_header("Authorization", authorization)
     try:
         with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
-            return response.read()
+            # One byte past the limit tells an oversized answer apart; the rest is never read.
+            body = response.read(MAX_BYTES + 1)
     except urllib.error.HTTPError as error:
         error.close()  # the error holds the open response; the refresher must not leak it
         msg = f"HTTP {error.code}"
@@ -97,6 +99,10 @@ def _request(opener: Opener, url: str, authorization: str) -> bytes:
     except TimeoutError:
         msg = "timeout"
         raise FetchError(msg, retryable=True) from None
+    if len(body) > MAX_BYTES:
+        msg = "answer over 16 MiB"  # not retried: the next try reads the same answer (Q-15)
+        raise FetchError(msg, retryable=False)
+    return body
 
 
 def _redirect_target(location: str | None) -> str:
