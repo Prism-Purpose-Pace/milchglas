@@ -70,6 +70,14 @@ def test_window_days_bounds_orch_cfg_5(days: int, *, ok: bool) -> None:
         assert "window_days" in _error(_valid(window_days=days))
 
 
+@pytest.mark.parametrize(("seconds", "ok"), [(-1, False), (0, False), (1, True), (900, True)])
+def test_ttl_seconds_must_be_positive_orch_cfg_13(seconds: int, *, ok: bool) -> None:
+    if ok:
+        assert parse(_valid(ttl_seconds=seconds), NOW).ttl_seconds == seconds
+    else:
+        assert "ttl_seconds" in _error(_valid(ttl_seconds=seconds))
+
+
 @pytest.mark.parametrize("key", ["colour", "CALDAV_SECRET", "caldav_secret", "token"])
 def test_unknown_key_is_named_never_its_value_orch_cfg_4(key: str) -> None:
     message = _error(_valid(**{key: MARKER}))

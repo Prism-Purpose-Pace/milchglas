@@ -92,6 +92,11 @@ ignore = [
 # fetch opens the calendar URL built from CALDAV_URL; its scheme is the configuration's
 # rule (https only, FR-1 and NFR-S7: ORCH-CFG-2), not something a request can check.
 "src/milchglas/sources/caldav.py" = ["S310"]
+# _components hands untrusted server text to icalendar, which fails with at least seven
+# exception classes (a fuzz run found ValueError, TypeError, AttributeError,
+# AssertionError, OSError among them); any of them marks the object unparsable and
+# fails the refresh (Q-14), so the blind except keeps D-7d instead of hiding it.
+"src/milchglas/sources/multistatus.py" = ["BLE001"]
 # These tests hand naive datetimes to core on purpose: core must refuse them.
 "tests/unit/core/test_emit.py" = ["DTZ001"]
 "tests/unit/core/test_model.py" = ["DTZ001"]
@@ -99,6 +104,9 @@ ignore = [
 # test directory is a package, otherwise equal test basenames in tests/unit and
 # tests/contract collide in both mypy and pytest.
 "tests/**/*.py" = ["S101", "PLR2004"]
+# The CalDAV world's server checks a made-up app password, never a real one, and parses
+# the request bodies the client under test wrote, never input from outside.
+"tests/unit/sources/test_caldav.py" = ["S105", "S314"]
 # One test builds a throwaway git repository to prove the guard's range semantics.
 "tests/scripts/test_check_public_tree.py" = ["S101", "PLR2004", "S603", "S607"]
 # Plants a hook's git environment at a decoy repository and runs a test file under it.

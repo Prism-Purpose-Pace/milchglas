@@ -39,8 +39,22 @@ WINDOW = window(at("2026-09-28T00:00+02:00"), BERLIN, 28)
         ),  # aware, but not canonical UTC (DET-7 hashes UTC only)
         (at("2026-10-01T09:00Z"), at("2026-10-01T09:00Z")),  # zero length
         (at("2026-10-01T09:00Z"), at("2026-10-01T08:00Z")),  # negative
+        # One bad side is enough: the other side is a valid UTC instant.
+        (datetime(2026, 10, 1, 8), at("2026-10-01T09:00Z")),
+        (datetime(2026, 10, 1, 8, tzinfo=BERLIN), at("2026-10-01T09:00Z")),
+        (at("2026-10-01T08:00Z"), datetime(2026, 10, 1, 9)),
+        (at("2026-10-01T08:00Z"), datetime(2026, 10, 1, 11, tzinfo=BERLIN)),
     ],
-    ids=["naive", "zoned", "zero", "negative"],
+    ids=[
+        "naive",
+        "zoned",
+        "zero",
+        "negative",
+        "CORE-BLK-1-start-naive",
+        "CORE-BLK-1-start-zoned",
+        "CORE-BLK-1-end-naive",
+        "CORE-BLK-1-end-zoned",
+    ],
 )
 def test_timed_block_rejects_non_utc_or_empty_spans(start: datetime, end: datetime) -> None:
     with pytest.raises(ValueError, match="TimedBlock"):
@@ -56,9 +70,18 @@ def test_timed_block_accepts_a_positive_utc_span() -> None:
     )
 
 
-def test_day_block_rejects_datetimes() -> None:
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [
+        (datetime(2026, 10, 1, tzinfo=UTC), datetime(2026, 10, 2, tzinfo=UTC)),
+        (datetime(2026, 10, 1, tzinfo=UTC), date(2026, 10, 2)),
+        (date(2026, 10, 1), datetime(2026, 10, 2, tzinfo=UTC)),
+    ],
+    ids=["both", "CORE-BLK-1-start", "CORE-BLK-1-end"],
+)
+def test_day_block_rejects_datetimes(start: date, end: date) -> None:
     with pytest.raises(TypeError, match="DayBlock"):
-        DayBlock(datetime(2026, 10, 1, tzinfo=UTC), datetime(2026, 10, 2, tzinfo=UTC))
+        DayBlock(start, end)
 
 
 @pytest.mark.parametrize(
@@ -133,6 +156,15 @@ def test_window_rejects_a_naive_now() -> None:
         (day("2026-10-26", "2026-10-27"), []),
         # Day block straddling the window end.
         (day("2026-10-24", "2026-10-28"), [day("2026-10-24", "2026-10-26")]),
+        # CLIP-7: a block that is cut is rebuilt, and the rebuilt one keeps its flag.
+        (
+            timed("2026-09-27T23:50+02:00", "2026-09-28T00:10+02:00", tentative=True),
+            [timed("2026-09-28T00:00+02:00", "2026-09-28T00:10+02:00", tentative=True)],
+        ),
+        (
+            day("2026-09-26", "2026-09-29", tentative=True),
+            [day("2026-09-28", "2026-09-29", tentative=True)],
+        ),
     ],
     ids=[
         "CORE-CLIP-1",
@@ -144,6 +176,8 @@ def test_window_rejects_a_naive_now() -> None:
         "day-ends-at-start",
         "day-starts-at-end",
         "day-straddles-end",
+        "CORE-CLIP-7-timed",
+        "CORE-CLIP-7-day",
     ],
 )
 def test_clip_cuts_blocks_to_the_window(block: Block, expected: list[Block]) -> None:
@@ -341,6 +375,23 @@ def test_grid_fits_the_zone_by_the_offset_changes_it_has_core_rnd_8(
     zone: ZoneInfo, grid: int, *, fits: bool
 ) -> None:
     assert grid_fits_zone(grid, zone, JAN_2026) is fits
+
+
+@pytest.mark.parametrize(
+    ("zone", "start"),
+    [
+        *(
+            pytest.param(zone, JAN_2026, id=zone.key)
+            for zone in (BERLIN, KOLKATA, LORD_HOWE, CAIRO, UTC_ZONE)
+        ),
+        # The 30-minute change is ahead of this start: a whole number of one-minute steps.
+        pytest.param(PYONGYANG, PYONGYANG_CHANGE - timedelta(hours=1), id="Asia/Pyongyang-change"),
+    ],
+)
+def test_grid_fits_the_finest_grid_in_every_zone_core_rnd_11(
+    zone: ZoneInfo, start: datetime
+) -> None:
+    assert grid_fits_zone(1, zone, start)
 
 
 @pytest.mark.parametrize(
