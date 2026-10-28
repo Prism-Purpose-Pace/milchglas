@@ -378,6 +378,23 @@ def test_grid_fits_the_zone_by_the_offset_changes_it_has_core_rnd_8(
 
 
 @pytest.mark.parametrize(
+    ("zone", "start"),
+    [
+        *(
+            pytest.param(zone, JAN_2026, id=zone.key)
+            for zone in (BERLIN, KOLKATA, LORD_HOWE, CAIRO, UTC_ZONE)
+        ),
+        # The 30-minute change is ahead of this start: a whole number of one-minute steps.
+        pytest.param(PYONGYANG, PYONGYANG_CHANGE - timedelta(hours=1), id="Asia/Pyongyang-change"),
+    ],
+)
+def test_grid_fits_the_finest_grid_in_every_zone_core_rnd_11(
+    zone: ZoneInfo, start: datetime
+) -> None:
+    assert grid_fits_zone(1, zone, start)
+
+
+@pytest.mark.parametrize(
     ("start", "fits"),
     [
         (PYONGYANG_CHANGE - timedelta(days=367), True),  # the change is beyond 366 days
