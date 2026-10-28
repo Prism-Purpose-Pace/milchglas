@@ -187,6 +187,26 @@ def test_etag_answers_a_conditional_request_web_3(site: Site) -> None:
     assert header(call(app, path=FEED_PATH), "ETag") == etag
 
 
+@pytest.mark.parametrize(
+    ("template", "status"),
+    [
+        ('"a",{etag}', "304 Not Modified"),
+        ('{etag},"a"', "304 Not Modified"),
+        ('"a",W/{etag},"b"', "304 Not Modified"),
+        ('"a","b"', "200 OK"),
+    ],
+    ids=["last", "first", "weak-in-the-middle", "absent"],
+)
+def test_etag_list_needs_no_space_after_the_comma_web_20(
+    site: Site, template: str, status: str
+) -> None:
+    # RFC 9110 section 8.8.3: `#entity-tag` is a comma list, and the space is optional.
+    app = site.app()
+    etag = header(call(app, path=FEED_PATH), "ETag")
+    assert etag is not None
+    assert call(app, path=FEED_PATH, if_none_match=template.format(etag=etag))[0] == status
+
+
 def test_missing_feed_is_the_identical_404_web_6(site: Site) -> None:
     (site.var / FEED).unlink()
     app = site.app()
