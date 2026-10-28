@@ -106,3 +106,21 @@ Feature: Fetch from the CalDAV server
       Given the server answers 207 with 16 MiB of calendar data and no length
       When the client fetches one calendar
       Then the fetch succeeds with all 16 MiB
+
+  @id:77
+  Rule: Ask every enabled calendar, in configuration order, for the window (FR-1)
+
+    # The window spans the end of summer time on 2026-10-25: its two ends have different offsets.
+    @backlog @ORCH-FETCH-7
+    Scenario: The query covers the window in UTC
+      Given the window runs from 2026-10-20 to 2026-11-22 in Europe/Berlin
+      When the client fetches one calendar
+      Then the server received a calendar query at depth 1
+      And it asked for the events from 20261019T220000Z to 20261121T230000Z, expanded over the same range
+
+    @backlog @ORCH-FETCH-7
+    Scenario: Only enabled calendars are asked, in configuration order
+      Given the configuration lists Privat enabled, Familie disabled and Arbeit enabled
+      When the client fetches the calendars
+      Then the server received queries for Privat and then Arbeit
+      And the server received no request for Familie
