@@ -201,7 +201,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-FETCH-6 | Basic auth header built from `CALDAV_USER` and `CALDAV_SECRET` | FR-1, NFR-S2 | unit | planned |
 | ORCH-FETCH-7 | REPORT carries `Depth: 1`; its body has `<C:time-range>` and `<C:expand>` over the same UTC window (`…Z`); only `enabled` calendars are requested, in config order | FR-1, AC-10 | unit | planned |
 | ORCH-FETCH-8 | PROPFIND `Depth: 0` guard before each REPORT fails the refresh (feed kept, calendar named by index) when the href is a collection but no calendar, the owner is the service user, or the privilege set holds `{DAV:}write`; a read-only calendar passes; a 207 without responses on a non-calendar never reaches success | FR-1, NFR-S3, Q-16 | unit | planned |
-| ORCH-FETCH-9 | The first request already carries `Authorization` (exactly one request per successful fetch, none without it); a `Set-Cookie` is never sent back | FR-1 | unit | planned |
+| ORCH-FETCH-9 | The first request already carries `Authorization` (exactly one request per successful fetch, none without it); a `Set-Cookie` is never sent back | FR-1 | unit | exists |
 | ORCH-FETCH-10 | Calendars are fetched, parsed and reduced one at a time: with ten fake calendars at most one response body is alive (counter in the fake transport) | Q-15 | unit | planned |
 | ORCH-FETCH-11 | A refused connection is not retried: one attempt, then a failure that names the refused connection (only timeouts and 5xx are retried) | FR-1, Q-15 | unit | exists |
 | ORCH-NET-1 | `CALDAV_URL` with an untrusted TLS certificate fails the refresh; the feed stays byte-identical | NFR-S7 | unit | planned |

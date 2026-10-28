@@ -58,14 +58,14 @@ Feature: Fetch from the CalDAV server
   @id:77
   Rule: Send the credentials at once and keep nothing the server hands out (FR-1)
 
-    @backlog @ORCH-FETCH-9
+    @ORCH-FETCH-9
     Scenario: The first request already carries the credentials
       Given the server challenges every request without the service user's credentials
       When the client fetches one calendar
       Then the fetch succeeds after 1 request
       And no request reached the server without the credentials
 
-    @backlog @ORCH-FETCH-9
+    @ORCH-FETCH-9
     Scenario: A cookie the server sets is not sent back
       Given the server answers 503 with a session cookie and then 207
       When the client fetches one calendar
