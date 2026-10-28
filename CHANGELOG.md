@@ -4,6 +4,37 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.4.0](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.3.1...v0.4.0) (2026-10-28)
+
+
+### Features
+
+* **caldav:** Check each calendar href before its query ([4990575](https://github.com/Prism-Purpose-Pace/milchglas/commit/4990575518311c46d54a7916b18b137e0058a312)), closes [#77](https://github.com/Prism-Purpose-Pace/milchglas/issues/77)
+* **caldav:** Fail a redirect and name the host it pointed to ([29e2d82](https://github.com/Prism-Purpose-Pace/milchglas/commit/29e2d82868092105647be3cc593d15b605ac71b2)), closes [#77](https://github.com/Prism-Purpose-Pace/milchglas/issues/77)
+* **caldav:** Fail the read on any object the parser reports errors for ([f223064](https://github.com/Prism-Purpose-Pace/milchglas/commit/f223064d7b316167f38c097a57c393f039358b57)), closes [#74](https://github.com/Prism-Purpose-Pace/milchglas/issues/74)
+* **caldav:** Query each enabled calendar for the window ([6ffcdba](https://github.com/Prism-Purpose-Pace/milchglas/commit/6ffcdba3bffdd623fb773af940aeacc4e1fc41d1)), closes [#77](https://github.com/Prism-Purpose-Pace/milchglas/issues/77)
+* **caldav:** Read a multistatus answer into busy blocks ([ded4a7c](https://github.com/Prism-Purpose-Pace/milchglas/commit/ded4a7c43d63aa9bedd22c94bac8fdb585552d1e)), closes [#74](https://github.com/Prism-Purpose-Pace/milchglas/issues/74)
+* **caldav:** Read only complete objects that the server expanded ([bee34ad](https://github.com/Prism-Purpose-Pace/milchglas/commit/bee34ad102988f76fe6d403038d67a3051aab140)), closes [#74](https://github.com/Prism-Purpose-Pace/milchglas/issues/74)
+* **caldav:** Refuse an answer that is no plain multistatus ([0e17c14](https://github.com/Prism-Purpose-Pace/milchglas/commit/0e17c14aa70ce930aa1b4ce9c9d76b2e90b56b7a)), closes [#74](https://github.com/Prism-Purpose-Pace/milchglas/issues/74)
+* **caldav:** Retry a fetch only on timeouts and server errors ([0f4abb0](https://github.com/Prism-Purpose-Pace/milchglas/commit/0f4abb0eb15d1da4fd1e1f65ac00d1210bd1e36c)), closes [#23](https://github.com/Prism-Purpose-Pace/milchglas/issues/23)
+* **caldav:** Send the credentials with the first request ([8a34168](https://github.com/Prism-Purpose-Pace/milchglas/commit/8a341684bd0f84b9e38053b84d29fa129e9c736a)), closes [#77](https://github.com/Prism-Purpose-Pace/milchglas/issues/77)
+* **caldav:** Stop reading an answer past 16 MiB ([163912c](https://github.com/Prism-Purpose-Pace/milchglas/commit/163912cf32657e5ab4eaa60f08635690cf0792e5)), closes [#77](https://github.com/Prism-Purpose-Pace/milchglas/issues/77)
+
+
+### Bug Fixes
+
+* **caldav:** Close the gaps a security review of the parser found ([7c589ff](https://github.com/Prism-Purpose-Pace/milchglas/commit/7c589ff393b8585c803b77940d012ac8dc707a04)), closes [#74](https://github.com/Prism-Purpose-Pace/milchglas/issues/74)
+* **caldav:** Keep server bytes and the secret out of every failure ([3f2a976](https://github.com/Prism-Purpose-Pace/milchglas/commit/3f2a976e809127d267f7410e12f9a12939fcd915)), closes [#77](https://github.com/Prism-Purpose-Pace/milchglas/issues/77)
+* **caldav:** Retry a connect timeout and report a refused connection ([cb4a210](https://github.com/Prism-Purpose-Pace/milchglas/commit/cb4a210ab6f4326f111f001e9e7f4486f2fa2c7d)), closes [#23](https://github.com/Prism-Purpose-Pace/milchglas/issues/23)
+
+
+### Documentation
+
+* **features:** Describe the GATE-22 form rules in the catalogue ([4fb2e45](https://github.com/Prism-Purpose-Pace/milchglas/commit/4fb2e450c794d2514dd5ee3f5be2f1dae26b9ba2)), closes [#80](https://github.com/Prism-Purpose-Pace/milchglas/issues/80)
+* **features:** List the adopted GATE-22 rules in catalogue and guide ([b25aae7](https://github.com/Prism-Purpose-Pace/milchglas/commit/b25aae707147084169b7dc38a22c32abed20b45a)), closes [#80](https://github.com/Prism-Purpose-Pace/milchglas/issues/80)
+* **features:** Note the two-scenario Rule in catalogue and guide ([ee8a490](https://github.com/Prism-Purpose-Pace/milchglas/commit/ee8a490258641b79491336278d4a6d348af7d1a4)), closes [#80](https://github.com/Prism-Purpose-Pace/milchglas/issues/80)
+* **spec:** Record D-18 on the feature-file rules after GATE-22 ([b03a46e](https://github.com/Prism-Purpose-Pace/milchglas/commit/b03a46e70c029e7c7291dc0c7541883333ce5266))
+
 ## [0.3.1](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.3.0...v0.3.1) (2026-10-27)
 
 
