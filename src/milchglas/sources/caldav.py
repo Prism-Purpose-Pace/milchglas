@@ -6,10 +6,15 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC
 from http import HTTPStatus
 from http.client import HTTPResponse
 from typing import Protocol
+
+from milchglas.config import Calendar
+from milchglas.core.model import Window
 
 TIMEOUT_SECONDS = 10
 BACKOFF_SECONDS = (1, 2, 4)  # Q-15: the waits before the three retries
@@ -24,6 +29,18 @@ class FetchError(Exception):
     def __init__(self, message: str, *, retryable: bool) -> None:
         super().__init__(message)
         self.retryable = retryable
+
+
+@dataclass(frozen=True, slots=True)
+class Account:
+    """The service user on the CalDAV server: `CALDAV_URL`, `CALDAV_USER`, `CALDAV_SECRET`.
+
+    `origin` is the scheme, host and port of `CALDAV_URL`; every request goes there (NFR-S7).
+    """
+
+    origin: str
+    user: str
+    secret: str = field(repr=False)
 
 
 class Opener(Protocol):
@@ -52,30 +69,71 @@ def build_opener() -> urllib.request.OpenerDirector:
 
 
 def fetch(
-    url: str,
+    account: Account,
+    calendars: Sequence[Calendar],
+    window: Window,
     *,
-    user: str,
-    secret: str,
     opener: Opener | None = None,
     sleep: Callable[[float], None] = time.sleep,
-) -> bytes:
-    """One calendar's answer; timeouts and 5xx are retried, anything else fails at once."""
+) -> Iterator[tuple[int, bytes]]:
+    """Each enabled calendar's answer with its index, one at a time, in configuration order.
+
+    One REPORT per calendar (FR-1); timeouts and 5xx are retried, anything else fails at once.
+    Every href is an absolute path on the account's origin.
+    """
     opener = opener or build_opener()
+    query = _calendar_query(window)
+    for index, calendar in enumerate(calendars):
+        if calendar.enabled:
+            request = _dav_request(account, calendar.href, "REPORT", "1", query)
+            yield index, _send(opener, request, sleep)
+
+
+def _calendar_query(window: Window) -> bytes:
+    """Every VEVENT in the window, recurrences expanded by the server over the same range."""
+    start, end = (t.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ") for t in (window.start, window.end))
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data><C:expand start="{start}" end="{end}"/></C:calendar-data>
+  </D:prop>
+  <C:filter>
+    <C:comp-filter name="VCALENDAR">
+      <C:comp-filter name="VEVENT"><C:time-range start="{start}" end="{end}"/></C:comp-filter>
+    </C:comp-filter>
+  </C:filter>
+</C:calendar-query>
+""".encode()
+
+
+def _dav_request(
+    account: Account, href: str, method: str, depth: str, body: bytes
+) -> urllib.request.Request:
+    request = urllib.request.Request(
+        account.origin + href,
+        data=body,
+        method=method,
+        headers={"Depth": depth, "Content-Type": "application/xml; charset=utf-8"},
+    )
     # Basic auth with the first request: urllib's auth handlers wait for a 401 first (FR-1).
-    authorization = "Basic " + base64.b64encode(f"{user}:{secret}".encode()).decode("ascii")
+    # Unredirected, so no redirect could ever carry it on.
+    credentials = base64.b64encode(f"{account.user}:{account.secret}".encode()).decode("ascii")
+    request.add_unredirected_header("Authorization", f"Basic {credentials}")
+    return request
+
+
+def _send(opener: Opener, request: urllib.request.Request, sleep: Callable[[float], None]) -> bytes:
     for wait in BACKOFF_SECONDS:
         try:
-            return _request(opener, url, authorization)
+            return _request(opener, request)
         except FetchError as error:
             if not error.retryable:
                 raise
         sleep(wait)
-    return _request(opener, url, authorization)
+    return _request(opener, request)
 
 
-def _request(opener: Opener, url: str, authorization: str) -> bytes:
-    request = urllib.request.Request(url, method="REPORT")
-    request.add_unredirected_header("Authorization", authorization)
+def _request(opener: Opener, request: urllib.request.Request) -> bytes:
     try:
         with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
             # One byte past the limit tells an oversized answer apart; the rest is never read.
