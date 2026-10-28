@@ -7,6 +7,9 @@ hand-over to `reduce_event` records what each event looks like when it leaves th
 and an audit hook records every file the process opens while it reads an answer.
 """
 
+import hashlib
+import logging
+import re
 import sys
 from collections.abc import Collection
 from dataclasses import dataclass, field
@@ -19,7 +22,7 @@ from icalendar import Component
 from pytest_bdd import given, parsers, scenario, then, when
 
 from milchglas.core.model import Block, TimedBlock
-from milchglas.core.reduce import Skip, reduce_event
+from milchglas.core.reduce import MalformedEventError, Skip, reduce_event
 from milchglas.sources import multistatus
 
 HEAD = (
@@ -60,6 +63,7 @@ class World:
     error: Exception | None = None
     opened: list[str] = field(default_factory=list)
     secret: Path | None = None  # a local file an entity names
+    logged: list[str] = field(default_factory=list)
     handed: list[tuple[Component, str | None]] = field(default_factory=list)
     duration: str | None = None  # the DURATION text the answer carries
     description: str | None = None  # the text the answer's DESCRIPTION must read as
@@ -144,6 +148,21 @@ def test_parse_8_not_a_multistatus() -> None:
 @scenario("caldav/parse.feature", "An answer that declares markup is refused unread")
 def test_parse_10_declaration_refused() -> None:
     """A DOCTYPE is refused before any entity in it expands (Q-14, NFR-O3)."""
+
+
+@scenario("caldav/parse.feature", "A garbage start among valid events fails the read")
+def test_parse_11_garbage_start_among_valid_events() -> None:
+    """One unreadable object fails the read instead of becoming a free slot (Q-14)."""
+
+
+@scenario("caldav/parse.feature", "A cancelled event with a garbage start still fails the read")
+def test_parse_11_cancelled_event_with_garbage_start() -> None:
+    """reduce would skip it unread; the source layer decides Q-14 first."""
+
+
+@scenario("caldav/parse.feature", "A duration beyond any date fails the read")
+def test_parse_14_duration_beyond_any_date() -> None:
+    """DURATION reaches reduce as text; the alarm's TRIGGER overflows inside icalendar."""
 
 
 @given("the owner's time zone is Europe/Berlin")
@@ -231,17 +250,53 @@ def answers_declaration(world: World, declaration: str, tmp_path: Path) -> None:
     world.body = body.replace(b"?>\n", b"?>\n" + doctype.encode() + b"\n", 1)
 
 
+@given(parsers.parse('calendar 1 answers with 3 events, the second at "{href}" starting "{value}"'))
+def answers_garbage_among_valid(world: World, href: str, value: str) -> None:
+    world.body = answer(
+        response(HREF, vcalendar(b"DTSTART:20261102T080000Z", b"DTEND:20261102T090000Z")),
+        response(href, vcalendar(b"DTSTART:" + value.encode(), b"DTEND:20261102T110000Z")),
+        response(
+            "/calendars/svc/BBX-team/ev-3.ics",
+            vcalendar(b"DTSTART:20261102T120000Z", b"DTEND:20261102T130000Z"),
+        ),
+    )
+
+
+@given(parsers.parse('calendar 1 answers with a cancelled event at "{href}" starting "{value}"'))
+def answers_cancelled_garbage(world: World, href: str, value: str) -> None:
+    world.body = answer(
+        response(href, vcalendar(b"STATUS:CANCELLED", b"DTSTART:" + value.encode()))
+    )
+
+
+@given(parsers.parse('calendar 1 answers with an event at "{href}" whose {name} is "{value}"'))
+def answers_out_of_range(world: World, href: str, name: str, value: str) -> None:
+    props = {
+        "DURATION": [b"DURATION:" + value.encode()],
+        "alarm TRIGGER": [
+            b"DTEND:20261102T090000Z",
+            b"BEGIN:VALARM",
+            b"ACTION:DISPLAY",
+            b"TRIGGER:" + value.encode(),
+            b"END:VALARM",
+        ],
+    }[name]
+    world.body = answer(response(href, vcalendar(b"DTSTART:20261102T080000Z", *props)))
+
+
 @when("Milchglas reads the answer")
-def reads_the_answer(world: World) -> None:
+def reads_the_answer(world: World, caplog: pytest.LogCaptureFixture) -> None:
     _LISTENERS.append(world.opened)
+    caplog.set_level(logging.DEBUG)  # every logger, the libraries' included
     try:
         world.blocks = multistatus.parse(
-            world.body, status=world.status, tz=world.tz, owner_emails=()
+            world.body, calendar=1, status=world.status, tz=world.tz, owner_emails=()
         )
-    except multistatus.ParseError as error:
+    except (multistatus.ParseError, MalformedEventError) as error:
         world.error = error
     finally:
         _LISTENERS.remove(world.opened)
+    world.logged = [record.getMessage() for record in caplog.records]
 
 
 @then(parsers.parse("the owner is busy from 2026-10-24 07:00 UTC to 2026-10-25 {end} UTC"))
@@ -297,3 +352,24 @@ def fails_as_refused_declaration(world: World) -> None:
 def no_file_read(world: World) -> None:
     assert world.secret is not None
     assert str(world.secret) not in world.opened
+
+
+@then(
+    parsers.parse('reading fails as a malformed event naming calendar 1 and the hash of "{href}"')
+)
+def fails_as_malformed_event(world: World, href: str) -> None:
+    assert isinstance(world.error, MalformedEventError)
+    assert not isinstance(world.error, multistatus.ParseError)
+    message = str(world.error)
+    assert message.startswith("calendar 1, object ")
+    assert hashlib.sha256(href.encode()).hexdigest()[:16] in message
+
+
+@then(parsers.re(r"no error or log line holds (?P<values>.+)"))
+def nothing_holds(world: World, values: str) -> None:
+    assert world.error is not None
+    assert world.error.__cause__ is None
+    assert world.error.__context__ is None or world.error.__suppress_context__
+    for value in re.findall(r'"([^"]+)"', values):
+        assert value not in str(world.error)
+        assert not any(value in line for line in world.logged)
