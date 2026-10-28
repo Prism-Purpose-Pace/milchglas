@@ -3,12 +3,15 @@
 The world is a multistatus answer as sabre/dav writes one (synthetic, see
 `tests/fixtures/MANIFEST.md`): `calendar-data` as escaped XML text with CR written as
 `&#13;`, built here byte for byte so a fold can split a UTF-8 character. A spy on the
-hand-over to `reduce_event` records what each event looks like when it leaves the parser.
+hand-over to `reduce_event` records what each event looks like when it leaves the parser,
+and an audit hook records every file the process opens while it reads an answer.
 """
 
+import sys
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -26,13 +29,37 @@ HEAD = (
     b' xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">\n'
 )
 HREF = "/calendars/svc/BBX-team/ev-1.ics"
+# What an entity in a DOCTYPE can do: expand a thousandfold, or name a local file.
+DECLARATIONS = {
+    "a bare DOCTYPE": "<!DOCTYPE d:multistatus>",
+    "an entity bomb": (
+        '<!DOCTYPE d:multistatus [<!ENTITY a "BBX-boom">'
+        ' <!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;"> <!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">'
+        ' <!ENTITY bomb "&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;">]>'
+    ),
+    "an external entity naming a local file": '<!DOCTYPE d:multistatus [<!ENTITY bomb SYSTEM "{file}">]>',
+}
+_LISTENERS: list[list[str]] = []
+
+
+def _record_opens(event: str, args: tuple[object, ...]) -> None:
+    if event == "open":
+        for opened in _LISTENERS:
+            opened.append(str(args[0]))
+
+
+sys.addaudithook(_record_opens)
 
 
 @dataclass
 class World:
     tz: ZoneInfo = field(default_factory=lambda: ZoneInfo("UTC"))
+    status: int = 207
     body: bytes = b""
     blocks: list[Block] | None = None
+    error: Exception | None = None
+    opened: list[str] = field(default_factory=list)
+    secret: Path | None = None  # a local file an entity names
     handed: list[tuple[Component, str | None]] = field(default_factory=list)
     duration: str | None = None  # the DURATION text the answer carries
     description: str | None = None  # the text the answer's DESCRIPTION must read as
@@ -104,6 +131,21 @@ def test_parse_13_line_longer_than_75_octets() -> None:
     """RFC 5545 section 3.1 says SHOULD NOT, so the parser accepts it."""
 
 
+@scenario("caldav/parse.feature", "A calendar without events in the window")
+def test_parse_7_calendar_without_events() -> None:
+    """An empty calendar is a valid answer (Q-16); the type guard before it is #77's."""
+
+
+@scenario("caldav/parse.feature", "An answer that is not a multistatus fails without quoting it")
+def test_parse_8_not_a_multistatus() -> None:
+    """The error names status and size, never a byte of the body (NFR-P4)."""
+
+
+@scenario("caldav/parse.feature", "An answer that declares markup is refused unread")
+def test_parse_10_declaration_refused() -> None:
+    """A DOCTYPE is refused before any entity in it expands (Q-14, NFR-O3)."""
+
+
 @given("the owner's time zone is Europe/Berlin")
 def owner_zone(world: World) -> None:
     world.tz = ZoneInfo("Europe/Berlin")
@@ -165,9 +207,41 @@ def answers_long_line(world: World) -> None:
     )
 
 
+@given("calendar 1 answers with a multistatus that holds no response")
+def answers_no_response(world: World) -> None:
+    world.body = answer()
+
+
+@given(parsers.parse('calendar 1 answers with status {status:d} and the body "{body}"'))
+def answers_body(world: World, status: int, body: str) -> None:
+    world.status, world.body = status, body.encode()
+
+
+@given(parsers.parse("calendar 1 answers with a multistatus that starts with {declaration}"))
+def answers_declaration(world: World, declaration: str, tmp_path: Path) -> None:
+    world.secret = tmp_path / "secret.txt"
+    world.secret.write_text("BBX-local-secret")
+    doctype = DECLARATIONS[declaration].format(file=world.secret.as_uri())
+    event = vcalendar(
+        b"DTSTART:20261102T080000Z", b"DTEND:20261102T090000Z", b"DESCRIPTION:BBX-ref"
+    )
+    body = answer(response(HREF, event)).replace(
+        b"BBX-ref", b"&bomb;" if "ENTITY" in doctype else b""
+    )
+    world.body = body.replace(b"?>\n", b"?>\n" + doctype.encode() + b"\n", 1)
+
+
 @when("Milchglas reads the answer")
 def reads_the_answer(world: World) -> None:
-    world.blocks = multistatus.parse(world.body, tz=world.tz, owner_emails=())
+    _LISTENERS.append(world.opened)
+    try:
+        world.blocks = multistatus.parse(
+            world.body, status=world.status, tz=world.tz, owner_emails=()
+        )
+    except multistatus.ParseError as error:
+        world.error = error
+    finally:
+        _LISTENERS.remove(world.opened)
 
 
 @then(parsers.parse("the owner is busy from 2026-10-24 07:00 UTC to 2026-10-25 {end} UTC"))
@@ -184,3 +258,42 @@ def busy_on_monday_morning(world: World) -> None:
     assert world.blocks == [TimedBlock(utc("2026-11-02 08:00"), utc("2026-11-02 09:00"))]
     [(event, _)] = world.handed
     assert world.description is None or event["DESCRIPTION"] == world.description
+
+
+@then("the owner is busy at no time from calendar 1")
+def busy_at_no_time(world: World) -> None:
+    assert world.blocks == []
+
+
+@then("reading reports no error")
+def no_error(world: World) -> None:
+    assert world.error is None
+
+
+@then(parsers.parse("reading fails naming status {status:d} and {size:d} bytes"))
+def fails_naming_status_and_size(world: World, status: int, size: int) -> None:
+    assert len(world.body) == size
+    assert isinstance(world.error, multistatus.ParseError)
+    assert f"HTTP {status}, {size} bytes" in str(world.error)
+
+
+@then("the error holds nothing of the body")
+def error_holds_nothing(world: World) -> None:
+    assert world.error is not None
+    assert "BBX" not in str(world.error)
+    # The library's message is gone, not only hidden behind ours.
+    assert world.error.__cause__ is None
+    assert world.error.__context__ is None or world.error.__suppress_context__
+
+
+@then("reading fails as a refused declaration")
+def fails_as_refused_declaration(world: World) -> None:
+    assert isinstance(world.error, multistatus.ParseError)
+    assert "declaration" in str(world.error)
+    assert "BBX" not in str(world.error)
+
+
+@then("no local file was read")
+def no_file_read(world: World) -> None:
+    assert world.secret is not None
+    assert str(world.secret) not in world.opened

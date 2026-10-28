@@ -40,14 +40,14 @@ Feature: Read the calendar server's answer
 
   Rule: Only a plain multistatus answer is read (Q-14, Q-16)
 
-    @backlog @PARSE-7
+    @PARSE-7
     Scenario: A calendar without events in the window
       Given calendar 1 answers with a multistatus that holds no response
       When Milchglas reads the answer
       Then the owner is busy at no time from calendar 1
       And reading reports no error
 
-    @backlog @PARSE-8
+    @PARSE-8
     Scenario Outline: An answer that is not a multistatus fails without quoting it
       Given calendar 1 answers with status 207 and the body "<body>"
       When Milchglas reads the answer
@@ -60,7 +60,7 @@ Feature: Read the calendar server's answer
         | <d:multistatus xmlns:d="DAV:"><d:response>BBX- | 46   |
         | <d:error xmlns:d="DAV:">BBX-</d:error>          | 38   |
 
-    @backlog @PARSE-10
+    @PARSE-10
     Scenario Outline: An answer that declares markup is refused unread
       Given calendar 1 answers with a multistatus that starts with <declaration>
       When Milchglas reads the answer
