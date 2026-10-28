@@ -197,7 +197,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-FETCH-2 | 500, 502, 503 retried; every 4xx, `401`, `403` and `429` included, fails at once after exactly one request (a retry would deepen a brute-force lockout); one 503 then 207 → success | FR-1, Q-15 | unit | exists |
 | ORCH-FETCH-3 | Any fetch or parse failure → `feed.ics` bytes and mtime unchanged, `last_error` set, `last_success` unchanged, one-shot exit code 1 | AC-7, D-7d, FR-8 | unit | planned |
 | ORCH-FETCH-4 | Body over the 16 MiB cap → aborted mid-stream, failure as in FETCH-3 | Q-15 | unit | planned |
-| ORCH-FETCH-5 | 301, 302, 307 never followed → failure whose error names the status and the Location host; a second port named in `Location` receives no request | NFR-S7 | unit | planned |
+| ORCH-FETCH-5 | 301, 302, 307, 308 never followed → failure whose error names the status and the Location host; a second port named in `Location` receives no request | NFR-S7 | unit | planned |
 | ORCH-FETCH-6 | Basic auth header built from `CALDAV_USER` and `CALDAV_SECRET` | FR-1, NFR-S2 | unit | planned |
 | ORCH-FETCH-7 | REPORT carries `Depth: 1`; its body has `<C:time-range>` and `<C:expand>` over the same UTC window (`…Z`); only `enabled` calendars are requested, in config order | FR-1, AC-10 | unit | planned |
 | ORCH-FETCH-8 | PROPFIND `Depth: 0` guard before each REPORT fails the refresh (feed kept, calendar named by index) when the href is a collection but no calendar, the owner is the service user, or the privilege set holds `{DAV:}write`; a read-only calendar passes; a 207 without responses on a non-calendar never reaches success | FR-1, NFR-S3, Q-16 | unit | planned |

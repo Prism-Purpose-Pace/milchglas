@@ -71,3 +71,21 @@ Feature: Fetch from the CalDAV server
       When the client fetches one calendar
       Then the fetch succeeds after 2 requests
       And no request reached the server with a cookie
+
+  @id:77
+  Rule: Never follow the server to another address (NFR-S7)
+
+    @backlog @ORCH-FETCH-5
+    Scenario Outline: A redirect ends the fetch without following it
+      Given the server answers <status> pointing to a second server
+      When the client fetches one calendar
+      Then the fetch fails naming status <status> and the second server's host
+      And the second server received no request
+      And the server received exactly 1 request
+
+      Examples:
+        | status |
+        | 301    |
+        | 302    |
+        | 307    |
+        | 308    |
