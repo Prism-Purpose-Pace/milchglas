@@ -1,6 +1,7 @@
 """CalDAV requests with the request and retry rules of FR-1 and Q-15."""
 
 import base64
+import http.client
 import re
 import time
 import urllib.error
@@ -22,6 +23,9 @@ from milchglas.core.model import Window
 TIMEOUT_SECONDS = 10
 BACKOFF_SECONDS = (1, 2, 4)  # Q-15: the waits before the three retries
 MAX_BYTES = 16 * 2**20  # Q-15: the largest answer read
+# A Depth 0 answer for four properties is under 2 KiB, and parsing multiplies its size by
+# some 40, so a check answer gets a cap of its own.
+CHECK_MAX_BYTES = 64 * 2**10
 # A host name or IP address as `urlsplit` lower-cases it; anything else stays out of the error.
 _HOST = re.compile(r"[a-z0-9.:-]{1,253}")
 _PROPFIND = b"""<?xml version="1.0" encoding="utf-8"?>
@@ -60,6 +64,19 @@ class Account:
     user: str
     secret: str = field(repr=False)
 
+    def __post_init__(self) -> None:
+        # A value read with surrogateescape fails to encode, and its UnicodeEncodeError holds
+        # the whole `user:secret`; the error here names the key and has no context (NFR-S2).
+        unencodable = ""
+        for key, value in (("CALDAV_USER", self.user), ("CALDAV_SECRET", self.secret)):
+            try:
+                value.encode()
+            except UnicodeEncodeError:
+                unencodable = unencodable or key
+        if unencodable:
+            msg = f"{unencodable}: must be text that UTF-8 can encode"
+            raise ValueError(msg)
+
 
 class Opener(Protocol):
     """The part of `urllib.request.OpenerDirector` that `fetch` uses."""
@@ -77,8 +94,9 @@ def build_opener() -> urllib.request.OpenerDirector:
     opener = urllib.request.OpenerDirector()
     for handler in (
         urllib.request.UnknownHandler(),
-        urllib.request.HTTPHandler(),
-        urllib.request.HTTPSHandler(),
+        # Never the process-wide http.client debug level: it prints every header sent (T-10).
+        urllib.request.HTTPHandler(debuglevel=0),
+        urllib.request.HTTPSHandler(debuglevel=0),
         urllib.request.HTTPDefaultErrorHandler(),
         urllib.request.HTTPErrorProcessor(),
     ):
@@ -118,7 +136,11 @@ def fetch(
 
 def _check(opener: Opener, request: urllib.request.Request, sleep: Callable[[float], None]) -> None:
     """Fail unless the href is a calendar that someone else shares read-only (FR-1, NFR-S3)."""
-    if refusal := _refusal(_found(_send(opener, request, sleep))):
+    answer = _send(opener, request, sleep)
+    if len(answer) > CHECK_MAX_BYTES:
+        msg = "check answer over 64 KiB"
+        raise FetchError(msg, retryable=False)
+    if refusal := _refusal(_found(answer)):
         raise FetchError(refusal, retryable=False)
 
 
@@ -233,6 +255,7 @@ def _send(opener: Opener, request: urllib.request.Request, sleep: Callable[[floa
 
 
 def _request(opener: Opener, request: urllib.request.Request) -> bytes:
+    body, broken = b"", ""
     try:
         with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
             # One byte past the limit tells an oversized answer apart; the rest is never read.
@@ -256,6 +279,14 @@ def _request(opener: Opener, request: urllib.request.Request) -> bytes:
     except TimeoutError:
         msg = "timeout"
         raise FetchError(msg, retryable=True) from None
+    except (http.client.HTTPException, OSError) as error:
+        # An answer that breaks off or is no HTTP: BadStatusLine holds the server's line and
+        # IncompleteRead the body read so far, so only the class leaves, raised outside this
+        # clause so that not even `__context__` keeps the error (NFR-P4).
+        broken = type(error).__name__
+    if broken:
+        msg = f"connection failed: {broken}"
+        raise FetchError(msg, retryable=False)
     if len(body) > MAX_BYTES:
         msg = "answer over 16 MiB"  # not retried: the next try reads the same answer (Q-15)
         raise FetchError(msg, retryable=False)

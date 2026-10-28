@@ -196,7 +196,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-FETCH-1 | 10 s timeout reaches the opener; a timeout is retried: four attempts with injected backoff 1, 2, 4 s, then failure | FR-1, Q-15 | unit | exists |
 | ORCH-FETCH-2 | 500, 502, 503 retried; every 4xx, `401`, `403` and `429` included, fails at once after exactly one request (a retry would deepen a brute-force lockout); one 503 then 207 → success | FR-1, Q-15 | unit | exists |
 | ORCH-FETCH-3 | Any fetch or parse failure → `feed.ics` bytes and mtime unchanged, `last_error` set, `last_success` unchanged, one-shot exit code 1 | AC-7, D-7d, FR-8 | unit | planned |
-| ORCH-FETCH-4 | Body over the 16 MiB cap → aborted mid-stream and not retried, failure as in FETCH-3; a body of exactly 16 MiB is read whole | Q-15 | unit | exists |
+| ORCH-FETCH-4 | Body over the 16 MiB cap → aborted mid-stream and not retried, failure as in FETCH-3; a body of exactly 16 MiB is read whole; a PROPFIND answer over 64 KiB fails before it is parsed | Q-15 | unit | exists |
 | ORCH-FETCH-5 | 301, 302, 307, 308 never followed → failure whose error names the status and the Location host; a second port named in `Location` receives no request | NFR-S7 | unit | exists |
 | ORCH-FETCH-6 | Basic auth header built from `CALDAV_USER` and `CALDAV_SECRET` | FR-1, NFR-S2 | unit | planned |
 | ORCH-FETCH-7 | REPORT carries `Depth: 1`; its body has `<C:time-range>` and `<C:expand>` over the same UTC window (`…Z`); only `enabled` calendars are requested, in config order | FR-1, AC-10 | unit | exists |
@@ -204,6 +204,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-FETCH-9 | The first request already carries `Authorization` (exactly one request per successful fetch, none without it); a `Set-Cookie` is never sent back | FR-1 | unit | exists |
 | ORCH-FETCH-10 | Calendars are fetched, parsed and reduced one at a time: with ten fake calendars at most one response body is alive (counter in the fake transport) | Q-15 | unit | planned |
 | ORCH-FETCH-11 | A refused connection is not retried: one attempt, then a failure that names the refused connection (only timeouts and 5xx are retried) | FR-1, Q-15 | unit | exists |
+| ORCH-FETCH-12 | No failure text or debug output carries server bytes or the credential: an answer that breaks off or is no HTTP (bad status line, cut chunked body, over 100 headers, no answer) fails as `connection failed: <class>`, its text kept out even of `__context__`; a `CALDAV_USER` or `CALDAV_SECRET` that UTF-8 cannot encode is refused by key; a process-wide `http.client` debug level prints no `Authorization` | NFR-P4, NFR-S2, T-10 | unit | exists |
 | ORCH-NET-1 | `CALDAV_URL` with an untrusted TLS certificate fails the refresh; the feed stays byte-identical | NFR-S7 | unit | planned |
 | ORCH-NET-2 | A server answering in a slow drip ends the run at the total deadline (default 120 s, injected); the refresh fails, the feed stays byte-identical | NFR-S7 | unit | planned |
 | ORCH-NET-3 | The contract suite's plain-HTTP switch is test-only: production code never reads it, so with the switch absent an `http` URL is rejected | NFR-S7 | unit | planned |

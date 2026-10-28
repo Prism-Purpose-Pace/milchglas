@@ -18,6 +18,7 @@ in `socket.create_connection`, and urllib's own handling of it runs unchanged.
 
 import base64
 import dataclasses
+import http.client
 import socket
 import threading
 import urllib.request
@@ -87,6 +88,7 @@ class World:
     requests: list[Received] = field(default_factory=list)
     descriptions: dict[str, Description] = field(default_factory=dict)
     check_answer: bytes | None = None
+    raw: bytes | None = None
     challenge: bool = False
     set_cookie: bool = False
     location: str | None = None
@@ -128,6 +130,10 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("WWW-Authenticate", 'Basic realm="Nextcloud", charset="UTF-8"')
             self.send_header("Content-Length", "0")
             self.end_headers()
+            return
+        if world.raw is not None:
+            self.wfile.write(world.raw)  # bytes no well-behaved server would send
+            self.close_connection = True
             return
         # A request the script did not plan for gets a 207, as from a healthy server.
         answer = world.script.pop(0) if world.script else 207
@@ -377,6 +383,69 @@ def test_orch_fetch_8_check_fails_closed(world: World, answer: bytes, refusal: s
         list(fetch(world.account, world.calendars, world.window, opener=_RecordingOpener(world)))
     assert str(caught.value) == f"calendars[0]: {refusal}"
     assert [r.method for r in world.requests] == ["PROPFIND"]
+
+
+@pytest.mark.parametrize(
+    ("raw", "broken"),
+    [
+        (b"HTTP/1.1 OOPS \x1b[31mSynthetic title\r\n\r\n", "BadStatusLine"),
+        (
+            (
+                b"HTTP/1.1 207 Multi-Status\r\nTransfer-Encoding: chunked\r\n\r\n"
+                b"40\r\nBEGIN:VEVENT\r\nSUMMARY:Synthetic title\r\n"
+            ),
+            "IncompleteRead",
+        ),
+        (b"HTTP/1.1 207 Multi-Status\r\n" + b"X-Filler: 1\r\n" * 101 + b"\r\n", "HTTPException"),
+        (b"", "RemoteDisconnected"),
+    ],
+    ids=["bad-status-line", "cut-chunked-body", "too-many-headers", "no-answer"],
+)
+def test_orch_fetch_12_broken_answer_names_only_its_class(
+    world: World, raw: bytes, broken: str
+) -> None:
+    """http.client keeps the server's bytes in its errors; none of them leaves (NFR-P4)."""
+    world.raw = raw
+    with pytest.raises(FetchError) as caught:
+        list(fetch(world.account, world.calendars, world.window, opener=_RecordingOpener(world)))
+    assert str(caught.value) == f"calendars[0]: connection failed: {broken}"
+    chain: BaseException | None = caught.value
+    while chain is not None:
+        assert "Synthetic title" not in repr(chain.args)
+        chain = chain.__cause__ or chain.__context__
+    assert len(world.requests) == 1
+
+
+@pytest.mark.parametrize("key", ["CALDAV_USER", "CALDAV_SECRET"])
+def test_orch_fetch_12_credential_utf8_cannot_encode_is_refused(key: str) -> None:
+    """A secret read with surrogateescape would sit whole in a UnicodeEncodeError (NFR-S2)."""
+    unencodable = "p\udcfcss-synthetic"
+    user, secret = (unencodable, SECRET) if key == "CALDAV_USER" else (USER, unencodable)
+    with pytest.raises(ValueError, match=f"^{key}: ") as caught:
+        Account("http://127.0.0.1:1", user, secret)
+    assert unencodable not in repr(caught.value)
+    assert caught.value.__context__ is None
+
+
+def test_orch_fetch_12_debug_level_never_reaches_the_wire_log(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A process-wide http.client debug level would print the Basic credential (T-10)."""
+    monkeypatch.setattr(http.client.HTTPConnection, "debuglevel", 1)
+    list(fetch(world.account, world.calendars, world.window, opener=_RecordingOpener(world)))
+    out = capsys.readouterr().out
+    assert "Authorization" not in out
+    assert CREDENTIALS.split()[1] not in out
+
+
+def test_orch_fetch_4_check_answer_over_64_kib_is_refused_before_parsing(world: World) -> None:
+    """A Depth 0 answer is under 2 KiB; 16 MiB of elements would take some 600 MiB to parse."""
+    world.check_answer = (
+        b'<d:multistatus xmlns:d="DAV:">' + b'<a b=""/>' * 8000 + b"</d:multistatus>"
+    )
+    with pytest.raises(FetchError) as caught:
+        list(fetch(world.account, world.calendars, world.window, opener=_RecordingOpener(world)))
+    assert str(caught.value) == "calendars[0]: check answer over 64 KiB"
 
 
 def _never_connects(*_args: object, **_kwargs: object) -> NoReturn:
