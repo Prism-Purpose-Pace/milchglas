@@ -31,7 +31,7 @@ the expected-blocks oracle assumes until the spec changes.
 | PARSE-2 | A `calendar-data` propstat with any status but 200, or a response without `calendar-data`, is a parse error that fails the refresh; a 404 for any other requested property is ignored | NFR-C1, Q-14 | unit | planned |
 | PARSE-3 | Server dialect parses: CRLF and LF-only lines, `&#13;`, folded lines, `X-` props, `calendar-data` as escaped text; CDATA and raw CRLF are synthetic robustness fixtures | NFR-C1 | unit | planned |
 | PARSE-4 | Weekly series + EXDATE + moved instance → exactly the real occurrences; the override is its own VEVENT without RRULE and counts once; an instance whose override the owner declined is absent | AC-2, FR-2, FR-3 | unit | planned |
-| PARSE-5 | Expanded instance with DURATION instead of DTEND (UTC DTSTART): the parser hands the DURATION text to reduce, builds no `timedelta` first (spy), and the length follows Q-20 | Q-20, AC-3 | unit | planned |
+| PARSE-5 | Expanded instance with DURATION instead of DTEND (UTC DTSTART): the parser hands the DURATION text to reduce, builds no `timedelta` first (spy), and the length follows Q-20 | Q-20, AC-3 | unit | exists |
 | PARSE-6 | Sentinel in SUMMARY, DESCRIPTION, LOCATION, ATTENDEE `CN`, CATEGORIES and `X-` props → absent from blocks (structural), feed and logs | AC-8, NFR-P1 | unit | planned |
 | PARSE-7 | Empty 207 (zero responses) → zero blocks, not an error | Q-16 | unit | planned |
 | PARSE-8 | Non-XML or truncated body → refresh fails; the error carries byte count and HTTP status, never body content | NFR-P4 | unit | planned |
@@ -39,7 +39,7 @@ the expected-blocks oracle assumes until the spec changes.
 | PARSE-10 | DOCTYPE or entity declaration in a multistatus → rejected before parsing (expat handler, stdlib only); entity bomb and external entity naming a local file → refresh fails, last feed byte-identical, no file read | Q-14, NFR-C1, NFR-O3 | unit | planned |
 | PARSE-11 | One unparsable object among valid ones (garbage DTSTART; any parser error, including a non-empty `errors` list in lenient mode, even on a cancelled event) → refresh fails; the error names the object by href hash and the calendar by index; the sentinel is in no log or exception text | Q-14, NFR-P4, AC-8 | unit | planned |
 | PARSE-12 | Expanded instance that still holds RRULE or RDATE while local expansion is off → unparsable → refresh fails, last feed kept | Q-14, FR-2 | unit | planned |
-| PARSE-13 | Unfolding runs on bytes before UTF-8 decoding, CRLF + space and LF + space; a fold inside a multibyte character parses to the right text; a 200-octet line parses (the emitter stays strict, EMIT-7) | NFR-C1 | unit | planned |
+| PARSE-13 | Unfolding runs on bytes before UTF-8 decoding, CRLF + space and LF + space; a fold inside a multibyte character parses to the right text; a 200-octet line parses (the emitter stays strict, EMIT-7) | NFR-C1 | unit | exists |
 | PARSE-14 | Out-of-range DURATION (for example `-P999999999DT1S`) → the source layer raises its malformed-event error; refresh fails, last feed kept, neither value nor event text in error or log | Q-14, NFR-P4 | unit | planned |
 | PARSE-15 | Blocks parsed from the captured answer and emitted → exactly the committed feed bytes; goldens change only through an explicit update option | NFR-C1, AC-6 | unit | planned |
 | E2E-1 | Oracle default: a timed block overlapping an all-day block stays separate; the no-overlap, no-touch rule applies per kind | Q-9, AC-1 | unit | planned |

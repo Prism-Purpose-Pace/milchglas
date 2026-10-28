@@ -12,6 +12,7 @@ that neither prefix reaches a block, the feed or any error text.
 | `objects/core-identity.ics` | synthetic, RFC 5545 §3.3.5 (DATE-TIME as UTC and with TZID), one instant in three spellings with their VTIMEZONE blocks | DET-7 |
 | `objects/demo2.ics`, `objects/demo3.ics` | synthetic: the hand-written import fixtures of the live end-to-end suite (Nextcloud), copied with the former product name replaced | pipeline golden (AC-1, AC-3, AC-4, AC-5) |
 | `expected_blocks.json` | the end-to-end suite's oracle for the two demo calendars, copied with the same renames; since the Q-12 default changed, the two transparent all-day events (D2-25, D3-07) block and merge with their neighbours | pipeline golden |
+| `tests/unit/sources/test_multistatus.py` (answers built in code) | synthetic, in the sabre/dav dialect NFR-C1 describes: `calendar-data` as escaped XML text with CR written as `&#13;`, LF-only lines for the unexpanded shape; an expanded instance keeps DURATION with a UTC DTSTART (Q-20) | PARSE-5, PARSE-13 (a fold inside a two-byte character with CRLF and LF, a 200-octet line) |
 
 No fixture is captured from a CalDAV server yet. Synthetic files are replaced by
 captured ones (sabre/dav via a Baïkal container) as the contract suite lands; a captured
