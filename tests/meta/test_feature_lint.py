@@ -18,6 +18,8 @@ adds the form rules of novibe's `.gherkin-lintrc` and its requirements step, on 
   `Examples` with rows, every column is used by a step, and every `<variable>` of a step has a
   column in each `Examples` block. A variable counts in step text, doc string and data table,
   where pytest-bdd substitutes it (`pytest_bdd.parser.PARAM_RE`), and a background step counts.
+- dupe-feature-name, dupe-scenario-name: a feature name is unique across the files, a
+  scenario name within its feature, rules included (pytest-bdd looks a scenario up by name).
 
 Every finding names file, line and rule. A rule fails on its own bad case and stays silent
 on its near-miss, so a check that cannot fail would show here.
@@ -157,6 +159,25 @@ def outline(
                 yield at(step["location"]["line"], "undefined-variable", f"<{name}> has no column")
 
 
+def repeated_scenarios(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
+    seen: dict[str, int] = {}
+    for scenario, _ in cases(feature["children"], []):
+        name, line = scenario["name"], scenario["location"]["line"]
+        if name in seen:
+            yield at(line, "dupe-scenario-name", f"{name!r} is also the name of line {seen[name]}")
+        seen.setdefault(name, line)
+
+
+def repeated_features(features: dict[str, Feature]) -> Iterator[Finding]:
+    """The features, by file in order, whose name an earlier file already uses."""
+    seen: dict[str, str] = {}
+    for file, feature in features.items():
+        first = seen.setdefault(feature["name"], file)
+        if first != file:
+            message = f"{feature['name']!r} is also the name of {first}"
+            yield Finding(file, feature["location"]["line"], "dupe-feature-name", message)
+
+
 def head(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
     """The id and tag rules, and the rule that a feature holds a scenario."""
     line = feature["location"]["line"]
@@ -181,6 +202,7 @@ def check(file: str, document: GherkinDocument) -> Iterator[Finding]:
         yield at(1, "no-scenario", "no Feature")
         return
     yield from head(at, feature)
+    yield from repeated_scenarios(at, feature)
     keywords = DIALECTS[feature["language"]]["scenarioOutline"]
     for scenario, background in cases(feature["children"], []):
         steps = [*background, *scenario["steps"]]
@@ -191,14 +213,17 @@ def check(file: str, document: GherkinDocument) -> Iterator[Finding]:
 def lint(root: Path) -> list[Finding]:
     """Every rule broken in any feature file under tests/features/, by file and line."""
     findings: list[Finding] = []
+    features: dict[str, Feature] = {}
     for path in sorted((root / FEATURES).rglob("*.feature")):
         file = path.relative_to(root).as_posix()
         document = read(path)
         if isinstance(document, tuple):
             findings.append(Finding(file, document[0], "parse", document[1]))
-        else:
-            findings += check(file, document)
-    return sorted(set(findings))
+            continue
+        findings += check(file, document)
+        if "feature" in document:
+            features[file] = document["feature"]
+    return sorted({*findings, *repeated_features(features)})
 
 
 # --- the real tree -----------------------------------------------------------------------
@@ -467,6 +492,60 @@ OUTLINE_SILENT = {
 @pytest.mark.parametrize("text", OUTLINE_SILENT.values(), ids=OUTLINE_SILENT.keys())
 def test_good_outline_is_silent(tmp_path: Path, text: str) -> None:
     assert found(tmp_path, text) == []
+
+
+SECOND = "\n    @ALPHA-2\n    Scenario: First\n      Given a thing\n      When it runs\n      Then it is done\n"
+
+
+@pytest.mark.parametrize(
+    ("text", "line"),
+    [
+        (GOOD + SECOND, 13),
+        (GOOD + "\n  Rule: Other rule\n" + SECOND, 15),
+    ],
+    ids=["same-rule", "other-rule"],
+)
+def test_scenario_name_used_twice_is_reported_on_the_second(
+    tmp_path: Path, text: str, line: int
+) -> None:
+    assert found(tmp_path, text) == [(line, "dupe-scenario-name")]
+
+
+def test_scenario_names_that_differ_or_sit_in_two_files_are_silent(tmp_path: Path) -> None:
+    other = GOOD + SECOND.replace("First", "Second")
+    root = tree(
+        tmp_path,
+        {
+            "tests/features/a/one.feature": other,
+            "tests/features/b/two.feature": GOOD.replace("Sample", "Other"),
+        },
+    )
+    assert lint(root) == []
+
+
+def test_feature_name_used_in_two_files_is_reported_in_the_second(tmp_path: Path) -> None:
+    root = tree(
+        tmp_path,
+        {"tests/features/a/one.feature": GOOD, "tests/features/b/two.feature": GOOD},
+    )
+    [finding] = lint(root)
+    assert (finding.file, finding.line, finding.rule) == (
+        "tests/features/b/two.feature",
+        2,
+        "dupe-feature-name",
+    )
+    assert "tests/features/a/one.feature" in finding.message
+
+
+def test_feature_names_that_differ_are_silent(tmp_path: Path) -> None:
+    root = tree(
+        tmp_path,
+        {
+            "tests/features/a/one.feature": GOOD,
+            "tests/features/b/two.feature": GOOD.replace("Sample", "Other"),
+        },
+    )
+    assert lint(root) == []
 
 
 # Step texts that name how the system is used, not what it does: one per pattern of novibe's
