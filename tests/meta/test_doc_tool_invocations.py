@@ -1,8 +1,8 @@
 """Contributor-facing docs must invoke Python dev tools through the lock.
 
-A bare `ruff` / `mypy` / `pytest` / `ty` / `mutmut` command resolves to whatever binary is on
-PATH, not the uv.lock version the hooks and CI run, so a contributor (human or AI
-agent) who follows such a doc reintroduces version drift.
+A bare `ruff` / `mypy` / `basedpyright` / `pytest` / `mutmut` command resolves to
+whatever binary is on PATH, not the uv.lock version the hooks and CI run, so a contributor
+(human or AI agent) who follows such a doc reintroduces version drift.
 """
 
 import re
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-LOCKED_TOOLS = frozenset({"ruff", "mypy", "pytest", "ty", "mutmut"})
+LOCKED_TOOLS = frozenset({"ruff", "mypy", "basedpyright", "pytest", "mutmut"})
 OWNED_DOCS = ("README.md", "CONTRIBUTING.md", "CLAUDE.md", "TOOLING.md")
 CODE_SPAN = re.compile(r"`([^`\n]+)`")
 COMMAND_SEPARATOR = re.compile(r"&&|\|\||;|\|")

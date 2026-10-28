@@ -1,13 +1,13 @@
 # Milchglas — project metadata, dev tooling and tool configuration.
 #
-# Single version source: every dev tool (ruff, mypy, ty, pytest, …) is declared in
+# Single version source: every dev tool (ruff, mypy, basedpyright, pytest, …) is declared in
 # [dependency-groups] and pinned by uv.lock. The pre-commit hooks and CI call them
 # through `uv run --frozen`, so hook, terminal and CI run the identical version.
 # Bump a tool with `uv lock --upgrade-package <tool>`, never by editing a hook rev.
 #
 # Runtime dependencies are added with the first feature that imports them; they must
-# stay pure Python (docs/spec.md §7). mypy --strict is the type gate (spec AC-12);
-# ty runs advisory only.
+# stay pure Python (docs/spec.md §7). mypy --strict is the type gate (spec AC-12),
+# basedpyright the second.
 
 [project]
 name = "milchglas"
@@ -136,11 +136,16 @@ strict = true
 files = ["src", "tests"]
 mypy_path = "scripts"
 warn_unreachable = true
+strict_equality_for_none = true
+local_partial_types = true
 # Beyond --strict: codes that catch real bugs in interval/rounding logic (truthy tests
 # on possibly-empty values, redundant or unreachable branches, unmatched cases) and
-# keep suppressions narrow (ignore-without-code forbids a bare `# type: ignore`).
+# keep suppressions narrow (ignore-without-code forbids a bare `# type: ignore`,
+# unused-ignore a stale one). Together: every error code mypy leaves off by default.
 enable_error_code = [
     "ignore-without-code",
+    "unused-ignore",
+    "unimported-reveal",
     "redundant-expr",
     "truthy-bool",
     "truthy-iterable",
@@ -158,6 +163,28 @@ enable_error_code = [
 module = ["milchglas.config"]
 disallow_any_expr = true
 disallow_any_explicit = true
+
+# ---------------------------------------------------------------------------
+# basedpyright — second type gate: inferred unknowns and code hygiene, which mypy
+# leaves open. Findings that existed when it was added sit in
+# .basedpyright/baseline.json; a new one fails, and the baseline only shrinks.
+# ---------------------------------------------------------------------------
+[tool.basedpyright]
+pythonVersion = "3.12"
+include = ["src", "tests"]
+# src: the package resolves from source, not as an installed library without py.typed.
+extraPaths = ["src", "scripts"]
+typeCheckingMode = "recommended"
+failOnWarnings = true
+# Its own `# pyright: ignore[rule]` only; a mypy `# type: ignore[code]` must not
+# silence it too.
+enableTypeIgnoreComments = false
+reportUnusedCallResult = "none"            # discarded results: 196 on 2026-10-26, none a bug
+reportImplicitStringConcatenation = "none" # ruff ISC owns it
+reportPrivateUsage = "none"                # ruff SLF001 owns it
+reportMissingSuperCall = "none"            # flags __init__ of plain classes
+reportAny = "none"                         # mypy owns Any
+reportExplicitAny = "none"
 
 # ---------------------------------------------------------------------------
 # pytest + coverage — native [tool.pytest] table (pytest >= 9)
@@ -217,13 +244,13 @@ also_copy = ["config.example.json"]
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.40.2",
     "hypothesis>=6.168.0",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-bdd>=9.0.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.16.7",
-    "ty>=0.0.80",
 ]
 mutation = [
     "mutmut>=3.8.0",

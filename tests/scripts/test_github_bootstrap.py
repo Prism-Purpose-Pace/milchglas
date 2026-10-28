@@ -69,9 +69,7 @@ def test_fork_workflows_wait_for_approval_from_every_outside_contributor() -> No
 def _ruleset(name: str) -> dict[str, Any]:
     bodies = [s.body for s in PLAN if s.kind == "ruleset" and s.body and s.body["name"] == name]
     assert len(bodies) == 1, name
-    body = bodies[0]
-    assert body is not None
-    return body
+    return bodies[0]
 
 
 def test_tag_ruleset_freezes_existing_tags_without_bypass() -> None:
