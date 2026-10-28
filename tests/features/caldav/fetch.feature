@@ -5,6 +5,23 @@ Feature: Fetch from the CalDAV server
   for a moment gets another try; an answer that a retry cannot
   change ends the fetch at once.
 
+  @id:77 @ORCH-FETCH-5
+  Scenario Outline: A redirect ends the fetch without following it
+    Never follow the server to another address (NFR-S7).
+
+    Given the server answers <status> pointing to a second server
+    When the client fetches one calendar
+    Then the fetch fails naming status <status> and the second server's host
+    And the second server received no request
+    And the server received exactly 1 request
+
+    Examples:
+      | status |
+      | 301    |
+      | 302    |
+      | 307    |
+      | 308    |
+
   Rule: Retry only what can recover (FR-1, Q-15)
 
     @ORCH-FETCH-2
@@ -71,24 +88,6 @@ Feature: Fetch from the CalDAV server
       When the client fetches one calendar
       Then the fetch succeeds after one retry
       And no request reached the server with a cookie
-
-  @id:77
-  Rule: Never follow the server to another address (NFR-S7)
-
-    @ORCH-FETCH-5
-    Scenario Outline: A redirect ends the fetch without following it
-      Given the server answers <status> pointing to a second server
-      When the client fetches one calendar
-      Then the fetch fails naming status <status> and the second server's host
-      And the second server received no request
-      And the server received exactly 1 request
-
-      Examples:
-        | status |
-        | 301    |
-        | 302    |
-        | 307    |
-        | 308    |
 
   @id:77
   Rule: Stop reading an answer that grows past 16 MiB (Q-15)
