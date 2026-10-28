@@ -169,6 +169,10 @@ def test_errors_never_quote_a_value() -> None:
         assert MARKER not in _error(raw)
 
 
+def test_non_string_key_is_not_a_json_object() -> None:
+    assert _error({1: "x"}) == "config: must be a JSON object"
+
+
 @pytest.mark.parametrize(
     ("zone", "grid", "ok"),
     [

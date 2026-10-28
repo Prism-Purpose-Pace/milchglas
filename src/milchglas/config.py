@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TypeGuard
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from milchglas.core.emit import valid_text
@@ -80,14 +81,14 @@ def read_digest(path: Path) -> bytes:
     except ConfigError:
         msg = "token_sha256: config.json is missing or not valid JSON"
         raise ConfigError(msg) from None
-    if not isinstance(raw, dict):
+    if not _is_object(raw):
         msg = "token_sha256: config.json is not a JSON object"
         raise ConfigError(msg)
     return bytes.fromhex(_digest(raw.get("token_sha256")))
 
 
 def parse(raw: object, now: datetime) -> Config:
-    if not isinstance(raw, dict):
+    if not _is_object(raw):
         msg = "config: must be a JSON object"
         raise ConfigError(msg)
     if unknown := sorted(set(raw) - _KEYS):
@@ -132,11 +133,17 @@ def parse(raw: object, now: datetime) -> Config:
 
 def _read(path: Path) -> object:
     try:
-        return json.loads(path.read_bytes())
+        raw: object = json.loads(path.read_bytes())
     except (OSError, ValueError):
         # No chained cause: a decode error carries the bytes it choked on.
         msg = "config: config.json is missing or not valid JSON"
         raise ConfigError(msg) from None
+    return raw
+
+
+def _is_object(raw: object) -> TypeGuard[dict[str, object]]:
+    """A JSON object as `json.loads` returns it; its values are still unchecked."""
+    return isinstance(raw, dict) and all(isinstance(key, str) for key in raw)
 
 
 def _get[T](
@@ -179,7 +186,7 @@ def _calendars(entries: list[object]) -> tuple[Calendar, ...]:
     calendars: list[Calendar] = []
     for index, entry in enumerate(entries):
         key = f"calendars[{index}]"
-        if not isinstance(entry, dict) or set(entry) != _CALENDAR_KEYS:
+        if not _is_object(entry) or set(entry) != _CALENDAR_KEYS:
             msg = f"{key}: must be an object with exactly href, name and enabled"
             raise ConfigError(msg)
         calendar = Calendar(
