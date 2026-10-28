@@ -1,5 +1,6 @@
-"""CalDAV requests with the retry rules of FR-1 and Q-15."""
+"""CalDAV requests with the request and retry rules of FR-1 and Q-15."""
 
+import base64
 import time
 import urllib.error
 import urllib.request
@@ -26,23 +27,36 @@ class Opener(Protocol):
     def open(self, fullurl: urllib.request.Request, *, timeout: float) -> HTTPResponse: ...
 
 
+def build_opener() -> urllib.request.OpenerDirector:
+    """The opener of every request: no cookie jar, and no proxy from the environment (NFR-S7)."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def fetch(
-    url: str, *, opener: Opener | None = None, sleep: Callable[[float], None] = time.sleep
+    url: str,
+    *,
+    user: str,
+    secret: str,
+    opener: Opener | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> bytes:
     """One calendar's answer; timeouts and 5xx are retried, anything else fails at once."""
-    opener = opener or urllib.request.build_opener()
+    opener = opener or build_opener()
+    # Basic auth with the first request: urllib's auth handlers wait for a 401 first (FR-1).
+    authorization = "Basic " + base64.b64encode(f"{user}:{secret}".encode()).decode("ascii")
     for wait in BACKOFF_SECONDS:
         try:
-            return _request(opener, url)
+            return _request(opener, url, authorization)
         except FetchError as error:
             if not error.retryable:
                 raise
         sleep(wait)
-    return _request(opener, url)
+    return _request(opener, url, authorization)
 
 
-def _request(opener: Opener, url: str) -> bytes:
+def _request(opener: Opener, url: str, authorization: str) -> bytes:
     request = urllib.request.Request(url, method="REPORT")
+    request.add_unredirected_header("Authorization", authorization)
     try:
         with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
             return response.read()
