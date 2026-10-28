@@ -35,7 +35,7 @@ Feature: Fetch from the CalDAV server
         | 502    |
         | 503    |
 
-    @backlog @ORCH-FETCH-1
+    @ORCH-FETCH-1
     Scenario Outline: A timeout is retried three times, then fails
       Given the server lets every <stage> time out
       When the client fetches one calendar
@@ -48,7 +48,7 @@ Feature: Fetch from the CalDAV server
         | connection |
         | answer     |
 
-    @backlog @ORCH-FETCH-11
+    @ORCH-FETCH-11
     Scenario: A refused connection ends the fetch after one attempt
       Given the server refuses every connection
       When the client fetches one calendar

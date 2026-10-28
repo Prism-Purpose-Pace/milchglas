@@ -3,15 +3,21 @@
 The world is a real HTTP server on 127.0.0.1 that answers each request from a script, and
 the real urllib opener behind a recorder: it notes the timeout `fetch` asks for and passes
 a short one on, so a server that never answers costs a quarter second, not 10 s.
+
+Two cases need no server. A refused connection is a loopback port nobody listens on, so
+the kernel refuses it. A connection that times out cannot be made on loopback without
+platform tricks, so the world raises `TimeoutError` where the operating system reports it,
+in `socket.create_connection`, and urllib's own handling of it runs unchanged.
 """
 
+import socket
 import threading
 import urllib.request
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from http.client import HTTPResponse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import override
+from typing import NoReturn, override
 
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
@@ -96,6 +102,16 @@ def test_orch_fetch_1_timeout_is_retried_then_fails() -> None:
     """Four attempts, 1, 2 and 4 s apart, each with the 10 s timeout of FR-1."""
 
 
+@scenario("caldav/fetch.feature", "A refused connection ends the fetch after one attempt")
+def test_orch_fetch_11_refused_connection_ends_the_fetch() -> None:
+    """Only timeouts and 5xx are retried (FR-1, Q-15)."""
+
+
+def _never_connects(*_args: object, **_kwargs: object) -> NoReturn:
+    msg = "timed out"  # the text the socket module itself gives a timeout
+    raise TimeoutError(msg)
+
+
 @given(parsers.parse("the server answers {status:d}"))
 def server_answers(world: World, status: int) -> None:
     world.script = [status]
@@ -106,9 +122,20 @@ def server_answers_then_207(world: World, status: int) -> None:
     world.script = [status, 207]
 
 
-@given("the server never answers within the timeout")
-def server_never_answers(world: World) -> None:
-    world.script = [HANG, HANG, HANG, HANG]
+@given(parsers.parse("the server lets every {stage} time out"))
+def server_lets_stage_time_out(world: World, stage: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    if stage == "connection":
+        monkeypatch.setattr(socket, "create_connection", _never_connects)
+    else:
+        world.script = [HANG, HANG, HANG, HANG]
+
+
+@given("the server refuses every connection")
+def server_refuses(world: World) -> None:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    world.url = f"http://127.0.0.1:{port}/calendars/demo/"
 
 
 @when("the client fetches one calendar")
@@ -147,10 +174,20 @@ def fails_as_timeout(world: World) -> None:
     assert "timeout" in str(world.error)
 
 
-@then("the server received 4 requests, each with a 10 s timeout")
-def received_four(world: World) -> None:
-    assert world.received == 4
+@then("the client tried 4 times, each with a 10 s timeout")
+def tried_four_times(world: World) -> None:
     assert world.timeouts == [10, 10, 10, 10]
+
+
+@then("the fetch fails naming the refused connection")
+def fails_naming_refusal(world: World) -> None:
+    assert world.error is not None
+    assert "refused" in str(world.error).lower()
+
+
+@then("the client tried 1 time")
+def tried_once(world: World) -> None:
+    assert len(world.timeouts) == 1
 
 
 @then("the client waited 1 s, 2 s and 4 s")

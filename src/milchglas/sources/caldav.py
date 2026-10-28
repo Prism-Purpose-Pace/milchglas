@@ -51,6 +51,14 @@ def _request(opener: Opener, url: str) -> bytes:
         msg = f"HTTP {error.code}"
         # Only 5xx: a retried 401 or 429 turns a wrong password into a lockout (Q-15).
         raise FetchError(msg, retryable=error.code >= HTTPStatus.INTERNAL_SERVER_ERROR) from None
+    except urllib.error.URLError as error:
+        # urllib wraps what fails before an answer, a connect timeout included. Only the
+        # timeout is retried; the reason's class names the rest, never a host (NFR-P4).
+        if isinstance(error.reason, TimeoutError):
+            msg = "timeout"
+            raise FetchError(msg, retryable=True) from None
+        msg = f"connection failed: {type(error.reason).__name__}"
+        raise FetchError(msg, retryable=False) from None
     except TimeoutError:
         msg = "timeout"
         raise FetchError(msg, retryable=True) from None
