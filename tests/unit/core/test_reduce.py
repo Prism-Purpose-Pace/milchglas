@@ -236,8 +236,8 @@ DURATION_BASE = "CORE-DUR-1"
 START = "2026-10-01T12:00Z"
 
 
-def _with_duration(text: str | None) -> Block | Skip:
-    event = component(TIMES, DURATION_BASE)
+def _with_duration(text: str | None, base: str = DURATION_BASE) -> Block | Skip:
+    event = component(TIMES, base)
     return reduce_event(event, tz=BERLIN, owner_emails=OWNERS, duration=text)
 
 
@@ -286,6 +286,34 @@ def test_unreadable_duration_text_raises_without_quoting_it_core_dur_8(text: str
     assert str(caught.value) == "DURATION is unreadable"  # the text may be private
     assert caught.value.__cause__ is None
     assert caught.value.__context__ is None or caught.value.__suppress_context__
+
+
+# An all-day event on 2026-10-03; only the DURATION text changes below.
+ALLDAY_BASE = "CORE-DUR-2"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # Hours that add up to whole days are whole days: one busy day, never a dropped event.
+        ("PT24H", day("2026-10-03", "2026-10-04")),
+        ("PT48H", day("2026-10-03", "2026-10-05")),
+        ("P1DT24H", day("2026-10-03", "2026-10-05")),
+        ("P1W", day("2026-10-03", "2026-10-10")),
+        ("PT0S", Skip.EMPTY),
+        ("-PT24H", Skip.NEGATIVE),
+        ("-P1DT24H", Skip.NEGATIVE),
+    ],
+)
+def test_allday_duration_counts_whole_days_core_dur_9(text: str, expected: Block | Skip) -> None:
+    assert _with_duration(text, ALLDAY_BASE) == expected
+
+
+@pytest.mark.parametrize("text", ["PT12H", "PT25H", "PT24H1M", "P1DT12H", "PT1S", "-PT12H"])
+def test_allday_duration_with_a_part_of_a_day_is_malformed_core_dur_9(text: str) -> None:
+    # A date has no hour to end on; reading it as a day or as nothing would misplace the block.
+    with pytest.raises(MalformedEventError):
+        _with_duration(text, ALLDAY_BASE)
 
 
 def test_an_event_with_a_duration_property_needs_its_text_core_dur_8() -> None:
