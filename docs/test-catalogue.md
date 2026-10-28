@@ -258,6 +258,7 @@ the expected-blocks oracle assumes until the spec changes.
 | WEB-13 | `web` refuses to start on a `token_sha256` that is not 64 hex characters | NFR-S1, D-14 | unit | exists |
 | WEB-18 | Feed file unreadable (permission, a directory, an I/O error) → the identical 404 and one constant warning naming the exception class; no exception leaves the app, so no server error log line carries the request path or the token | NFR-S5, AC-9 | unit | exists |
 | WEB-19 | `web` reads `MILCHGLAS_LOG_LEVEL` in any letter case, unset or empty means `INFO`; any other value refuses the start with an error naming only the variable | NFR-O1 | unit | exists |
+| WEB-20 | An `If-None-Match` list is split at its commas, with or without a space after them (RFC 9110 section 8.8.3): the current ETag anywhere in the list, first, last or weak, gets 304; a list without it gets 200 (`-last`, `-first`, `-weak-in-the-middle`, `-absent`) | AC-9, AC-6 | unit | exists |
 
 ## 9. Health
 
