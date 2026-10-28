@@ -14,6 +14,10 @@ adds the form rules of novibe's `.gherkin-lintrc` and its requirements step, on 
   `When` and a `Then`. `And`, `But` and `*` count as the keyword before them, and the
   background steps count, because pytest-bdd runs them as part of the scenario.
 - restricted-pattern: no step text names a screen element, a protocol or a data format.
+- outline-without-examples, unused-example-column, undefined-variable: an outline has
+  `Examples` with rows, every column is used by a step, and every `<variable>` of a step has a
+  column in each `Examples` block. A variable counts in step text, doc string and data table,
+  where pytest-bdd substitutes it (`pytest_bdd.parser.PARAM_RE`), and a background step counts.
 
 Every finding names file, line and rule. A rule fails on its own bad case and stays silent
 on its near-miss, so a check that cannot fail would show here.
@@ -26,9 +30,11 @@ from pathlib import Path
 from typing import Any, NamedTuple, cast, override
 
 import pytest
+from gherkin.dialect import DIALECTS
 from gherkin.errors import CompositeParserException
 from gherkin.parser import Parser
 from gherkin.parser_types import Feature, GherkinDocument, Scenario, Step
+from pytest_bdd.parser import PARAM_RE
 
 from tests.conftest import CATALOGUE_ID
 from tests.meta.test_catalogue_traceability import REPO, tree
@@ -120,6 +126,37 @@ def shape(at: partial[Finding], scenario: Scenario, steps: list[Step]) -> Iterat
                 yield at(step["location"]["line"], "restricted-pattern", f"step names {found[0]!r}")
 
 
+def variables(step: Step) -> set[str]:
+    """The <variables> of a step, where pytest-bdd substitutes them: text, doc string, table."""
+    texts = [step["text"]]
+    if "docString" in step:
+        texts.append(step["docString"]["content"])
+    if "dataTable" in step:
+        texts += [cell["value"] for row in step["dataTable"]["rows"] for cell in row["cells"]]
+    return {found[1] for text in texts for found in PARAM_RE.finditer(text)}
+
+
+def outline(
+    at: partial[Finding], scenario: Scenario, steps: list[Step], keywords: list[str]
+) -> Iterator[Finding]:
+    """Examples with rows, a step for every column and a column for every variable."""
+    blocks = [examples for examples in scenario["examples"] if examples.get("tableBody")]
+    if not blocks:
+        if scenario["keyword"] in keywords or scenario["examples"]:
+            yield at(scenario["location"]["line"], "outline-without-examples", "no Examples rows")
+        return
+    used = {name for step in steps for name in variables(step)}
+    columns = [{cell["value"] for cell in block["tableHeader"]["cells"]} for block in blocks]
+    for block in blocks:
+        for cell in block["tableHeader"]["cells"]:
+            if cell["value"] not in used:
+                yield at(cell["location"]["line"], "unused-example-column", f"{cell['value']!r}")
+    for step in steps:
+        for name in sorted(variables(step)):
+            if not all(name in block for block in columns):
+                yield at(step["location"]["line"], "undefined-variable", f"<{name}> has no column")
+
+
 def head(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
     """The id and tag rules, and the rule that a feature holds a scenario."""
     line = feature["location"]["line"]
@@ -144,8 +181,11 @@ def check(file: str, document: GherkinDocument) -> Iterator[Finding]:
         yield at(1, "no-scenario", "no Feature")
         return
     yield from head(at, feature)
+    keywords = DIALECTS[feature["language"]]["scenarioOutline"]
     for scenario, background in cases(feature["children"], []):
-        yield from shape(at, scenario, [*background, *scenario["steps"]])
+        steps = [*background, *scenario["steps"]]
+        yield from shape(at, scenario, steps)
+        yield from outline(at, scenario, steps, keywords)
 
 
 def lint(root: Path) -> list[Finding]:
@@ -324,6 +364,109 @@ def test_near_miss_is_silent(tmp_path: Path, text: str) -> None:
 @pytest.mark.parametrize("tag", ["wip", "alpha-1", "ALPHA", "ALPHA-1x", "id", "id:", "backlogged"])
 def test_tag_outside_the_allowlist_is_reported(tmp_path: Path, tag: str) -> None:
     assert found(tmp_path, GOOD.replace("@ALPHA-1", f"@ALPHA-1 @{tag}")) == [(6, "tag-allowed")]
+
+
+# An outline that is right: the bad cases below each break one thing.
+OUTLINE = """\
+@id:80
+Feature: Sample
+
+  @ALPHA-1
+  Scenario Outline: First
+    Given a <thing>
+    When it runs
+    Then it is <state>
+
+    Examples:
+      | thing | state |
+      | cat   | done  |
+"""
+
+OUTLINE_BAD = {
+    "no-examples": (
+        OUTLINE.split("\n    Examples:", maxsplit=1)[0] + "\n",
+        [(5, "outline-without-examples")],
+    ),
+    "template-keyword-no-examples": (
+        OUTLINE.split("\n    Examples:", maxsplit=1)[0].replace("Outline", "Template") + "\n",
+        [(5, "outline-without-examples")],
+    ),
+    "examples-without-rows": (
+        OUTLINE.replace("      | cat   | done  |\n", ""),
+        [(5, "outline-without-examples")],
+    ),
+    "examples-without-table": (
+        OUTLINE.split("      | thing", maxsplit=1)[0],
+        [(5, "outline-without-examples")],
+    ),
+    "scenario-keyword-with-empty-examples": (
+        OUTLINE.replace("Scenario Outline", "Scenario").replace("      | cat   | done  |\n", ""),
+        [(5, "outline-without-examples")],
+    ),
+    "german-keyword-no-examples": (
+        (
+            "# language: de\n@id:80\nFunktionalität: Sample\n\n  @ALPHA-1\n"
+            "  Szenariogrundriss: First\n"
+            "    Gegeben sei a <thing>\n    Wenn it runs\n    Dann it is done\n"
+        ),
+        [(6, "outline-without-examples")],
+    ),
+    "unused-column": (
+        OUTLINE.replace("| state |", "| state | extra |").replace("| done  |", "| done  | 1 |"),
+        [(11, "unused-example-column")],
+    ),
+    "column-used-only-in-the-name": (
+        OUTLINE.replace("First", "First <state>").replace("it is <state>", "it is done"),
+        [(11, "unused-example-column")],
+    ),
+    "unused-column-in-the-second-block": (
+        OUTLINE + "\n    Examples:\n      | thing | state | extra |\n      | dog   | done  | 1 |\n",
+        [(15, "unused-example-column")],
+    ),
+    "variable-without-column": (
+        OUTLINE.replace("a <thing>", "a <thing> and <other>"),
+        [(6, "undefined-variable")],
+    ),
+    "variable-without-column-in-the-second-block": (
+        OUTLINE + "\n    Examples:\n      | thing |\n      | dog   |\n",
+        [(8, "undefined-variable")],
+    ),
+    "variable-in-the-doc-string-without-column": (
+        OUTLINE.replace(
+            "Then it is <state>", 'Then it is <state>\n      """\n      <other>\n      """'
+        ),
+        [(8, "undefined-variable")],
+    ),
+}
+
+
+@pytest.mark.parametrize(("text", "expected"), OUTLINE_BAD.values(), ids=OUTLINE_BAD.keys())
+def test_bad_outline_is_reported_with_line_and_rule(
+    tmp_path: Path, text: str, expected: list[tuple[int, str]]
+) -> None:
+    assert found(tmp_path, text) == expected
+
+
+OUTLINE_SILENT = {
+    "outline": OUTLINE,
+    "scenario-keyword-with-examples": OUTLINE.replace("Scenario Outline", "Scenario"),
+    "two-blocks": OUTLINE + "\n    Examples:\n      | thing | state |\n      | dog   | done  |\n",
+    "variable-only-in-a-doc-string": OUTLINE.replace(
+        "Then it is <state>", 'Then it is done\n      """\n      <state>\n      """'
+    ),
+    "variable-only-in-a-data-table": OUTLINE.replace(
+        "Then it is <state>", "Then it is done\n      | <state> |"
+    ),
+    "variable-only-in-the-background": OUTLINE.replace(
+        "  @ALPHA-1", "  Background:\n    Given the <state>\n\n  @ALPHA-1"
+    ).replace("Then it is <state>", "Then it is done"),
+    "angle-brackets-in-a-scenario-without-examples": GOOD.replace("a thing", "an <answer> element"),
+}
+
+
+@pytest.mark.parametrize("text", OUTLINE_SILENT.values(), ids=OUTLINE_SILENT.keys())
+def test_good_outline_is_silent(tmp_path: Path, text: str) -> None:
+    assert found(tmp_path, text) == []
 
 
 # Step texts that name how the system is used, not what it does: one per pattern of novibe's
