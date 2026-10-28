@@ -31,6 +31,13 @@ the same files with:
 - no-comments: a `#` line is a comment and fails; the reason goes into a scenario description.
 - dupe-feature-name, dupe-scenario-name: a feature name is unique across the files, a
   scenario name within its feature, rules included (pytest-bdd looks a scenario up by name).
+- use-and: a Given, When or Then never follows a step of the same keyword; `And` goes there.
+- no-duplicate-tags: a tag stands once on a node; pytest-bdd keeps tags as a set, so a doubled
+  ID tag would pass GATE-22's one-ID check unseen.
+- synthetic-world: every e-mail domain, URL host and IP address in a name, description, step,
+  doc string or table cell is a documentation one (RFC 2606 names, RFC 5737 and RFC 3849
+  networks, loopback), so a feature names nothing real (novibe: the World is synthetic).
+  Shortcut: a bare host name without a scheme or `@`, and a person's name, are not read here.
 
 Every finding names file, line and rule. A rule fails on its own bad case and stays silent
 on its near-miss, so a check that cannot fail would show here.
@@ -41,6 +48,8 @@ requirements step; `@long-running` passes tag-allowed but is a pytest marker tha
 `pyproject.toml` does not register yet.
 """
 
+import contextlib
+import ipaddress
 import re
 from collections.abc import Callable, Iterator
 from functools import partial
@@ -77,6 +86,16 @@ RESTRICTED = [
         r"\bJSON\b",
         r"\bSQL\b",
     )
+]
+EMAIL = re.compile(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)")
+URL = re.compile(r"\b[a-z][a-z0-9+.-]*://(\[[^\]]+\]|[^/\s:?#\"'<>|]+)", re.IGNORECASE)
+IP = re.compile(r"[0-9A-Fa-f:.]*[:.][0-9A-Fa-f:.]+")  # a candidate; ipaddress decides
+RESERVED_NAME = re.compile(
+    r"(?:.+\.)?(?:example\.(?:com|net|org)|example|test|invalid|localhost)", re.IGNORECASE
+)
+DOCUMENTATION = [
+    ipaddress.ip_network(network)
+    for network in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "2001:db8::/32")
 ]
 
 
@@ -144,6 +163,55 @@ def restricted(at: partial[Finding], line: int, text: str) -> Iterator[Finding]:
             yield at(line, "restricted-pattern", f"names {found[0]!r}")
 
 
+def repeats(at: partial[Finding], steps: list[Step]) -> Iterator[Finding]:
+    """A Given, When or Then right after a step of the same keyword, where And belongs."""
+    for step, before in zip(steps[1:], kinds(steps), strict=False):
+        if step["keywordType"] == before and before in ORDER:
+            yield at(step["location"]["line"], "use-and", f"{step['keyword'].strip()!r}: use And")
+
+
+def texts(feature: Feature) -> Iterator[tuple[int, str]]:
+    """Every name, description, step text, doc string and table cell, with its line."""
+    scenarios = [scenario for scenario, _ in cases(feature["children"], [])]
+    backgrounds = parts(feature, "background")
+    for node in [feature, *parts(feature, "rule"), *backgrounds, *scenarios]:
+        yield node["location"]["line"], f"{node['name']}\n{node['description']}"
+    tables: list[Any] = [examples for scenario in scenarios for examples in scenario["examples"]]
+    for step in [step for node in [*backgrounds, *scenarios] for step in node["steps"]]:
+        yield step["location"]["line"], step["text"]
+        if "docString" in step:
+            yield step["docString"]["location"]["line"], step["docString"]["content"]
+        tables.append({"tableBody": step.get("dataTable", {}).get("rows", [])})
+    for table in tables:
+        rows = [*([table["tableHeader"]] if "tableHeader" in table else []), *table["tableBody"]]
+        yield from (
+            (cell["location"]["line"], cell["value"]) for row in rows for cell in row["cells"]
+        )
+
+
+def real(value: str) -> bool:
+    """True unless `value` is a documentation name or address, or loopback."""
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return not RESERVED_NAME.fullmatch(value.rstrip("."))
+    return not (address.is_loopback or any(address in network for network in DOCUMENTATION))
+
+
+def world(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
+    """The e-mail domains, URL hosts and IP addresses that point somewhere real."""
+    for line, text in texts(feature):
+        found = [m[1] for m in EMAIL.finditer(text)]
+        found += [m[1].strip("[]") for m in URL.finditer(text)]
+        for candidate in IP.finditer(text):
+            with contextlib.suppress(ValueError):
+                found.append(str(ipaddress.ip_address(candidate[0].rstrip("."))))
+        for value in found:
+            if real(value):
+                message = f"{value!r} is real: use an RFC 2606 name or RFC 5737/3849 address"
+                yield at(line, "synthetic-world", message)
+
+
 def shape(at: partial[Finding], scenario: Scenario, steps: list[Step]) -> Iterator[Finding]:
     """The size, the When/Then form and the order of one scenario and its background steps."""
     line, kind = scenario["location"]["line"], kinds(steps)
@@ -158,6 +226,7 @@ def shape(at: partial[Finding], scenario: Scenario, steps: list[Step]) -> Iterat
         if 0 <= position < highest:
             yield at(step["location"]["line"], "keyword-order", "Given, When, Then in this order")
         highest = max(highest, position)
+    yield from repeats(at, scenario["steps"])
     for step in steps:
         yield from restricted(at, step["location"]["line"], step["text"])
 
@@ -235,7 +304,9 @@ def head(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
     if not feature["description"].strip():
         yield at(line, "feature-description", "no description: who gains what, and why")
     for node in tagged(feature):
-        for tag in node["tags"]:
+        for index, tag in enumerate(node["tags"]):
+            if tag["name"] in [earlier["name"] for earlier in node["tags"][:index]]:
+                yield at(tag["location"]["line"], "no-duplicate-tags", f"{tag['name']} twice")
             if not ALLOWED_TAG.fullmatch(tag["name"].removeprefix("@")):
                 allowed = "@id:<issue>, @backlog, @long-running or a catalogue ID"
                 yield at(
@@ -255,6 +326,7 @@ def body(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
         if len(steps) > MAX_BACKGROUND or set(kinds(steps)) != {"Context"}:  # empty: set()
             message = f"{len(steps)} steps; 1 to {MAX_BACKGROUND} Given steps"
             yield at(background["location"]["line"], "background-form", message)
+        yield from repeats(at, steps)
     nodes = [feature, *parts(feature, "rule"), *parts(feature, "background")]
     nodes += [scenario for scenario, _ in cases(feature["children"], [])]
     for node in nodes:
@@ -276,6 +348,7 @@ def check(file: str, document: GherkinDocument) -> Iterator[Finding]:
         return
     yield from head(at, feature)
     yield from body(at, feature)
+    yield from world(at, feature)
     yield from repeated_scenarios(at, feature)
     keywords = DIALECTS[feature["language"]]["scenarioOutline"]
     for scenario, background in cases(feature["children"], []):
@@ -392,7 +465,31 @@ BAD = {
     "when-missing": (GOOD.replace("      When it runs\n", ""), [(7, "when-count")]),
     "when-twice": (
         GOOD.replace("When it runs\n", "When it runs\n      When it runs again\n"),
-        [(7, "when-count")],
+        [(7, "when-count"), (10, "use-and")],
+    ),
+    "use-and-given": (
+        GOOD.replace("Given a thing\n", "Given a thing\n      Given a second\n"),
+        [(9, "use-and")],
+    ),
+    "use-and-then": (
+        GOOD.replace("Then it is done\n", "Then it is done\n      Then it is clean\n"),
+        [(11, "use-and")],
+    ),
+    "use-and-after-and": (
+        GOOD.replace("Given a thing\n", "Given a thing\n      And a second\n      Given a third\n"),
+        [(10, "use-and")],
+    ),
+    "use-and-in-background": (
+        GOOD.replace("  Rule:", "  Background:\n    Given a base\n    Given a second\n\n  Rule:"),
+        [(6, "use-and")],
+    ),
+    "duplicate-tag-on-a-scenario": (
+        GOOD.replace("@ALPHA-1", "@ALPHA-1 @ALPHA-1"),
+        [(6, "no-duplicate-tags")],
+    ),
+    "duplicate-tag-on-the-feature": (
+        GOOD.replace("@id:80", "@id:80 @id:80"),
+        [(1, "no-duplicate-tags"), (2, "feature-id")],
     ),
     "and-after-when": (
         GOOD.replace("When it runs\n", "When it runs\n      And it runs again\n"),
@@ -544,6 +641,9 @@ SILENT = {
         "    Background:\n      Given a base\n      And a second\n      And a third\n\n    @ALPHA-1\n",
     ),
     "but-after-given": GOOD.replace("Given a thing\n", "Given a thing\n      But not another\n"),
+    "same-tag-on-feature-and-scenario": GOOD.replace("@id:80", "@id:80 @backlog").replace(
+        "@ALPHA-1", "@backlog @ALPHA-1"
+    ),
 }
 
 
@@ -838,3 +938,67 @@ def test_step_that_only_contains_a_pattern_as_part_of_a_word_is_silent(
     tmp_path: Path, step: str
 ) -> None:
     assert found(tmp_path, GOOD.replace("a thing", step)) == []
+
+
+# Addresses that point somewhere real, and the documentation ones a synthetic World uses.
+REAL_ADDRESSES = [
+    "owner@mail.acme.de",
+    "owner@example.com.acme.de",
+    "https://cloud.acme.de/remote.php/dav",
+    "https://nas.home.arpa",
+    "10.0.0.7",
+    "the server 10.0.0.7.",
+    "fd00::7",
+    "https://[fd00::7]/dav",
+]
+
+
+@pytest.mark.parametrize("address", REAL_ADDRESSES)
+def test_real_address_in_a_step_is_reported(tmp_path: Path, address: str) -> None:
+    text = GOOD.replace("a thing", f"a calendar at {address}")
+    assert found(tmp_path, text) == [(8, "synthetic-world")]
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "owner@example.com",
+        "https://dav.example.org/calendars",
+        "https://dav.test",
+        "https://localhost:8080/f/feed.ics",
+        "192.0.2.7",
+        "2001:db8::1",
+        "https://[2001:db8::1]/dav",
+        "127.0.0.1",
+        "09:00 to 10:30:00",
+        "version 1.7 on 2026-10-25",
+    ],
+)
+def test_documentation_address_or_time_is_silent(tmp_path: Path, address: str) -> None:
+    assert found(tmp_path, GOOD.replace("a thing", f"a calendar at {address}")) == []
+
+
+ADDRESS_PLACES = {
+    "feature-description": (GOOD.replace("  A sample.", "  Mail owner@mail.acme.de."), 2),
+    "scenario-name": (GOOD.replace("Scenario: First", "Scenario: First at 10.0.0.7"), 7),
+    "background-step": (
+        GOOD.replace("  Rule:", "  Background:\n    Given the server 10.0.0.7\n\n  Rule:"),
+        5,
+    ),
+    "doc-string": (
+        GOOD.replace(
+            "Given a thing\n",
+            'Given a thing\n        """\n        owner@mail.acme.de\n        """\n',
+        ),
+        9,
+    ),
+    "data-table": (GOOD.replace("Given a thing\n", "Given a thing\n        | 10.0.0.7 |\n"), 9),
+    "examples-cell": (OUTLINE.replace("| cat   | done  |", "| 10.0.0.7 | done |"), 12),
+}
+
+
+@pytest.mark.parametrize(("text", "line"), ADDRESS_PLACES.values(), ids=ADDRESS_PLACES.keys())
+def test_real_address_anywhere_is_reported_on_its_line(
+    tmp_path: Path, text: str, line: int
+) -> None:
+    assert found(tmp_path, text) == [(line, "synthetic-world")]
