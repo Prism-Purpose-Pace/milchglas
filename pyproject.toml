@@ -88,7 +88,11 @@ ignore = [
 "!src/milchglas/core/**" = ["TID251"]
 # emit takes one argument per field of the published feed (blocks, summary, salt, ttl,
 # version, now, dtstamps); a parameter object would only rename them.
-"src/milchglas/core/emit.py" = ["PLR0913"]# These tests hand naive datetimes to core on purpose: core must refuse them.
+"src/milchglas/core/emit.py" = ["PLR0913"]
+# fetch opens the calendar URL built from CALDAV_URL; its scheme is the configuration's
+# rule (https only, FR-1 and NFR-S7: ORCH-CFG-2), not something a request can check.
+"src/milchglas/sources/caldav.py" = ["S310"]
+# These tests hand naive datetimes to core on purpose: core must refuse them.
 "tests/unit/core/test_emit.py" = ["DTZ001"]
 "tests/unit/core/test_model.py" = ["DTZ001"]
 # pytest idioms: assertion rewriting, literal expectations. INP001 stays ON: every
