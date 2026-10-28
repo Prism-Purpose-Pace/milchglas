@@ -5,9 +5,10 @@ Human contributors: [CONTRIBUTING.md](CONTRIBUTING.md) holds the same rules.
 
 Milchglas reads CalDAV calendars read-only, reduces every event to anonymous time
 intervals and publishes a busy-only ICS feed. Spec: [docs/spec.md](docs/spec.md).
-**Status: no fetch yet** — built: the pure pipeline core (`src/milchglas/core/`: model,
+**Status: no refresh yet** — built: the pure pipeline core (`src/milchglas/core/`: model,
 reduce, emit; fixtures in `tests/fixtures/`), `config.py`, `state.py`, the token commands in
-`__main__.py` and `web/`; the CalDAV fetch (`sources/`) and `refresh.py` are not built yet.
+`__main__.py`, `web/` and the CalDAV client and parser (`sources/`); `refresh.py`, which wires
+fetch, pipeline and feed write into one run, is not built yet.
 Toolchain rationale: [TOOLING.md](TOOLING.md).
 
 ## Stack
@@ -48,8 +49,9 @@ fetch (CalDAV calendar-query + server-side expand) → filter → reduce → cli
 Layout: `src/milchglas/core/` (model, reduce, emit — pure, no I/O; ruff bans I/O imports
 there), `config.py` (loader, minimal digest reader), `state.py` (atomic writes, last success
 / last error, run lock), `web/` (WSGI app serving `/f/<token>.ics` and `/healthz`;
-`wsgi:create()` is the gunicorn entry); planned: `sources/` (CalDAV client, parsing),
-`refresh.py` (orchestration), `deploy/<option>/`; `docs/`.
+`wsgi:create()` is the gunicorn entry), `sources/` (`caldav.py` the request rules of FR-1,
+`multistatus.py` the parser); planned: `refresh.py` (orchestration), `deploy/<option>/`,
+`docs/runbook.md`, `docs/consumers.md`.
 
 - Non-secret config: one `config.json` (`tz`, `window_days`, `grid_minutes`, `summary`,
   `ttl_seconds`, `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[]`,
