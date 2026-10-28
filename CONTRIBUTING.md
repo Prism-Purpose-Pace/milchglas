@@ -110,10 +110,10 @@ docstring. Gate details: [TOOLING.md](TOOLING.md).
   carries `@backlog`: it may stay unbound, and a bound one is skipped; the change that
   builds it removes the tag. Properties, fuzzing and gates stay plain pytest. GATE-22
   checks the binding and the form: a feature description, at most five steps, exactly one
-  `When`, a `Then`, Given-When-Then in order, a Background of at most four Givens, no name
-  or step that names a click, a button, an endpoint, HTTP, JSON or SQL, `Examples` that
-  match the `<variables>` of an outline, no comment (put the reason in the scenario's
-  description), only the tags `@id:<number>`, `@backlog`, `@long-running` (a marker:
+  `When`, a `Then`, Given-When-Then in order, a Background of at most four Givens, a Rule
+  only for two scenarios or more, no name or step that names a click, a button, an
+  endpoint, HTTP, JSON or SQL, `Examples` that match the `<variables>` of an outline, no
+  comment (put the reason in the scenario's description), only the tags `@id:<number>`, `@backlog`, `@long-running` (a marker:
   register it in `pyproject.toml` first) and row IDs. A failing scenario names file,
   line and rule: `uv run pytest tests/meta/test_feature_lint.py`.
 - Core behaviour gets golden tests: overlap and adjacency merge, grid rounding, DST
