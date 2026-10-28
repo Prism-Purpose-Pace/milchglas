@@ -145,8 +145,8 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
 - Fill in the pull request template, including the privacy checklist.
 - A pull request that changes a feature file carries the output of
   `uv run --script scripts/judge_features.py` under "Judge findings" in its body. The four
-  judges are advisory until each passes its calibration (D-18); they need
-  `ANTHROPIC_API_KEY` and never run in CI.
+  judges are advisory until each passes its calibration (D-18); they run
+  through the `claude` CLI on your own login and never run in CI.
 - `main` is protected: pull requests are rebase-merged, history stays linear. Squash is
   disabled because a squash commit replaces the commits' authors with the merging
   account's profile name; a rebase keeps the authors but still records that profile

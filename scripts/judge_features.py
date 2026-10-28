@@ -8,25 +8,30 @@
     uv run --script scripts/judge_features.py --calibrate tests/meta/judge-set
 
 Without FILE it judges the feature files under tests/features/ that differ from the merge
-base with origin/main (else main), untracked ones included. Each file costs one request to
-the Messages API with the key in ANTHROPIC_API_KEY. While the judges are advisory, the
-finding lines go into the pull request body (CONTRIBUTING.md § Pull requests). Stdlib only,
-like every script here: the call is one HTTPS POST.
+base with origin/main (else main), untracked ones included. Each file costs one
+`claude --print` call on the operator's own Claude Code login, so no API key is needed.
+While the judges are advisory, the finding lines go into the pull request body
+(CONTRIBUTING.md § Pull requests). Stdlib only, like every script here.
+
+The call is isolated: it runs in an empty folder and loads no settings, hooks, plugins, MCP
+servers, skills, memory or tools of the caller (`--setting-sources ""`), and its system
+prompt replaces Claude Code's. The judge sees only the rubric and the file, so a hook that
+works on the operator's sessions cannot change what the calibration measured.
 
 --calibrate measures S1 of D-18 for each judge over a labelled set: `<judge>--defect-NN.feature`
 holds one seeded defect of that judge, `clean-NN.feature` none for any judge. A judge passes
 when it flags at least 26 of every 30 defect files and at most 3 of every 30 clean files, on at
 least 30 of each.
 
-No server-side fallback: a refusal stops the run, because an answer from another model would
-not be the model the calibration measured. A change of MODEL or of the rubric reruns it.
+No fallback model: an answer from another model would not be the model the calibration
+measured. A change of MODEL or of the rubric reruns it.
 
 A section of the rubric says `Status: advisory` or `Status: blocking`; a judge turns blocking
 once it passes the calibration. `--blocking` (the push stage) fails only on a finding of a
-blocking judge, and with no blocking judge it passes at once, without a key or a request.
+blocking judge, and with no blocking judge it passes at once, without the CLI or a call.
 
 Exit codes: 0 judged (advisory findings are advice) or every judge passed; 1 a blocking judge
-found something, or a judge failed the calibration; 2 a usage, rubric, git or API error.
+found something, or a judge failed the calibration; 2 a usage, rubric, git or claude error.
 """
 
 from __future__ import annotations
@@ -35,19 +40,22 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
-import urllib.error
-import urllib.request
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Any, override
 
-API = "https://api.anthropic.com/v1/messages"
-VERSION = "2026-10-21"
 MODEL = "claude-opus-5-5"
+CLAUDE = (  # one isolated judge call; --tools takes a list, so the prompt goes to stdin
+    "claude", "--print", "--model", MODEL, "--effort", "medium", "--output-format", "json",
+    "--setting-sources", "", "--settings", '{"disableAllHooks": true}', "--strict-mcp-config",
+    "--disable-slash-commands", "--no-session-persistence", "--tools", "",
+)  # fmt: skip
+TIMEOUT = 600
 ROOT = Path(__file__).resolve().parents[1]
 RUBRIC = Path("tests/meta/judges.md")
 FEATURES = Path("tests/features")
@@ -65,7 +73,7 @@ type Post = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 class JudgeError(Exception):
-    """A rubric, git or API failure: the run cannot judge, so it must not pass."""
+    """A rubric, git or claude failure: the run cannot judge, so it must not pass."""
 
 
 @dataclass(frozen=True)
@@ -101,16 +109,16 @@ def blocking(rubric: Mapping[str, str]) -> set[str]:
     return found
 
 
-def sender(environ: Mapping[str, str]) -> Post:
-    """The real API call, with the key from the environment; no key, no run."""
-    if not (key := environ.get("ANTHROPIC_API_KEY", "")):
-        msg = "ANTHROPIC_API_KEY is not set: the judges need it (CI never runs them)"
+def sender() -> Post:
+    """The real call through the claude CLI; no CLI, no run."""
+    if not shutil.which("claude"):
+        msg = "the claude CLI is not on PATH: the judges run through it (CI never runs them)"
         raise JudgeError(msg)
-    return partial(post, key=key)
+    return ask
 
 
 def request(feature: str, rubric: Mapping[str, str]) -> dict[str, Any]:
-    """The Messages API body that judges one feature file; findings come back as JSON."""
+    """The system prompt, schema and numbered file that judge one feature file."""
     numbered = "\n".join(f"{n:>4}| {line}" for n, line in enumerate(feature.splitlines(), 1))
     sections = "\n\n".join(
         f"## {name}\n{STATUS.sub('', text).strip()}" for name, text in rubric.items()
@@ -131,45 +139,47 @@ def request(feature: str, rubric: Mapping[str, str]) -> dict[str, Any]:
         "required": ["findings"],
         "additionalProperties": False,
     }
-    return {
-        "model": MODEL,
-        "max_tokens": 16000,
-        "system": f"{INSTRUCTION}\n\n{sections}",
-        "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": schema}},
-        "messages": [{"role": "user", "content": numbered}],
-    }
+    return {"system": f"{INSTRUCTION}\n\n{sections}", "schema": schema, "prompt": numbered}
 
 
-def post(
-    body: dict[str, Any], key: str, opener: Callable[..., Any] = urllib.request.urlopen
+def ask(
+    body: Mapping[str, Any], run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
 ) -> dict[str, Any]:
-    """Send one request; an HTTP error becomes a JudgeError that names the status, never the key."""
-    headers = {"content-type": "application/json", "x-api-key": key, "anthropic-version": VERSION}
-    call = urllib.request.Request(
-        API, data=json.dumps(body).encode(), headers=headers, method="POST"
-    )
+    """One isolated claude call in an empty folder; output that is no JSON fails the run."""
+    args = [*CLAUDE, "--system-prompt", body["system"], "--json-schema", json.dumps(body["schema"])]
+    env = {name: value for name, value in os.environ.items() if name != "CLAUDECODE"}
     try:
-        with opener(call, timeout=600) as response:
-            answer: dict[str, Any] = json.load(response)
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", "replace")[:500]
-        msg = f"the Messages API answered {error.code}: {detail}"
+        with tempfile.TemporaryDirectory() as empty:
+            done = run(
+                args,
+                input=body["prompt"],
+                capture_output=True,
+                text=True,
+                cwd=empty,
+                env=env,
+                timeout=TIMEOUT,
+                check=False,
+            )
+    except subprocess.TimeoutExpired:
+        msg = f"claude did not answer within {TIMEOUT} s"
         raise JudgeError(msg) from None
-    except urllib.error.URLError as error:
-        msg = f"the Messages API is unreachable: {error.reason}"
+    try:
+        answer: dict[str, Any] = json.loads(done.stdout)
+    except json.JSONDecodeError:
+        msg = f"claude exited {done.returncode}: {(done.stderr or done.stdout).strip()[:500]}"
         raise JudgeError(msg) from None
     return answer
 
 
 def findings(file: str, answer: Mapping[str, Any], judges: Sequence[str]) -> list[Finding]:
-    """The findings of one answer; any stop but end_turn means no verdict."""
-    if answer.get("stop_reason") != "end_turn":
-        msg = f"{file}: the model stopped with {answer.get('stop_reason')!r}, no verdict"
+    """The findings of one answer; an error answer means no verdict."""
+    if answer.get("is_error") or answer.get("subtype") != "success":
+        detail = str(answer.get("result", ""))[:300]
+        msg = f"{file}: claude answered {answer.get('subtype')!r}, no verdict: {detail}"
         raise JudgeError(msg)
-    text = "".join(block["text"] for block in answer["content"] if block["type"] == "text")
     try:
-        listed = json.loads(text)["findings"]
-    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        listed = answer["structured_output"]["findings"]
+    except (KeyError, TypeError) as error:
         msg = f"{file}: the answer is no findings list ({error})"
         raise JudgeError(msg) from None
     return [
@@ -238,7 +248,6 @@ def calibrate(folder: Path, rubric: Mapping[str, str], send: Post) -> tuple[list
 def main(
     argv: Sequence[str] | None = None,
     send: Post | None = None,
-    environ: Mapping[str, str] = os.environ,
     rubric_file: Path = ROOT / RUBRIC,
 ) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0] if __doc__ else None)
@@ -254,13 +263,13 @@ def main(
         rubric = rubrics(rubric_file.read_text(encoding="utf-8"))
         gate = blocking(rubric)
         if args.calibrate is not None:
-            lines, passed = calibrate(args.calibrate, rubric, send or sender(environ))
+            lines, passed = calibrate(args.calibrate, rubric, send or sender())
             print("\n".join(lines))
             return 0 if passed else 1
         if args.blocking and not gate:
-            return 0  # no judge has passed its calibration yet: nothing blocks, no key needed
+            return 0  # no judge has passed its calibration yet: nothing blocks, no call needed
         paths = args.files or changed(ROOT)
-        found = judge(paths, rubric, send or sender(environ)) if paths else []
+        found = judge(paths, rubric, send or sender()) if paths else []
     except JudgeError as error:
         print(f"judge_features: {error}", file=sys.stderr)
         return 2
