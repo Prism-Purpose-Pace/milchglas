@@ -4,7 +4,7 @@
 #                pre-commit install --install-hooks
 #                uv run --script scripts/install_push_guard.py
 #
-# Single version source: the Python tools (ruff, mypy, pytest) run as local hooks
+# Single version source: the Python tools (ruff, mypy, basedpyright, pytest) run as local hooks
 # through `uv run --frozen`, so their versions come from uv.lock and match the
 # commands in CONTRIBUTING.md and CI exactly. Remote `rev:` pins remain only for
 # non-Python tools; bump those with `pre-commit autoupdate`.
@@ -41,9 +41,10 @@ repos:
       - id: detect-private-key
 
   # ---------------------------------------------------------------------------
-  # Python: ruff, lock sync, mypy --strict, pytest — local hooks, versions from
-  # uv.lock. mypy and pytest run at pre-push: a full type-check and test run exceed
-  # the <2s commit budget; CI repeats them as required checks.
+  # Python: ruff, lock sync, mypy --strict, basedpyright, pytest — local hooks,
+  # versions from uv.lock. The type checkers and pytest run at pre-push: a full
+  # type-check and test run exceed the <2s commit budget; CI repeats them as
+  # required checks.
   # ---------------------------------------------------------------------------
   - repo: local
     hooks:
@@ -80,6 +81,14 @@ repos:
       - id: mypy-strict
         name: mypy --strict
         entry: uv run --frozen mypy
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
+      # Findings recorded in .basedpyright/baseline.json pass; a new one fails.
+      - id: basedpyright
+        name: basedpyright (baseline)
+        entry: uv run --frozen basedpyright
         language: system
         always_run: true
         pass_filenames: false
