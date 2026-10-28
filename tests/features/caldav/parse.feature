@@ -10,7 +10,7 @@ Feature: Read the calendar server's answer
 
   Rule: An event is read as the server wrote it (FR-2, Q-20)
 
-    @backlog @PARSE-5
+    @PARSE-5
     Scenario Outline: A repeated event lasts as long as written
       Given calendar 1 answers with one instance from 2026-10-24 07:00 UTC lasting "<duration>"
       When Milchglas reads the answer
@@ -21,7 +21,7 @@ Feature: Read the calendar server's answer
         | P1D      | 08:00 |
         | PT24H    | 07:00 |
 
-    @backlog @PARSE-13
+    @PARSE-13
     Scenario Outline: A line folded inside a character still reads
       Given calendar 1 answers with an event from 2026-11-02 08:00 UTC to 09:00 UTC whose description "BBX-Kälte" is folded inside the "ä" with <line end>
       When Milchglas reads the answer
@@ -32,7 +32,7 @@ Feature: Read the calendar server's answer
         | CRLF     |
         | LF       |
 
-    @backlog @PARSE-13
+    @PARSE-13
     Scenario: A line longer than 75 octets still reads
       Given calendar 1 answers with an event from 2026-11-02 08:00 UTC to 09:00 UTC whose description line is 200 octets long
       When Milchglas reads the answer
