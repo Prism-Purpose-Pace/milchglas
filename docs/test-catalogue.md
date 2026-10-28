@@ -125,6 +125,7 @@ the expected-blocks oracle assumes until the spec changes.
 | CORE-CLIP-4 | Block straddling the window end → cut at the end | FR-5 | unit | exists |
 | CORE-CLIP-5 | All-day block straddling the window start → `start_date` is the window start date | FR-5 | unit | exists |
 | CORE-CLIP-6 | Window start = 00:00 local of `clock.now()`; refreshes at 09:05 and 09:20 the same day → identical window and bytes | FR-5, AC-6 | unit | exists |
+| CORE-CLIP-7 | A tentative block that the window cuts stays tentative, timed and all-day alike: the rebuilt block carries the flag of the one it replaces (`-timed`, `-day`) | FR-5, FR-14 | unit | exists |
 | CORE-RND-1 | 10:07–10:52 → 10:00–11:00 | FR-6 | unit | exists |
 | CORE-RND-2 | 10:00–10:15 stays unchanged | FR-6 | unit | exists |
 | CORE-RND-3 | 10:00–10:16 → 10:00–10:30 | FR-6 | unit | exists |
