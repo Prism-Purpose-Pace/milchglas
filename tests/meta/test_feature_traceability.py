@@ -17,6 +17,11 @@ scenario under `tests/features/`:
 - misnamed: the binding function is `test_<id>` or `test_<id>_…`, the ID lower-cased with
   dashes as underscores, so pytest collects it and GATE-17 counts it as a citation.
 
+A fifth check, vacuous_then: every `@then` step function under `tests/` holds an `assert`,
+a `pytest.raises` or a call to an `assert_*` helper, so no outcome passes by asserting
+nothing (D-18). An assertion inside a helper with another name reads as missing: name the
+helper `assert_*`.
+
 A binding the check cannot read (`scenarios()`, a computed path) leaves its scenario
 unbound, so the gap is reported, never hidden. The hook in `tests/conftest.py` keeps the
 ID tags and the feature's `@id:<ticket>` out of the markers; any other tag still meets
@@ -76,6 +81,38 @@ def bindings(root: Path) -> list[tuple[Key, str]]:
     return found
 
 
+def asserts(function: ast.FunctionDef) -> bool:
+    """True when the function holds an `assert`, a `pytest.raises` or an `assert_*` call."""
+    for node in ast.walk(function):
+        match node:
+            case ast.Assert() | ast.Call(func=ast.Attribute(attr="raises")):
+                return True
+            case ast.Call(func=ast.Name(id=str() as name) | ast.Attribute(attr=str() as name)):
+                if name.startswith("assert_"):
+                    return True
+            case _:
+                pass
+    return False
+
+
+def vacuous_thens(root: Path) -> list[str]:
+    """Each `@then` step function under tests/ that asserts nothing, as `path:line: name`."""
+    found: list[str] = []
+    for path in sorted((root / "tests").rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.FunctionDef) or asserts(node):
+                continue
+            for decorator in node.decorator_list:
+                match decorator:
+                    case ast.Call(func=ast.Name(id="then") | ast.Attribute(attr="then")):
+                        found.append(
+                            f"{path.relative_to(root).as_posix()}:{node.lineno}: {node.name}"
+                        )
+                    case _:
+                        pass
+    return found
+
+
 def problems(root: Path) -> Problems:
     rows = parse_catalogue((root / CATALOGUE).read_text(encoding="utf-8"))
     tags = scenario_tags(root)
@@ -119,6 +156,10 @@ def problems(root: Path) -> Problems:
 
 def test_every_scenario_runs_under_its_id() -> None:
     assert problems(REPO) == {"tags": [], "unbound": [], "bound_twice": [], "misnamed": []}
+
+
+def test_every_then_step_asserts() -> None:
+    assert vacuous_thens(REPO) == []
 
 
 # --- the checks on synthetic features and bindings ---------------------------------------
@@ -288,6 +329,59 @@ def test_built() -> None: ...
 @given("a thing")
 def _thing() -> None: ...
 """
+
+
+STEPS = """\
+import pytest
+from pytest_bdd import given, parsers, then
+
+
+@then("it is checked")
+def _checked(value: int) -> None:
+    assert value == 1
+
+
+@then("it raises")
+def _raises() -> None:
+    with pytest.raises(ValueError):
+        int("x")
+
+
+@then("the helper checks it")
+def _helper(feed: str) -> None:
+    assert_feed(feed)
+
+
+@given("a thing")
+def _thing() -> None: ...
+"""
+
+
+def steps(tmp_path: Path, code: str) -> Path:
+    return tree(tmp_path, {"tests/unit/test_steps.py": code})
+
+
+def test_then_steps_that_assert_are_silent(tmp_path: Path) -> None:
+    assert vacuous_thens(steps(tmp_path, STEPS)) == []
+
+
+@pytest.mark.parametrize(
+    ("code", "name"),
+    [
+        ('@then("it is done")\ndef _done() -> None: ...\n', "_done"),
+        (
+            (
+                '@then(parsers.parse("it is {state}"))\ndef _state(state: str) -> None:\n'
+                "    print(state)\n"
+            ),
+            "_state",
+        ),
+        ('@pytest_bdd.then("x")\ndef _x() -> None:\n    pass\n', "_x"),
+    ],
+    ids=["ellipsis", "print-only", "module-attribute"],
+)
+def test_then_step_that_asserts_nothing_is_reported(tmp_path: Path, code: str, name: str) -> None:
+    assert vacuous_thens(steps(tmp_path, code)) == [f"tests/unit/test_steps.py:2: {name}"]
 
 
 def test_built_backlog_scenario_fails_the_run(tmp_path: Path) -> None:

@@ -38,6 +38,10 @@ the same files with:
   doc string or table cell is a documentation one (RFC 2606 names, RFC 5737 and RFC 3849
   networks, loopback), so a feature names nothing real (novibe: the World is synthetic).
   Shortcut: a bare host name without a scheme or `@`, and a person's name, are not read here.
+- id-stable: a feature keeps the `@id` it had where this branch left main (the merge base
+  with `origin/main`, else `main`; neither fails). Features are matched by their scenarios'
+  catalogue IDs, so a move, a rename, a split and a deletion pass. Shortcut: renumbering the
+  catalogue IDs together with the `@id` passes; GATE-17 shows the row change in review.
 
 Every finding names file, line and rule. A rule fails on its own bad case and stays silent
 on its near-miss, so a check that cannot fail would show here.
@@ -50,7 +54,9 @@ requirements step; `@long-running` passes tag-allowed but is a pytest marker tha
 
 import contextlib
 import ipaddress
+import os
 import re
+import subprocess
 from collections.abc import Callable, Iterator
 from functools import partial
 from pathlib import Path
@@ -372,6 +378,63 @@ def lint(root: Path) -> list[Finding]:
             features[file] = document["feature"]
     names = repeated(features, "dupe-feature-name", lambda feature: [feature["name"]])
     return sorted({*findings, *names, *repeated(features, "dupe-feature-id", ids)})
+
+
+def numbered(texts: list[str]) -> Iterator[tuple[list[str], set[str]]]:
+    """Each feature's `@id` tags and the catalogue ID tags it holds; unparsed text is skipped."""
+    for text in texts:
+        try:
+            feature = cast("Feature | None", Parser().parse(text).get("feature"))
+        except CompositeParserException:
+            continue  # the form rules report it
+        if feature is not None:
+            tags = {tag["name"] for node in tagged(feature) for tag in node["tags"]}
+            yield ids(feature), {tag for tag in tags if CATALOGUE_ID.fullmatch(tag[1:])}
+
+
+def renumbering(before: list[str], now: list[str]) -> list[str]:
+    """The `@id` tags of `before` that no feature of `now` holding their scenarios carries.
+
+    A feature is found by its scenarios' catalogue IDs, not its path, so a move or a rename
+    passes, and so does a feature deleted with its scenarios or split into two.
+    """
+    holders: dict[str, set[str]] = {}
+    for found, tags in numbered(now):
+        for tag in tags:
+            holders.setdefault(tag, set()).update(found)
+    changes: list[str] = []
+    for found, tags in numbered(before):
+        kept = sorted(tags & holders.keys())
+        carried = set().union(*(holders[tag] for tag in kept))
+        lost = [was for was in found if kept and was not in carried]
+        changes += [
+            f"{was} became {', '.join(sorted(carried))} ({', '.join(kept)})" for was in lost
+        ]
+    return changes
+
+
+def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
+    )
+
+
+def renumbered(root: Path) -> list[str]:
+    """The `@id` changes since this branch left main (the merge base with origin/main or main)."""
+    for ref in ("origin/main", "main"):
+        if (fork := git(root, "merge-base", "HEAD", ref)).returncode == 0:
+            break
+    else:
+        msg = "neither origin/main nor main to compare with: fetch main (CI: fetch-depth: 0)"
+        raise LookupError(msg)
+    base = fork.stdout.strip()
+    listed = git(root, "ls-tree", "-r", "--name-only", base, "--", FEATURES.as_posix()).stdout
+    paths = [path for path in listed.splitlines() if path.endswith(".feature")]
+    before = [git(root, "show", f"{base}:{path}").stdout for path in paths]
+    now = [
+        path.read_text(encoding="utf-8") for path in sorted((root / FEATURES).rglob("*.feature"))
+    ]
+    return renumbering(before, now)
 
 
 # --- the real tree -----------------------------------------------------------------------
@@ -1002,3 +1065,81 @@ def test_real_address_anywhere_is_reported_on_its_line(
     tmp_path: Path, text: str, line: int
 ) -> None:
     assert found(tmp_path, text) == [(line, "synthetic-world")]
+
+
+# --- id-stable: a feature keeps the @id it had on main -----------------------------------
+
+RENUMBERED = GOOD.replace("@id:80", "@id:81")
+# The second scenario moves to a feature of its own: the old feature keeps its id.
+SPLIT = (
+    GOOD.split("    @ALPHA-2", maxsplit=1)[0].replace("  Rule: One rule\n", ""),
+    (
+        "@id:90\nFeature: Other\n  Another.\n  @ALPHA-2\n  Scenario: Second\n"
+        "    Given another thing\n    When it stops\n    Then it is over\n"
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("before", "now", "expected"),
+    [
+        ([GOOD], [GOOD], []),
+        ([GOOD], [RENUMBERED], ["@id:80 became @id:81 (@ALPHA-1, @ALPHA-2)"]),
+        ([GOOD], [SPLIT[1]], ["@id:80 became @id:90 (@ALPHA-2)"]),
+        ([GOOD], list(SPLIT), []),
+        ([GOOD], [], []),
+        ([], [GOOD], []),
+        ([GOOD], ["Feature: x\n  | broken"], []),
+        ([GOOD, ""], [GOOD, ""], []),
+    ],
+    ids=[
+        "unchanged",
+        "renumbered",
+        "scenarios-moved-away",
+        "split",
+        "deleted",
+        "new",
+        "unparsed",
+        "empty-file",
+    ],
+)
+def test_feature_id_change_is_found_by_its_scenario_ids(
+    before: list[str], now: list[str], expected: list[str]
+) -> None:
+    assert renumbering(before, now) == expected
+
+
+def _git(root: Path, *args: str) -> None:
+    env = {
+        "PATH": os.environ["PATH"],
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_SYSTEM": os.devnull,
+        "GIT_AUTHOR_NAME": "Dev",
+        "GIT_AUTHOR_EMAIL": "dev@example.org",
+        "GIT_COMMITTER_NAME": "Dev",
+        "GIT_COMMITTER_EMAIL": "dev@example.org",
+    }
+    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=env)
+
+
+def test_feature_renumbered_since_main_is_reported(tmp_path: Path) -> None:
+    root = tree(tmp_path, {FILE: GOOD})
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "add", ".")
+    _git(root, "commit", "-q", "-m", "base")
+    _git(root, "switch", "-q", "-c", "topic")
+    (root / FILE).write_text(RENUMBERED, encoding="utf-8")
+    assert renumbered(root) == ["@id:80 became @id:81 (@ALPHA-1, @ALPHA-2)"]
+
+
+def test_repository_without_main_fails_instead_of_passing(tmp_path: Path) -> None:
+    root = tree(tmp_path, {FILE: GOOD})
+    _git(root, "init", "-q", "-b", "topic")
+    _git(root, "add", ".")
+    _git(root, "commit", "-q", "-m", "base")
+    with pytest.raises(LookupError, match="fetch-depth"):
+        renumbered(root)
+
+
+def test_no_feature_changed_its_id_since_main() -> None:
+    assert renumbered(REPO) == []

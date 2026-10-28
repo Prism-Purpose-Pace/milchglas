@@ -117,7 +117,9 @@ docstring. Gate details: [TOOLING.md](TOOLING.md).
   where a keyword would repeat, no tag twice on one node, only documentation addresses
   (`example.com`, `.test`, `192.0.2.0/24`, `2001:db8::/32`: RFC 2606, 5737, 3849), no
   comment (put the reason in the scenario's description), only the tags `@id:<number>`, `@backlog`, `@long-running` (a marker:
-  register it in `pyproject.toml` first) and row IDs. A failing scenario names file,
+  register it in `pyproject.toml` first) and row IDs. Every `@then` step asserts (an
+  `assert`, `pytest.raises` or an `assert_*` helper), and a feature keeps the `@id` it
+  had on `main`. A failing scenario names file,
   line and rule: `uv run pytest tests/meta/test_feature_lint.py`.
 - Core behaviour gets golden tests: overlap and adjacency merge, grid rounding, DST
   transitions in Europe/Berlin, all-day, multi-day, tentative, cancelled, declined,
