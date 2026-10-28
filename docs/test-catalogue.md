@@ -28,7 +28,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
 | PARSE-1 | Captured answer for the seeded demo calendars, window pinned → blocks equal the committed expected-blocks file; every no-block event is absent | AC-1 to AC-5 | unit | planned |
-| PARSE-2 | A 404 propstat for `calendar-data` is a parse error that fails the refresh; a 404 for any other requested property is ignored | NFR-C1, Q-14 | unit | planned |
+| PARSE-2 | A `calendar-data` propstat with any status but 200, or a response without `calendar-data`, is a parse error that fails the refresh; a 404 for any other requested property is ignored | NFR-C1, Q-14 | unit | planned |
 | PARSE-3 | Server dialect parses: CRLF and LF-only lines, `&#13;`, folded lines, `X-` props, `calendar-data` as escaped text; CDATA and raw CRLF are synthetic robustness fixtures | NFR-C1 | unit | planned |
 | PARSE-4 | Weekly series + EXDATE + moved instance → exactly the real occurrences; the override is its own VEVENT without RRULE and counts once; an instance whose override the owner declined is absent | AC-2, FR-2, FR-3 | unit | planned |
 | PARSE-5 | Expanded instance with DURATION instead of DTEND (UTC DTSTART): the parser hands the DURATION text to reduce, builds no `timedelta` first (spy), and the length follows Q-20 | Q-20, AC-3 | unit | planned |
