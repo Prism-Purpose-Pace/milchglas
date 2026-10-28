@@ -119,6 +119,7 @@ the expected-blocks oracle assumes until the spec changes.
 
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
+| CORE-BLK-1 | A `TimedBlock` takes two aware UTC instants with `start < end`, a `DayBlock` two dates that are no datetimes with `start < end`; one bad side is enough to reject, the start alone or the end alone, naive or zoned (`-start`, `-end`, `-start-naive`, `-start-zoned`, `-end-naive`, `-end-zoned`) | D-7c, FR-4 | unit | exists |
 | CORE-CLIP-1 | Block Sun 23:50 → Mon 00:10 local, window from Mon 00:00 → [00:00, 00:10] | FR-5 | unit | exists |
 | CORE-CLIP-2 | Block ending exactly at the window start → no block | FR-5 | unit | exists |
 | CORE-CLIP-3 | Block starting exactly at the window end → no block | FR-5 | unit | exists |
