@@ -2,16 +2,13 @@
 
 Catalogue GATE-23.
 
-No test calls the Messages API: a fake `send` stands in for it, so the suite runs in CI
-without a key. The real tree's calibration set is checked for its form and size here; the
+No test calls claude: a fake `send` or `run` stands in for it, so the suite runs in CI
+without the CLI or a login. The real tree's calibration set is checked for its form and size here; the
 calibration itself runs by hand (`--calibrate`), never in pytest.
 """
 
-import io
-import json
 import re
-import urllib.error
-import urllib.request
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -27,13 +24,23 @@ if TYPE_CHECKING:
 RUBRIC = {"judge-a": "Flag: rule a."}
 
 
-def answer(*items: tuple[str, int, str], stop: str = "end_turn") -> dict[str, Any]:
+def answer(*items: tuple[str, int, str]) -> dict[str, Any]:
+    """A successful `claude --print --output-format json` result with structured output."""
     listed = [{"judge": name, "line": line, "reason": reason} for name, line, reason in items]
-    text = json.dumps({"findings": listed})
     return {
-        "stop_reason": stop,
-        "content": [{"type": "thinking", "thinking": ""}, {"type": "text", "text": text}],
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "",
+        "structured_output": {"findings": listed},
     }
+
+
+FAILED = answer() | {
+    "is_error": True,
+    "structured_output": None,
+    "result": "Failed to authenticate: OAuth session expired and could not be refreshed",
+}
 
 
 # --- the rubric and the request ------------------------------------------------------------
@@ -52,18 +59,16 @@ def test_rubric_without_a_judge_section_fails() -> None:
 
 def test_request_numbers_the_lines_and_pins_the_schema_to_the_judges() -> None:
     body = jf.request("Feature: x\n  A sample.\n", RUBRIC)
-    assert body["model"] == jf.MODEL
-    assert body["messages"] == [{"role": "user", "content": "   1| Feature: x\n   2|   A sample."}]
+    assert body["prompt"] == "   1| Feature: x\n   2|   A sample."
     assert "Flag: rule a." in body["system"]
-    schema = body["output_config"]["format"]["schema"]
+    schema = body["schema"]
     assert schema["properties"]["findings"]["items"]["properties"]["judge"]["enum"] == ["judge-a"]
-    assert not {"temperature", "top_p", "top_k", "fallbacks"} & body.keys()
 
 
 # --- the answer ----------------------------------------------------------------------------
 
 
-def test_finding_comes_from_the_text_block_and_names_file_line_judge() -> None:
+def test_finding_comes_from_the_structured_output_and_names_file_line_judge() -> None:
     [finding] = jf.findings("f.feature", answer(("judge-a", 3, "a mechanism")), ["judge-a"])
     assert str(finding) == "f.feature:3: judge-a: a mechanism"
 
@@ -72,57 +77,79 @@ def test_finding_of_a_judge_outside_the_rubric_is_dropped() -> None:
     assert jf.findings("f", answer(("judge-z", 1, "x")), ["judge-a"]) == []
 
 
-@pytest.mark.parametrize("stop", ["refusal", "max_tokens", None])
-def test_answer_without_end_turn_is_no_verdict(stop: str | None) -> None:
+@pytest.mark.parametrize(
+    "failed",
+    [FAILED, answer() | {"subtype": "error_max_structured_output_retries"}],
+    ids=["error", "no-success"],
+)
+def test_error_answer_is_no_verdict(failed: dict[str, Any]) -> None:
     with pytest.raises(jf.JudgeError, match="no verdict"):
-        jf.findings("f", answer(stop=str(stop)) | {"stop_reason": stop}, ["judge-a"])
+        jf.findings("f", failed, ["judge-a"])
 
 
-def test_answer_that_is_no_findings_list_fails() -> None:
-    broken = {"stop_reason": "end_turn", "content": [{"type": "text", "text": "fine"}]}
+@pytest.mark.parametrize("output", [None, {"verdict": "fine"}], ids=["none", "no-findings"])
+def test_answer_that_is_no_findings_list_fails(output: object) -> None:
     with pytest.raises(jf.JudgeError, match="no findings list"):
-        jf.findings("f", broken, ["judge-a"])
+        jf.findings("f", answer() | {"structured_output": output}, ["judge-a"])
 
 
-# --- the HTTP call -------------------------------------------------------------------------
+# --- the claude call -----------------------------------------------------------------------
 
 
-class Opener:
+class Run:
+    """A fake `subprocess.run` that records the call and what its folder held."""
+
     def __init__(
-        self, reply: bytes = b'{"stop_reason": "end_turn"}', error: Exception | None = None
+        self, stdout: str = '{"subtype": "success"}', error: Exception | None = None
     ) -> None:
-        self.reply = reply
+        self.stdout = stdout
         self.error = error
-        self.calls: list[tuple[urllib.request.Request, float]] = []
+        self.calls: list[tuple[list[str], dict[str, object], list[str]]] = []
 
-    def __call__(self, call: urllib.request.Request, timeout: float) -> io.BytesIO:
-        self.calls.append((call, timeout))
+    def __call__(self, args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        self.calls.append((args, kwargs, [p.name for p in Path(str(kwargs["cwd"])).iterdir()]))
         if self.error:
             raise self.error
-        return io.BytesIO(self.reply)
+        return subprocess.CompletedProcess(args, 1, self.stdout, "auth failed")
 
 
-def test_post_sends_key_version_and_body_to_the_messages_api() -> None:
-    opener = Opener()
-    assert jf.post({"model": "m"}, key="secret-key", opener=opener) == {"stop_reason": "end_turn"}
-    [(call, timeout)] = opener.calls
-    assert timeout == 600
-    assert (call.full_url, call.get_method()) == (jf.API, "POST")
-    assert call.get_header("X-api-key") == "secret-key"
-    assert call.get_header("Anthropic-version") == jf.VERSION
-    assert json.loads(cast("bytes", call.data)) == {"model": "m"}
+BODY = {"system": "the rubric", "schema": {"type": "object"}, "prompt": "   1| Feature: x"}
 
 
-def test_http_error_names_the_status_but_never_the_key() -> None:
-    error = urllib.error.HTTPError(jf.API, 401, "no", {}, io.BytesIO(b'{"error": "bad key"}'))  # type: ignore[arg-type]
-    with pytest.raises(jf.JudgeError, match="401") as raised:
-        jf.post({}, key="secret-key", opener=Opener(error=error))
-    assert "secret-key" not in str(raised.value)
+def test_ask_runs_one_isolated_claude_call_in_an_empty_folder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDECODE", "1")
+    run = Run()
+    assert jf.ask(BODY, run=run) == {"subtype": "success"}
+    [(args, kwargs, held)] = run.calls
+    assert args[: len(jf.CLAUDE)] == list(jf.CLAUDE)
+    assert args[len(jf.CLAUDE) :] == [
+        "--system-prompt",
+        "the rubric",
+        "--json-schema",
+        '{"type": "object"}',
+    ]
+    assert args[args.index("--setting-sources") + 1] == ""
+    assert args[args.index("--model") + 1] == jf.MODEL
+    assert {"--strict-mcp-config", "--disable-slash-commands", "--tools"} <= set(args)
+    assert "--fallback-model" not in args
+    assert held == []
+    assert Path(str(kwargs["cwd"])).resolve() != jf.ROOT
+    assert not Path(str(kwargs["cwd"])).exists()
+    assert "CLAUDECODE" not in cast("dict[str, str]", kwargs["env"])
+    assert (kwargs["input"], kwargs["timeout"], kwargs["check"]) == (BODY["prompt"], 600, False)
 
 
-def test_unreachable_api_fails() -> None:
-    with pytest.raises(jf.JudgeError, match="unreachable"):
-        jf.post({}, key="k", opener=Opener(error=urllib.error.URLError("offline")))
+def test_output_that_is_no_json_names_the_exit_and_stderr() -> None:
+    with pytest.raises(jf.JudgeError, match="claude exited 1: auth failed"):
+        jf.ask(BODY, run=Run(stdout="not json"))
+
+
+def test_claude_without_an_answer_in_time_fails() -> None:
+    error = subprocess.TimeoutExpired(["claude"], 600)
+    with pytest.raises(jf.JudgeError, match="did not answer within 600 s"):
+        jf.ask(BODY, run=Run(error=error))
 
 
 # --- judging files -------------------------------------------------------------------------
@@ -132,7 +159,7 @@ def flag_when(pattern: str, judge: str = "judge-a") -> jf.Post:
     """A fake model: one finding on line 1 when the file text matches `pattern`."""
 
     def send(body: dict[str, Any]) -> dict[str, Any]:
-        text = body["messages"][0]["content"]
+        text = body["prompt"]
         return answer((judge, 1, "seeded")) if re.search(pattern, text) else answer()
 
     return send
@@ -232,9 +259,20 @@ def test_calibration_refuses_a_file_without_a_known_label(tmp_path: Path, name: 
 # --- the command ---------------------------------------------------------------------------
 
 
-def test_command_without_a_key_fails_and_says_why(capsys: pytest.CaptureFixture[str]) -> None:
-    assert jf.main(["x.feature"], environ={}) == 2
-    assert "ANTHROPIC_API_KEY is not set" in capsys.readouterr().err
+@pytest.fixture
+def no_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+
+
+@pytest.mark.usefixtures("no_cli")
+def test_command_without_the_cli_fails_and_says_why(capsys: pytest.CaptureFixture[str]) -> None:
+    assert jf.main(["x.feature"]) == 2
+    assert "the claude CLI is not on PATH" in capsys.readouterr().err
+
+
+def test_command_with_the_cli_sends_through_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("shutil.which", lambda name: f"/bin/{name}")
+    assert jf.sender() is jf.ask
 
 
 def test_command_prints_findings_and_passes(
@@ -255,11 +293,13 @@ def test_command_fails_a_judge_below_the_bar(
     assert "judge-then: 1/1 defects found" in capsys.readouterr().out
 
 
-def test_command_stops_on_a_refusal(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_command_stops_on_an_error_answer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     path = tmp_path / "a.feature"
     path.write_text("Feature: a\n", encoding="utf-8")
-    assert jf.main([str(path)], send=lambda _body: answer(stop="refusal")) == 2
-    assert "'refusal', no verdict" in capsys.readouterr().err
+    assert jf.main([str(path)], send=lambda _body: FAILED) == 2
+    assert "no verdict: Failed to authenticate" in capsys.readouterr().err
 
 
 def test_section_without_a_status_fails() -> None:
@@ -303,27 +343,30 @@ def test_push_stage_fails_only_on_a_blocking_judge(
     assert capsys.readouterr().out == f"{path.as_posix()}:1: {flagging}: seeded\n"
 
 
-def test_push_stage_with_a_blocking_judge_needs_the_key(tmp_path: Path) -> None:
+@pytest.mark.usefixtures("no_cli")
+def test_push_stage_with_a_blocking_judge_needs_the_cli(tmp_path: Path) -> None:
     rubric = tmp_path / "judges.md"
     rubric.write_text(GATE_RUBRIC, encoding="utf-8")
-    assert jf.main(["--blocking", "a.feature"], environ={}, rubric_file=rubric) == 2
+    assert jf.main(["--blocking", "a.feature"], rubric_file=rubric) == 2
 
 
-def test_push_stage_without_changed_features_needs_no_key(
+@pytest.mark.usefixtures("no_cli")
+def test_push_stage_without_changed_features_needs_no_cli(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rubric = tmp_path / "judges.md"
     rubric.write_text(GATE_RUBRIC, encoding="utf-8")
     monkeypatch.setattr(jf, "changed", lambda _root: [])
-    assert jf.main(["--blocking"], environ={}, rubric_file=rubric) == 0
+    assert jf.main(["--blocking"], rubric_file=rubric) == 0
 
 
-def test_push_stage_without_a_blocking_judge_passes_without_key_or_request(
+@pytest.mark.usefixtures("no_cli")
+def test_push_stage_without_a_blocking_judge_passes_without_cli_or_call(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     rubric = tmp_path / "judges.md"
     rubric.write_text(GATE_RUBRIC.replace("Status: blocking", "Status: advisory"), "utf-8")
-    assert jf.main(["--blocking", "a.feature"], environ={}, rubric_file=rubric) == 0
+    assert jf.main(["--blocking", "a.feature"], rubric_file=rubric) == 0
     assert capsys.readouterr() == ("", "")
 
 

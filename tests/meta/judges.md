@@ -10,8 +10,8 @@ Calibration: `tests/meta/judge-set/` holds feature files named `<judge>--defect-
 (one seeded defect of that judge) and `clean-NN.feature` (no defect for any judge). A judge
 turns blocking once it finds at least 26 of 30 seeded defects with at most 3 false findings on
 30 clean files (D-18, S1): its `Status:` line then changes from `advisory` to `blocking`,
-and the pull request that changes it shows the calibration output. A change to this file or to
-the model reruns the calibration.
+and the pull request that changes it shows the calibration output and `claude --version`. A
+change to this file, to the model or to the claude CLI's major version reruns the calibration.
 
 ## judge-solution
 
