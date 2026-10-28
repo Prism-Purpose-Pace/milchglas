@@ -24,7 +24,10 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # basedpyright rewrites its baseline without a final newline whenever a
+      # recorded finding disappears; the fixer would abort that commit every time.
       - id: end-of-file-fixer
+        exclude: ^\.basedpyright/baseline\.json$
       - id: trailing-whitespace
       - id: check-added-large-files
         args: [--maxkb=512]
