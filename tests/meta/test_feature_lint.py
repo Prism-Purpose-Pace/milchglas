@@ -3,21 +3,30 @@
 Catalogue GATE-22.
 
 GATE-22 binds every scenario to its catalogue ID (`test_feature_traceability`). This module
-adds the form rules of novibe's `.gherkin-lintrc` and its requirements step, on top of
-`gherkin-official`, the parser pytest-bdd runs the same files with:
+adds the form rules of novibe's `.gherkin-lintrc` and its requirements step, plus three that
+behave-lint and gherkin-lint share, on top of `gherkin-official`, the parser pytest-bdd runs
+the same files with:
 
 - parse: a file that does not parse fails.
 - no-scenario: a file that holds no scenario fails.
-- feature-id: the feature carries exactly one `@id:<issue>` tag.
+- feature-id, dupe-feature-id: the feature carries exactly one `@id:<issue>` tag, and no
+  other feature carries the same one (novibe: the plan refers to a feature by its id).
+- feature-description: the feature says who gains what, and why (novibe's Example Mapping).
 - tag-allowed: a tag is `@id:<issue>`, `@backlog`, `@long-running` or one catalogue ID.
-- step-count, when-count, then-required: a scenario has at most five steps, exactly one
-  `When` and a `Then`. `And`, `But` and `*` count as the keyword before them, and the
-  background steps count, because pytest-bdd runs them as part of the scenario.
-- restricted-pattern: no step text names a screen element, a protocol or a data format.
+- step-count, when-count, then-required, keyword-order: a scenario has at most five steps
+  of its own, exactly one `When`, a `Then`, and Given, When, Then in this order. `And`, `But`
+  and `*` count as the keyword before them. Background steps count for the keywords and the
+  order, as pytest-bdd runs them first, but not for the five: novibe caps a Background at four
+  steps of its own, which five steps in total would leave no room for.
+- background-form: a Background holds one to four steps, all of them Given.
+- empty-rule: a Rule holds at least one scenario.
+- restricted-pattern: no name, description or step text names a screen element, a protocol or
+  a data format; novibe's linter (gherkin-lint-plus) reads all of them.
 - outline-without-examples, unused-example-column, undefined-variable: an outline has
   `Examples` with rows, every column is used by a step, and every `<variable>` of a step has a
   column in each `Examples` block. A variable counts in step text, doc string and data table,
   where pytest-bdd substitutes it (`pytest_bdd.parser.PARAM_RE`), and a background step counts.
+  empty-examples: an `Examples` block without rows next to one with rows.
 - no-comments: a `#` line is a comment and fails; the reason goes into a scenario description.
 - dupe-feature-name, dupe-scenario-name: a feature name is unique across the files, a
   scenario name within its feature, rules included (pytest-bdd looks a scenario up by name).
@@ -25,15 +34,14 @@ adds the form rules of novibe's `.gherkin-lintrc` and its requirements step, on 
 Every finding names file, line and rule. A rule fails on its own bad case and stays silent
 on its near-miss, so a check that cannot fail would show here.
 
-Limits, kept on purpose: restricted-pattern reads step text only, as the issue asks, where
-gherkin-lint also reads feature, scenario and background names and descriptions; whether a
-scenario states an outcome and whether a `Then` can be seen from outside stay review in the
+Limits, kept on purpose: whether a scenario states an outcome, whether a `Then` can be seen
+from outside, and whether an Examples cell is a value rather than a phrase stay review in the
 requirements step; `@long-running` passes tag-allowed but is a pytest marker that
 `pyproject.toml` does not register yet.
 """
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from functools import partial
 from pathlib import Path
 from typing import Any, NamedTuple, cast, override
@@ -52,6 +60,8 @@ from tests.meta.test_feature_traceability import FEATURES
 ID_TAG = re.compile(r"id:\d+")
 ALLOWED_TAG = re.compile(rf"{ID_TAG.pattern}|backlog|long-running|{CATALOGUE_ID.pattern}")
 MAX_STEPS = 5
+MAX_BACKGROUND = 4
+ORDER = {"Context": 0, "Action": 1, "Outcome": 2}  # Given, When, Then
 # novibe's `.gherkin-lintrc` (Global): screen elements and protocols say how, not what.
 # gherkin-lint compiles them case-insensitively.
 RESTRICTED = [
@@ -101,12 +111,18 @@ def cases(children: list[Any], background: list[Step]) -> Iterator[tuple[Scenari
             yield from cases(child["rule"]["children"], background)
 
 
+def parts(feature: Feature, key: str) -> list[Any]:
+    """The rules or the backgrounds of a feature, a rule's background included."""
+    children: list[Any] = feature["children"]
+    rules = [child["rule"] for child in children if "rule" in child]
+    return [child[key] for node in [feature, *rules] for child in node["children"] if key in child]
+
+
 def tagged(feature: Feature) -> Iterator[Any]:
     """The feature, its rules, scenarios and examples: every node that carries tags."""
     yield feature
-    children: list[Any] = feature["children"]
-    yield from (child["rule"] for child in children if "rule" in child)
-    for scenario, _ in cases(children, []):
+    yield from parts(feature, "rule")
+    for scenario, _ in cases(feature["children"], []):
         yield scenario
         yield from scenario["examples"]
 
@@ -120,19 +136,28 @@ def kinds(steps: list[Step]) -> list[str]:
     return found
 
 
+def restricted(at: partial[Finding], line: int, text: str) -> Iterator[Finding]:
+    for pattern in RESTRICTED:
+        if found := pattern.search(text):
+            yield at(line, "restricted-pattern", f"names {found[0]!r}")
+
+
 def shape(at: partial[Finding], scenario: Scenario, steps: list[Step]) -> Iterator[Finding]:
-    """The size and the When/Then form of one scenario, and the words its steps use."""
+    """The size, the When/Then form and the order of one scenario and its background steps."""
     line, kind = scenario["location"]["line"], kinds(steps)
-    if len(steps) > MAX_STEPS:
-        yield at(line, "step-count", f"{len(steps)} steps, at most {MAX_STEPS}")
+    if len(scenario["steps"]) > MAX_STEPS:
+        yield at(line, "step-count", f"{len(scenario['steps'])} steps, at most {MAX_STEPS}")
     if kind.count("Action") != 1:
         yield at(line, "when-count", f"{kind.count('Action')} When steps, exactly 1")
     if "Outcome" not in kind:
         yield at(line, "then-required", "no Then step")
+    highest = 0
+    for step, position in zip(steps, [ORDER.get(k, -1) for k in kind], strict=True):
+        if 0 <= position < highest:
+            yield at(step["location"]["line"], "keyword-order", "Given, When, Then in this order")
+        highest = max(highest, position)
     for step in steps:
-        for pattern in RESTRICTED:
-            if found := pattern.search(step["text"]):
-                yield at(step["location"]["line"], "restricted-pattern", f"step names {found[0]!r}")
+        yield from restricted(at, step["location"]["line"], step["text"])
 
 
 def variables(step: Step) -> set[str]:
@@ -154,6 +179,8 @@ def outline(
         if scenario["keyword"] in keywords or scenario["examples"]:
             yield at(scenario["location"]["line"], "outline-without-examples", "no Examples rows")
         return
+    empty = [examples for examples in scenario["examples"] if examples not in blocks]
+    yield from (at(e["location"]["line"], "empty-examples", "no rows") for e in empty)
     used = {name for step in steps for name in variables(step)}
     columns = [{cell["value"] for cell in block["tableHeader"]["cells"]} for block in blocks]
     for block in blocks:
@@ -176,14 +203,22 @@ def repeated_scenarios(at: partial[Finding], feature: Feature) -> Iterator[Findi
         seen.setdefault(name, line)
 
 
-def repeated_features(features: dict[str, Feature]) -> Iterator[Finding]:
-    """The features, by file in order, whose name an earlier file already uses."""
+def repeated(
+    features: dict[str, Feature], rule: str, key: Callable[[Any], list[str]]
+) -> Iterator[Finding]:
+    """The features, by file in order, that repeat a name or id an earlier file uses."""
     seen: dict[str, str] = {}
     for file, feature in features.items():
-        first = seen.setdefault(feature["name"], file)
-        if first != file:
-            message = f"{feature['name']!r} is also the name of {first}"
-            yield Finding(file, feature["location"]["line"], "dupe-feature-name", message)
+        for value in key(feature):
+            first = seen.setdefault(value, file)
+            if first != file:
+                yield Finding(file, feature["location"]["line"], rule, f"{value!r} also in {first}")
+
+
+def ids(feature: Feature) -> list[str]:
+    return [
+        tag["name"] for tag in feature["tags"] if ID_TAG.fullmatch(tag["name"].removeprefix("@"))
+    ]
 
 
 def head(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
@@ -191,9 +226,12 @@ def head(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
     line = feature["location"]["line"]
     if not list(cases(feature["children"], [])):
         yield at(line, "no-scenario", "the Feature holds no scenario")
-    own = [tag for tag in feature["tags"] if ID_TAG.fullmatch(tag["name"].removeprefix("@"))]
-    if len(own) != 1:
-        yield at(line, "feature-id", f"{len(own)} @id:<issue> tags on the Feature, exactly 1")
+    if len(ids(feature)) != 1:
+        yield at(
+            line, "feature-id", f"{len(ids(feature))} @id:<issue> tags on the Feature, exactly 1"
+        )
+    if not feature["description"].strip():
+        yield at(line, "feature-description", "no description: who gains what, and why")
     for node in tagged(feature):
         for tag in node["tags"]:
             if not ALLOWED_TAG.fullmatch(tag["name"].removeprefix("@")):
@@ -201,6 +239,23 @@ def head(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
                 yield at(
                     tag["location"]["line"], "tag-allowed", f"{tag['name']} is none of {allowed}"
                 )
+
+
+def body(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
+    """Rules that hold scenarios, backgrounds that hold only a few Givens, and plain names."""
+    for rule in parts(feature, "rule"):
+        if not any("scenario" in child for child in rule["children"]):
+            yield at(rule["location"]["line"], "empty-rule", "a Rule without scenarios")
+    for background in parts(feature, "background"):
+        steps = background["steps"]
+        if len(steps) > MAX_BACKGROUND or set(kinds(steps)) != {"Context"}:  # empty: set()
+            message = f"{len(steps)} steps; 1 to {MAX_BACKGROUND} Given steps"
+            yield at(background["location"]["line"], "background-form", message)
+    nodes = [feature, *parts(feature, "rule"), *parts(feature, "background")]
+    nodes += [scenario for scenario, _ in cases(feature["children"], [])]
+    for node in nodes:
+        for text in (node["name"], node["description"]):
+            yield from restricted(at, node["location"]["line"], text)
 
 
 def check(file: str, document: GherkinDocument) -> Iterator[Finding]:
@@ -216,6 +271,7 @@ def check(file: str, document: GherkinDocument) -> Iterator[Finding]:
         yield at(1, "no-scenario", "no Feature")
         return
     yield from head(at, feature)
+    yield from body(at, feature)
     yield from repeated_scenarios(at, feature)
     keywords = DIALECTS[feature["language"]]["scenarioOutline"]
     for scenario, background in cases(feature["children"], []):
@@ -237,7 +293,8 @@ def lint(root: Path) -> list[Finding]:
         findings += check(file, document)
         if "feature" in document:
             features[file] = document["feature"]
-    return sorted({*findings, *repeated_features(features)})
+    names = repeated(features, "dupe-feature-name", lambda feature: [feature["name"]])
+    return sorted({*findings, *names, *repeated(features, "dupe-feature-id", ids)})
 
 
 # --- the real tree -----------------------------------------------------------------------
@@ -255,7 +312,7 @@ FILE = "tests/features/area/sample.feature"
 GOOD = """\
 @id:80
 Feature: Sample
-
+  A sample.
   Rule: One rule
 
     @ALPHA-1
@@ -293,7 +350,7 @@ BAD = {
     "no-scenario-comment-only": ("# nothing\n", [(1, "no-comments"), (1, "no-scenario")]),
     "no-scenario-misspelt": (
         GOOD.replace("    @ALPHA-1\n    Scenario:", "    Scenaro:"),
-        [(2, "no-scenario")],
+        [(2, "no-scenario"), (4, "empty-rule")],
     ),
     "parse-misspelt-after-tag": (GOOD.replace("Scenario:", "Scenaro:"), [(7, "parse")]),
     "feature-id-missing": (GOOD.replace("@id:80\n", ""), [(1, "feature-id")]),
@@ -315,20 +372,6 @@ BAD = {
         + "      And more\n",
         [(7, "step-count")],
     ),
-    "step-count-with-feature-background": (
-        GOOD.replace(
-            "  Rule:",
-            "  Background:\n    Given a base\n    And a second\n    And a third\n\n  Rule:",
-        ),
-        [(12, "step-count")],
-    ),
-    "step-count-with-rule-background": (
-        GOOD.replace(
-            "    @ALPHA-1\n",
-            "    Background:\n      Given a base\n      And a second\n      And a third\n\n    @ALPHA-1\n",
-        ),
-        [(12, "step-count")],
-    ),
     "when-missing": (GOOD.replace("      When it runs\n", ""), [(7, "when-count")]),
     "when-twice": (
         GOOD.replace("When it runs\n", "When it runs\n      When it runs again\n"),
@@ -348,7 +391,68 @@ BAD = {
     ),
     "when-in-background": (
         GOOD.replace("  Rule:", "  Background:\n    When it starts\n\n  Rule:"),
-        [(10, "when-count")],
+        [(4, "background-form"), (10, "when-count"), (11, "keyword-order")],
+    ),
+    "feature-description-missing": (
+        GOOD.replace("  A sample.\n", "\n"),
+        [(2, "feature-description")],
+    ),
+    "then-before-when": (
+        GOOD.replace("When it runs\n", "Then it is ready\n      When it runs\n"),
+        [(10, "keyword-order")],
+    ),
+    "given-after-when": (
+        GOOD.replace("When it runs\n", "When it runs\n      Given a second thing\n"),
+        [(10, "keyword-order")],
+    ),
+    "then-in-the-background": (
+        GOOD.replace("  Rule:", "  Background:\n    Then it was ready\n\n  Rule:"),
+        [(4, "background-form"), (11, "keyword-order"), (12, "keyword-order")],
+    ),
+    "background-of-five-steps": (
+        GOOD.replace(
+            "  Rule:",
+            "  Background:\n    Given a base\n    And a second\n    And a third\n"
+            "    And a fourth\n    And a fifth\n\n  Rule:",
+        ),
+        [(4, "background-form")],
+    ),
+    "empty-background": (
+        GOOD.replace("  Rule:", "  Background:\n\n  Rule:"),
+        [(4, "background-form")],
+    ),
+    "rule-background-with-when": (
+        GOOD.replace("    @ALPHA-1\n", "    Background:\n      When it starts\n\n    @ALPHA-1\n"),
+        [(6, "background-form"), (10, "when-count"), (11, "keyword-order")],
+    ),
+    "rule-without-scenario": (GOOD + "\n  Rule: Empty rule\n", [(12, "empty-rule")]),
+    "rule-with-only-a-background": (
+        GOOD + "\n  Rule: Empty rule\n\n    Background:\n      Given a base\n",
+        [(12, "empty-rule")],
+    ),
+    "restricted-in-the-feature-name": (
+        GOOD.replace("Sample", "Sample JSON"),
+        [(2, "restricted-pattern")],
+    ),
+    "restricted-in-the-feature-description": (
+        GOOD.replace("A sample.", "A sample one clicks."),
+        [(2, "restricted-pattern")],
+    ),
+    "restricted-in-a-rule-name": (
+        GOOD.replace("One rule", "One HTTP rule"),
+        [(4, "restricted-pattern")],
+    ),
+    "restricted-in-a-scenario-name": (
+        GOOD.replace("First", "First button"),
+        [(7, "restricted-pattern")],
+    ),
+    "restricted-in-a-scenario-description": (
+        GOOD.replace("    Scenario: First\n", "    Scenario: First\n      Via the endpoint.\n"),
+        [(7, "restricted-pattern")],
+    ),
+    "restricted-in-a-background-name": (
+        GOOD.replace("  Rule:", "  Background: the SQL base\n    Given a base\n\n  Rule:"),
+        [(4, "restricted-pattern")],
     ),
     "then-missing": (GOOD.replace("      Then it is done\n", ""), [(7, "then-required")]),
     "then-only-by-and-after-when": (
@@ -392,6 +496,15 @@ SILENT = {
     ).replace("Given a thing\n", "Given a thing\n      And a second\n"),
     "star-after-given": GOOD.replace("Given a thing\n", "Given a thing\n      * a second\n"),
     "and-after-then": GOOD.replace("Then it is done\n", "Then it is done\n      And more\n"),
+    "background-steps-do-not-count": GOOD.replace(
+        "  Rule:",
+        "  Background:\n    Given a base\n    And a second\n    And a third\n    And a fourth\n\n  Rule:",
+    ).replace("Given a thing\n", "Given a thing\n      And a second\n"),
+    "rule-background-steps-do-not-count": GOOD.replace(
+        "    @ALPHA-1\n",
+        "    Background:\n      Given a base\n      And a second\n      And a third\n\n    @ALPHA-1\n",
+    ),
+    "but-after-given": GOOD.replace("Given a thing\n", "Given a thing\n      But not another\n"),
 }
 
 
@@ -409,7 +522,7 @@ def test_tag_outside_the_allowlist_is_reported(tmp_path: Path, tag: str) -> None
 OUTLINE = """\
 @id:80
 Feature: Sample
-
+  A sample.
   @ALPHA-1
   Scenario Outline: First
     Given a <thing>
@@ -444,7 +557,7 @@ OUTLINE_BAD = {
     ),
     "german-keyword-no-examples": (
         (
-            "# language: de\n@id:80\nFunktionalität: Sample\n\n  @ALPHA-1\n"
+            "# language: de\n@id:80\nFunktionalität: Sample\n  Ein Beispiel.\n  @ALPHA-1\n"
             "  Szenariogrundriss: First\n"
             "    Gegeben sei a <thing>\n    Wenn it runs\n    Dann it is done\n"
         ),
@@ -469,6 +582,10 @@ OUTLINE_BAD = {
     "variable-without-column-in-the-second-block": (
         OUTLINE + "\n    Examples:\n      | thing |\n      | dog   |\n",
         [(8, "undefined-variable")],
+    ),
+    "empty-second-examples-block": (
+        OUTLINE + "\n    Examples:\n      | thing | state |\n",
+        [(14, "empty-examples")],
     ),
     "variable-in-the-doc-string-without-column": (
         OUTLINE.replace(
@@ -531,7 +648,7 @@ def test_scenario_names_that_differ_or_sit_in_two_files_are_silent(tmp_path: Pat
         tmp_path,
         {
             "tests/features/a/one.feature": other,
-            "tests/features/b/two.feature": GOOD.replace("Sample", "Other"),
+            "tests/features/b/two.feature": GOOD.replace("Sample", "Other").replace("80", "81"),
         },
     )
     assert lint(root) == []
@@ -540,7 +657,10 @@ def test_scenario_names_that_differ_or_sit_in_two_files_are_silent(tmp_path: Pat
 def test_feature_name_used_in_two_files_is_reported_in_the_second(tmp_path: Path) -> None:
     root = tree(
         tmp_path,
-        {"tests/features/a/one.feature": GOOD, "tests/features/b/two.feature": GOOD},
+        {
+            "tests/features/a/one.feature": GOOD,
+            "tests/features/b/two.feature": GOOD.replace("@id:80", "@id:81"),
+        },
     )
     [finding] = lint(root)
     assert (finding.file, finding.line, finding.rule) == (
@@ -556,7 +676,36 @@ def test_feature_names_that_differ_are_silent(tmp_path: Path) -> None:
         tmp_path,
         {
             "tests/features/a/one.feature": GOOD,
+            "tests/features/b/two.feature": GOOD.replace("Sample", "Other").replace("80", "81"),
+        },
+    )
+    assert lint(root) == []
+
+
+def test_feature_id_used_in_two_files_is_reported_in_the_second(tmp_path: Path) -> None:
+    root = tree(
+        tmp_path,
+        {
+            "tests/features/a/one.feature": GOOD,
             "tests/features/b/two.feature": GOOD.replace("Sample", "Other"),
+        },
+    )
+    [finding] = lint(root)
+    assert (finding.file, finding.line, finding.rule) == (
+        "tests/features/b/two.feature",
+        2,
+        "dupe-feature-id",
+    )
+    assert "tests/features/a/one.feature" in finding.message
+
+
+def test_rule_id_used_in_two_files_is_silent(tmp_path: Path) -> None:
+    sliced = GOOD.replace("  Rule:", "  @id:77\n  Rule:")
+    root = tree(
+        tmp_path,
+        {
+            "tests/features/a/one.feature": sliced,
+            "tests/features/b/two.feature": sliced.replace("Sample", "Other").replace("80", "81"),
         },
     )
     assert lint(root) == []
