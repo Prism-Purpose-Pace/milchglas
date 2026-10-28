@@ -9,9 +9,11 @@ case-insensitively as icalendar compares names. A property that is never read re
 sink, through however many helper functions, which a flow analysis that stops at a
 function boundary cannot promise.
 
-Two exceptions, each with its exact spelling: ATTENDEE in `_owner_replies` of
+Three exceptions, each with its exact spelling: ATTENDEE in `_owner_replies` of
 core/reduce.py, because the owner's PARTSTAT decides whether an event counts as declined
-(FR-3), and the config key `summary` in config.py, which holds the feed's own fixed text.
+(FR-3); the config key `summary` in config.py, which holds the feed's own fixed text; and
+the HTTP header `Location` in `_request` of sources/caldav.py, no event property, read so a
+redirect's error can name the host it pointed to (NFR-S7).
 Known limit: a name built at run time ("SUMM" + "ARY") and a loop over every property of an
 event are not read; review covers both.
 """
@@ -53,6 +55,7 @@ ALLOWED = frozenset(
         ("milchglas/core/reduce.py", "_owner_replies", "ATTENDEE"),
         ("milchglas/config.py", "", "summary"),
         ("milchglas/config.py", "parse", "summary"),
+        ("milchglas/sources/caldav.py", "_request", "Location"),
     }
 )
 
