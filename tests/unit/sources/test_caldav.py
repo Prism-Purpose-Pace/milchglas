@@ -2,9 +2,13 @@
 
 The world is a real HTTP server on 127.0.0.1 that answers each request from a script and,
 like Nextcloud, can challenge a request without the service user's credentials. It keeps
-every request it receives. The client is the production opener behind a recorder: it notes
-the timeout `fetch` asks for and passes a short one on, so a server that never answers
-costs a quarter second, not 10 s.
+every request it receives. Its 207 to a check (PROPFIND) describes the calendar, by default
+as a share the owner made read-only; its 207 to a query (REPORT) holds no events. The
+client is the production opener behind a recorder: it notes the timeout `fetch` asks for
+and passes a short one on, so a server that never answers costs a quarter second, not 10 s.
+
+The answers to a check are synthetic, written after sabre's multistatus, until the contract
+suite captures a real one from Baikal.
 
 Two cases need no server. A refused connection is a loopback port nobody listens on, so
 the kernel refuses it. A connection that times out cannot be made on loopback without
@@ -22,6 +26,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from email.message import Message
+from http import HTTPStatus
 from http.client import HTTPResponse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BufferedIOBase
@@ -47,6 +52,9 @@ PRIVAT = Calendar(href=f"{HOME}privat_shared_by_owner/", name="Privat", enabled=
 FAMILIE = Calendar(href=f"{HOME}familie_shared_by_owner/", name="Familie", enabled=False)
 ARBEIT = Calendar(href=f"{HOME}arbeit_shared_by_owner/", name="Arbeit", enabled=True)
 BERLIN = ZoneInfo("Europe/Berlin")
+OWNER = "/remote.php/dav/principals/users/owner/"
+SERVICE_USER = "/remote.php/dav/principals/users/svc-milchglas/"
+PRINCIPALS = {"the owner": OWNER, "svc-milchglas": SERVICE_USER}
 DAV = "{DAV:}"
 CALDAV = "{urn:ietf:params:xml:ns:caldav}"
 
@@ -59,6 +67,15 @@ class Received:
     body: bytes
 
 
+@dataclass(frozen=True)
+class Description:
+    """What the server says about an href in its answer to a check."""
+
+    resource: str = "calendar"
+    owner: str = OWNER
+    privileges: tuple[str, ...] = ("read", "write-properties")
+
+
 @dataclass
 class World:
     account: Account = field(default_factory=lambda: Account("", USER, SECRET))
@@ -68,6 +85,8 @@ class World:
     )
     script: list[int | None] = field(default_factory=list)
     requests: list[Received] = field(default_factory=list)
+    descriptions: dict[str, Description] = field(default_factory=dict)
+    check_answer: bytes | None = None
     challenge: bool = False
     set_cookie: bool = False
     location: str | None = None
@@ -88,7 +107,17 @@ class _Server(ThreadingHTTPServer):
 
 
 class _Handler(BaseHTTPRequestHandler):
+    def do_PROPFIND(self) -> None:
+        self._answer()
+
     def do_REPORT(self) -> None:
+        self._answer()
+
+    def do_GET(self) -> None:
+        """What a client that follows a 301 or 302 sends instead."""
+        self._answer()
+
+    def _answer(self) -> None:
         assert isinstance(self.server, _Server)
         world = self.server.world
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
@@ -100,8 +129,8 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        # A request the script did not plan for gets a 500, so a wrong retry shows in the count.
-        answer = world.script.pop(0) if world.script else 500
+        # A request the script did not plan for gets a 207, as from a healthy server.
+        answer = world.script.pop(0) if world.script else 207
         if answer is HANG:
             world.release.wait()
             return
@@ -110,22 +139,57 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Set-Cookie", "nc_session_id=synthetic; Path=/; HttpOnly")
         if world.location:
             self.send_header("Location", world.location)
-        if world.body_size:
+        if world.body_size and self.command == "REPORT":
             # No length: the body ends when the server closes the connection.
             self.end_headers()
             world.sent_all = _stream(self.wfile, world.body_size)
             world.done.set()
             return
-        self.send_header("Content-Length", "0")
+        body = b""
+        if answer == HTTPStatus.MULTI_STATUS and self.command == "PROPFIND":
+            description = world.descriptions.get(self.path, Description())
+            body = world.check_answer or _check_answer(self.path, description)
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-
-    def do_GET(self) -> None:
-        """What a client that follows a 301 or 302 sends instead."""
-        self.do_REPORT()
+        self.wfile.write(body)
 
     @override
     def log_message(self, *args: object) -> None:
         """Keep the server out of the test output."""
+
+
+def _check_answer(href: str, description: Description) -> bytes:
+    calendar = "<cal:calendar/>" if description.resource == "calendar" else ""
+    privileges = "".join(
+        f"<d:privilege><d:{name}/></d:privilege>" for name in description.privileges
+    )
+    return _multistatus(
+        href,
+        f"<d:resourcetype><d:collection/>{calendar}</d:resourcetype>"
+        f"<d:owner><d:href>{description.owner}</d:href></d:owner>"
+        f"<d:current-user-principal><d:href>{SERVICE_USER}</d:href></d:current-user-principal>"
+        f"<d:current-user-privilege-set>{privileges}</d:current-user-privilege-set>",
+    )
+
+
+def _multistatus(href: str, found: str, missing: str = "", *, responses: int = 1) -> bytes:
+    """The response for `href`: the found properties under 200, the missing ones under 404."""
+    not_found = (
+        f"<d:propstat><d:prop>{missing}</d:prop><d:status>HTTP/1.1 404 Not Found</d:status>"
+        "</d:propstat>"
+        if missing
+        else ""
+    )
+    response = (
+        f"<d:response><d:href>{href}</d:href>"
+        f"<d:propstat><d:prop>{found}</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+        f"{not_found}</d:response>"
+    )
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">'
+        f"{response * responses}</d:multistatus>"
+    ).encode()
 
 
 def _stream(wfile: BufferedIOBase, size: int) -> bool:
@@ -226,6 +290,16 @@ def test_orch_fetch_7_only_enabled_calendars_in_order() -> None:
     """A disabled calendar is neither asked nor counted (FR-1)."""
 
 
+@scenario("caldav/fetch.feature", "A calendar the service user must not read from ends the fetch")
+def test_orch_fetch_8_refused_calendar_ends_the_fetch() -> None:
+    """The check before each query keeps an href that is no read-only share out (NFR-S3)."""
+
+
+@scenario("caldav/fetch.feature", "A calendar the owner shares read-only is fetched")
+def test_orch_fetch_8_read_only_share_is_fetched() -> None:
+    """Nextcloud's read-only share holds write-properties and passes (FR-1)."""
+
+
 @pytest.mark.parametrize(
     "location",
     [None, "/calendars/other/", "http://[::1/", "http://ev\x1bil.example/"],
@@ -239,7 +313,70 @@ def test_orch_fetch_5_redirect_error_names_no_unreadable_host(
     world.location = location
     with pytest.raises(FetchError) as caught:
         list(fetch(world.account, world.calendars, world.window, opener=_RecordingOpener(world)))
-    assert str(caught.value) == "HTTP 307 redirect"
+    assert str(caught.value) == "calendars[0]: HTTP 307 redirect"
+
+
+FOUND = (
+    "<d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>"
+    f"<d:owner><d:href>{OWNER}</d:href></d:owner>"
+    f"<d:current-user-principal><d:href>{SERVICE_USER}</d:href></d:current-user-principal>"
+)
+READ_ONLY = "<d:current-user-privilege-set><d:privilege><d:read/></d:privilege></d:current-user-privilege-set>"
+
+
+@pytest.mark.parametrize(
+    ("answer", "refusal"),
+    [
+        (b'<d:multistatus xmlns:d="DAV:"/>', "not a calendar"),
+        (_multistatus(PRIVAT.href, FOUND + READ_ONLY, responses=2), "not a calendar"),
+        (_multistatus(PRIVAT.href, FOUND, "<d:current-user-privilege-set/>"), "privileges unknown"),
+        (
+            _multistatus(
+                PRIVAT.href, FOUND.split("<d:owner>", maxsplit=1)[0] + READ_ONLY, "<d:owner/>"
+            ),
+            "owner unknown",
+        ),
+        (
+            _multistatus(
+                PRIVAT.href,
+                FOUND.split("<d:current-user-principal>", maxsplit=1)[0] + READ_ONLY,
+                "<d:current-user-principal/>",
+            ),
+            "owner unknown",
+        ),
+        (
+            _check_answer(PRIVAT.href, Description(privileges=("read", "all"))),
+            "writable by the service user",
+        ),
+        (
+            _check_answer(PRIVAT.href, Description(privileges=("read", "bind"))),
+            "writable by the service user",
+        ),
+        (
+            b'<?xml version="1.0"?><!DOCTYPE d [<!ENTITY e "x">]><d:multistatus xmlns:d="DAV:"/>',
+            "check answer declares a DOCTYPE",
+        ),
+        (b'<d:multistatus xmlns:d="DAV:">', "check answer is not well-formed XML"),
+    ],
+    ids=[
+        "no-response",
+        "two-responses",
+        "privileges-not-found",
+        "owner-not-found",
+        "principal-not-found",
+        "all",
+        "bind",
+        "doctype",
+        "not-xml",
+    ],
+)
+def test_orch_fetch_8_check_fails_closed(world: World, answer: bytes, refusal: str) -> None:
+    """A check answer that does not prove a read-only share refuses the calendar (FR-1)."""
+    world.check_answer = answer
+    with pytest.raises(FetchError) as caught:
+        list(fetch(world.account, world.calendars, world.window, opener=_RecordingOpener(world)))
+    assert str(caught.value) == f"calendars[0]: {refusal}"
+    assert [r.method for r in world.requests] == ["PROPFIND"]
 
 
 def _never_connects(*_args: object, **_kwargs: object) -> NoReturn:
@@ -254,7 +391,7 @@ def server_answers(world: World, status: int) -> None:
 
 @given(parsers.parse("the server answers {status:d} and then 207"))
 def server_answers_then_207(world: World, status: int) -> None:
-    world.script = [status, 207]
+    world.script = [status]
 
 
 @given(parsers.parse("the server lets every {stage} time out"))
@@ -268,13 +405,12 @@ def server_lets_stage_time_out(world: World, stage: str, monkeypatch: pytest.Mon
 @given("the server challenges every request without the service user's credentials")
 def server_challenges(world: World) -> None:
     world.challenge = True
-    world.script = [207]
 
 
 @given("the server answers 503 with a session cookie and then 207")
 def server_sets_cookie_then_207(world: World) -> None:
     world.set_cookie = True
-    world.script = [503, 207]
+    world.script = [503]
 
 
 @given(parsers.parse("the server answers {status:d} pointing to a second server"))
@@ -286,13 +422,11 @@ def server_redirects(world: World, second: World, status: int) -> None:
 
 @given("the server answers 207 with 64 MiB of calendar data and no length")
 def server_streams_64_mib(world: World) -> None:
-    world.script = [207]
     world.body_size = 64 * MIB
 
 
 @given("the server answers 207 with 16 MiB of calendar data and no length")
 def server_streams_16_mib(world: World) -> None:
-    world.script = [207]
     world.body_size = 16 * MIB
 
 
@@ -311,13 +445,21 @@ def window_across_summer_time_end(world: World) -> None:
         date(2026, 10, 20),
         date(2026, 11, 22),
     )
-    world.script = [207]
 
 
 @given("the configuration lists Privat enabled, Familie disabled and Arbeit enabled")
 def three_calendars(world: World) -> None:
     world.calendars = (PRIVAT, FAMILIE, ARBEIT)
-    world.script = [207, 207]
+
+
+@given(
+    parsers.parse("the server describes {name} as a {resource} owned by {owner} with {privileges}")
+)
+def server_describes(world: World, name: str, resource: str, owner: str, privileges: str) -> None:
+    href = {"Privat": PRIVAT.href, "Arbeit": ARBEIT.href}[name]
+    world.descriptions[href] = Description(
+        resource, PRINCIPALS[owner], tuple(privileges.split(", "))
+    )
 
 
 @when("the client fetches one calendar")
@@ -378,32 +520,52 @@ def received_one(world: World) -> None:
     assert len(world.requests) == 1
 
 
-@then("the fetch succeeds after 2 requests")
-def succeeds_after_two(world: World) -> None:
-    assert world.error is None
-    assert len(world.requests) == 2
+@then("the server received exactly 1 query")
+def received_one_query(world: World) -> None:
+    assert [r.method for r in world.requests].count("REPORT") == 1
 
 
-@then("the fetch succeeds after 1 request")
-def succeeds_after_one(world: World) -> None:
+@then("the fetch succeeds after one retry")
+def succeeds_after_one_retry(world: World) -> None:
     assert world.error is None
-    assert len(world.requests) == 1
+    assert [r.method for r in world.requests] == ["PROPFIND", "PROPFIND", "REPORT"]
+
+
+@then("the fetch succeeds after one check and one query")
+def succeeds_after_check_and_query(world: World) -> None:
+    assert world.error is None
+    assert [(r.method, r.headers.get("Depth")) for r in world.requests] == [
+        ("PROPFIND", "0"),
+        ("REPORT", "1"),
+    ]
 
 
 @then("no request reached the server without the credentials")
 def no_request_without_credentials(world: World) -> None:
-    assert [r.headers.get("Authorization") for r in world.requests] == [CREDENTIALS]
+    assert [r.headers.get("Authorization") for r in world.requests] == [CREDENTIALS] * 2
 
 
 @then("no request reached the server with a cookie")
 def no_request_with_cookie(world: World) -> None:
-    assert [r.headers.get("Cookie") for r in world.requests] == [None, None]
+    assert [r.headers.get("Cookie") for r in world.requests] == [None] * 3
+
+
+@then(parsers.parse("the fetch fails naming calendars[2] as {refusal}"))
+def fails_naming_calendar_2(world: World, refusal: str) -> None:
+    assert world.error is not None
+    assert str(world.error) == f"calendars[2]: {refusal}"
+
+
+@then("the server received no query for Arbeit")
+def no_query_for_arbeit(world: World) -> None:
+    assert ("REPORT", ARBEIT.href) not in [(r.method, r.path) for r in world.requests]
+    assert ("PROPFIND", ARBEIT.href) in [(r.method, r.path) for r in world.requests]
 
 
 @then("the server received a calendar query at depth 1")
 def received_calendar_query(world: World) -> None:
     assert world.error is None
-    [query] = world.requests
+    [query] = [r for r in world.requests if r.method == "REPORT"]
     assert (query.method, query.path, query.headers.get("Depth")) == ("REPORT", PRIVAT.href, "1")
     assert ET.fromstring(query.body).tag == f"{CALDAV}calendar-query"
 
@@ -413,7 +575,8 @@ def received_calendar_query(world: World) -> None:
     "expanded over the same range"
 )
 def asked_for_the_window(world: World) -> None:
-    query = ET.fromstring(world.requests[0].body)
+    [report] = [r for r in world.requests if r.method == "REPORT"]
+    query = ET.fromstring(report.body)
     comp = query.find(f"{CALDAV}filter/{CALDAV}comp-filter[@name='VCALENDAR']")
     assert comp is not None
     time_range = comp.find(f"{CALDAV}comp-filter[@name='VEVENT']/{CALDAV}time-range")
@@ -428,7 +591,7 @@ def asked_for_the_window(world: World) -> None:
 @then("the server received queries for Privat and then Arbeit")
 def asked_privat_then_arbeit(world: World) -> None:
     assert world.error is None
-    assert [(r.method, r.path) for r in world.requests] == [
+    assert [(r.method, r.path) for r in world.requests if r.method == "REPORT"] == [
         ("REPORT", PRIVAT.href),
         ("REPORT", ARBEIT.href),
     ]

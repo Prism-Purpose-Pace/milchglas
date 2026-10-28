@@ -6,12 +6,15 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC
 from http import HTTPStatus
 from http.client import HTTPResponse
-from typing import Protocol
+from io import BytesIO
+from typing import NoReturn, Protocol
+from xml.parsers import expat
 
 from milchglas.config import Calendar
 from milchglas.core.model import Window
@@ -21,6 +24,21 @@ BACKOFF_SECONDS = (1, 2, 4)  # Q-15: the waits before the three retries
 MAX_BYTES = 16 * 2**20  # Q-15: the largest answer read
 # A host name or IP address as `urlsplit` lower-cases it; anything else stays out of the error.
 _HOST = re.compile(r"[a-z0-9.:-]{1,253}")
+_PROPFIND = b"""<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:">
+  <D:prop>
+    <D:resourcetype/>
+    <D:owner/>
+    <D:current-user-principal/>
+    <D:current-user-privilege-set/>
+  </D:prop>
+</D:propfind>
+"""
+# The privileges that let the service user change a calendar or who may (RFC 3744 section 3).
+# write-properties is not among them: Nextcloud grants it to every read-only share.
+_WRITING = frozenset(
+    f"{{DAV:}}{name}" for name in ("all", "write", "write-content", "bind", "unbind", "write-acl")
+)
 
 
 class FetchError(Exception):
@@ -84,9 +102,90 @@ def fetch(
     opener = opener or build_opener()
     query = _calendar_query(window)
     for index, calendar in enumerate(calendars):
-        if calendar.enabled:
-            request = _dav_request(account, calendar.href, "REPORT", "1", query)
-            yield index, _send(opener, request, sleep)
+        if not calendar.enabled:
+            continue
+        try:
+            _check(opener, _dav_request(account, calendar.href, "PROPFIND", "0", _PROPFIND), sleep)
+            answer = _send(
+                opener, _dav_request(account, calendar.href, "REPORT", "1", query), sleep
+            )
+        except FetchError as error:
+            # Named by index: a calendar's href and name stay out of every message (NFR-P4).
+            msg = f"calendars[{index}]: {error}"
+            raise FetchError(msg, retryable=False) from None
+        yield index, answer
+
+
+def _check(opener: Opener, request: urllib.request.Request, sleep: Callable[[float], None]) -> None:
+    """Fail unless the href is a calendar that someone else shares read-only (FR-1, NFR-S3)."""
+    if refusal := _refusal(_found(_send(opener, request, sleep))):
+        raise FetchError(refusal, retryable=False)
+
+
+def _found(answer: bytes) -> dict[str, ET.Element]:
+    """The properties the server found for the one resource it answered for, else none."""
+    responses = _tree(answer).findall("{DAV:}response")
+    if len(responses) != 1:
+        return {}
+    return {
+        prop.tag: prop
+        for propstat in responses[0].iterfind("{DAV:}propstat")
+        if (propstat.findtext("{DAV:}status") or "").split()[1:2] == ["200"]
+        for prop in propstat.iterfind("{DAV:}prop/*")
+    }
+
+
+def _refusal(found: dict[str, ET.Element]) -> str | None:
+    """Why the properties found show no read-only share; fails closed on a missing one."""
+    resource = found.get("{DAV:}resourcetype")
+    if resource is None or resource.find("{urn:ietf:params:xml:ns:caldav}calendar") is None:
+        return "not a calendar"
+    owner = _href(found.get("{DAV:}owner"))
+    principal = _href(found.get("{DAV:}current-user-principal"))
+    if owner is None or principal is None:
+        return "owner unknown"
+    if owner == principal:
+        return "owned by the service user"
+    privileges = found.get("{DAV:}current-user-privilege-set")
+    if privileges is None:
+        return "privileges unknown"
+    if any(privilege.tag in _WRITING for privilege in privileges.iterfind("{DAV:}privilege/*")):
+        return "writable by the service user"
+    return None
+
+
+def _href(prop: ET.Element | None) -> str | None:
+    return None if prop is None else prop.findtext("{DAV:}href")
+
+
+def _tree(answer: bytes) -> ET.Element:
+    """The answer as elements named `{namespace}name`; a DOCTYPE is refused (Q-14).
+
+    Without a DOCTYPE no entity can be declared, so none can expand.
+    """
+    builder = ET.TreeBuilder()
+    parser = expat.ParserCreate(namespace_separator=" ")
+    parser.StartDoctypeDeclHandler = _declaration
+    parser.EntityDeclHandler = _declaration
+    parser.StartElementHandler = lambda name, attributes: builder.start(_tag(name), attributes)
+    parser.EndElementHandler = lambda name: builder.end(_tag(name))
+    parser.CharacterDataHandler = builder.data
+    try:
+        parser.ParseFile(BytesIO(answer))
+    except expat.ExpatError:
+        msg = "check answer is not well-formed XML"
+        raise FetchError(msg, retryable=False) from None
+    return builder.close()
+
+
+def _tag(name: str) -> str:
+    namespace, _, local = name.rpartition(" ")
+    return f"{{{namespace}}}{local}" if namespace else local
+
+
+def _declaration(*_args: object) -> NoReturn:
+    msg = "check answer declares a DOCTYPE"
+    raise FetchError(msg, retryable=False)
 
 
 def _calendar_query(window: Window) -> bytes:
