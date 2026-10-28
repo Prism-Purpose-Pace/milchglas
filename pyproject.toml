@@ -160,6 +160,28 @@ disallow_any_expr = true
 disallow_any_explicit = true
 
 # ---------------------------------------------------------------------------
+# basedpyright — second type gate: inferred unknowns and code hygiene, which mypy
+# leaves open. Findings that existed when it was added sit in
+# .basedpyright/baseline.json; a new one fails, and the baseline only shrinks.
+# ---------------------------------------------------------------------------
+[tool.basedpyright]
+pythonVersion = "3.12"
+include = ["src", "tests"]
+# src: the package resolves from source, not as an installed library without py.typed.
+extraPaths = ["src", "scripts"]
+typeCheckingMode = "recommended"
+failOnWarnings = true
+# Its own `# pyright: ignore[rule]` only; a mypy `# type: ignore[code]` must not
+# silence it too.
+enableTypeIgnoreComments = false
+reportUnusedCallResult = "none"            # discarded results: 196 on 2026-10-26, none a bug
+reportImplicitStringConcatenation = "none" # ruff ISC owns it
+reportPrivateUsage = "none"                # ruff SLF001 owns it
+reportMissingSuperCall = "none"            # flags __init__ of plain classes
+reportAny = "none"                         # mypy owns Any
+reportExplicitAny = "none"
+
+# ---------------------------------------------------------------------------
 # pytest + coverage — native [tool.pytest] table (pytest >= 9)
 # ---------------------------------------------------------------------------
 [tool.pytest]
@@ -217,6 +239,7 @@ also_copy = ["config.example.json"]
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.40.2",
     "hypothesis>=6.168.0",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
