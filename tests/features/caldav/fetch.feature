@@ -26,7 +26,7 @@ Feature: Fetch from the CalDAV server
     Scenario Outline: A server error is retried
       Given the server answers <status> and then 207
       When the client fetches one calendar
-      Then the fetch succeeds after 2 requests
+      Then the fetch succeeds after one retry
       And the client waited 1 s
 
       Examples:
@@ -62,14 +62,14 @@ Feature: Fetch from the CalDAV server
     Scenario: The first request already carries the credentials
       Given the server challenges every request without the service user's credentials
       When the client fetches one calendar
-      Then the fetch succeeds after 1 request
+      Then the fetch succeeds after one check and one query
       And no request reached the server without the credentials
 
     @ORCH-FETCH-9
     Scenario: A cookie the server sets is not sent back
       Given the server answers 503 with a session cookie and then 207
       When the client fetches one calendar
-      Then the fetch succeeds after 2 requests
+      Then the fetch succeeds after one retry
       And no request reached the server with a cookie
 
   @id:77
@@ -99,7 +99,7 @@ Feature: Fetch from the CalDAV server
       When the client fetches one calendar
       Then the fetch fails naming the 16 MiB limit
       And the server could not send the whole answer
-      And the server received exactly 1 request
+      And the server received exactly 1 query
 
     @ORCH-FETCH-4
     Scenario: An answer of exactly 16 MiB is read whole
@@ -128,7 +128,7 @@ Feature: Fetch from the CalDAV server
   @id:77
   Rule: Read only a calendar that someone else owns and the service user cannot change (FR-1, NFR-S3)
 
-    @backlog @ORCH-FETCH-8
+    @ORCH-FETCH-8
     Scenario Outline: A calendar the service user must not read from ends the fetch
       Given the configuration lists Privat enabled, Familie disabled and Arbeit enabled
       And the server describes Arbeit as a <resource> owned by <owner> with <privileges>
@@ -143,7 +143,7 @@ Feature: Fetch from the CalDAV server
         | calendar   | the owner     | read, write | writable by the service user |
 
     # Nextcloud grants a read-only share write-properties, so the share can be renamed.
-    @backlog @ORCH-FETCH-8
+    @ORCH-FETCH-8
     Scenario: A calendar the owner shares read-only is fetched
       Given the server describes Privat as a calendar owned by the owner with read, write-properties
       When the client fetches one calendar
