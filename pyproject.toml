@@ -92,7 +92,7 @@ ignore = [
 # fetch opens the calendar URL built from CALDAV_URL; its scheme is the configuration's
 # rule (https only, FR-1 and NFR-S7: ORCH-CFG-2), not something a request can check.
 "src/milchglas/sources/caldav.py" = ["S310"]
-# _events hands untrusted server text to icalendar, which fails with at least seven
+# _components hands untrusted server text to icalendar, which fails with at least seven
 # exception classes (a fuzz run found ValueError, TypeError, AttributeError,
 # AssertionError, OSError among them); any of them marks the object unparsable and
 # fails the refresh (Q-14), so the blind except keeps D-7d instead of hiding it.
