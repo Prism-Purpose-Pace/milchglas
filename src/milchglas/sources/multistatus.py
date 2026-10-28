@@ -24,10 +24,16 @@ from milchglas.core.reduce import MalformedEventError, Skip, reduce_event
 _MULTISTATUS = "DAV: multistatus"
 _RESPONSE = "DAV: response"
 _HREF = "DAV: href"
+_PROPSTAT = "DAV: propstat"
+_STATUS = "DAV: status"
 _DATA = "urn:ietf:params:xml:ns:caldav calendar-data"
 # A line break followed by one space or tab continues the line (RFC 5545 section 3.1);
 # sabre writes CRLF in expanded answers and LF in unexpanded ones (NFR-C1).
 _FOLD = re.compile(rb"\r?\n[ \t]")
+_OK = re.compile(rb"\s*HTTP/\d\.\d 200\b")
+# Left in an instance, these mean the server did not expand it; while local expansion
+# is off, every later instance would be a free slot (FR-2, Q-14).
+_UNEXPANDED = ("RRULE", "RDATE")
 
 
 class _TextDuration(TypesFactory):
@@ -85,8 +91,11 @@ def parse(
     return blocks
 
 
-def _events(data: bytes) -> list[Component]:
+def _events(data: bytes | None) -> list[Component]:
     """The VEVENTs of one object, or MalformedEventError if the parser reports any error."""
+    if data is None:
+        msg = "no calendar-data with status 200"
+        raise MalformedEventError(msg)
     try:
         # Bytes, never str: icalendar reads a str without a line break as a file path.
         components = _Calendar.from_ical(_FOLD.sub(b"", data)).walk()
@@ -100,22 +109,32 @@ def _events(data: bytes) -> list[Component]:
     if any(component.errors for component in components):
         msg = "the parser reported an error"
         raise MalformedEventError(msg)
-    return [component for component in components if component.name == "VEVENT"]
+    events = [component for component in components if component.name == "VEVENT"]
+    if any(name in event for event in events for name in _UNEXPANDED):
+        msg = "an instance is not expanded"
+        raise MalformedEventError(msg)
+    return events
 
 
 class _Answer:
-    """The expat handlers that collect each response's href and `calendar-data` as bytes."""
+    """The expat handlers that collect each response's href and `calendar-data` as bytes.
+
+    A response whose `calendar-data` is missing or comes with any status but 200 keeps
+    `None` for it: such an object is not skipped but fails the read (PARSE-2).
+    """
 
     def __init__(self, body: bytes, status: int) -> None:
         self.body = body
         self.status = status
-        self.found: list[tuple[bytes, bytes]] = []
+        self.found: list[tuple[bytes, bytes | None]] = []
         self.path: list[str] = []
         self.chunks: list[str] | None = None
         self.href = b""
-        self.data: bytes | None = None
+        self.data: bytes | None = None  # of the propstat being read
+        self.state = b""  # the status line of the propstat being read
+        self.kept: bytes | None = None  # the response's calendar-data from a 200 propstat
 
-    def read(self) -> list[tuple[bytes, bytes]]:
+    def read(self) -> list[tuple[bytes, bytes | None]]:
         parser = expat.ParserCreate(encoding="ISO-8859-1", namespace_separator=" ")
         parser.StartDoctypeDeclHandler = self.declaration
         parser.EntityDeclHandler = self.declaration
@@ -143,7 +162,7 @@ class _Answer:
             msg = "not a multistatus"
             raise self.refused(msg)
         self.path.append(name)
-        if name == _DATA or self.path[-2:] == [_RESPONSE, _HREF]:
+        if name == _DATA or self.path[-2:] in ([_RESPONSE, _HREF], [_PROPSTAT, _STATUS]):
             self.chunks = []
 
     def text(self, data: str) -> None:
@@ -156,9 +175,15 @@ class _Answer:
             self.data = self.captured()
         elif name == _HREF and self.path[-1:] == [_RESPONSE]:
             self.href = self.captured()
-        elif name == _RESPONSE and self.data is not None:
-            self.found.append((self.href, self.data))
-            self.href, self.data = b"", None
+        elif name == _STATUS and self.path[-1:] == [_PROPSTAT]:
+            self.state = self.captured()
+        elif name == _PROPSTAT:
+            if self.data is not None and _OK.match(self.state):
+                self.kept = self.data
+            self.data, self.state = None, b""
+        elif name == _RESPONSE:
+            self.found.append((self.href, self.kept))
+            self.href, self.kept = b"", None
 
     def captured(self) -> bytes:
         """The bytes of the element that just closed, as the server sent them."""

@@ -32,6 +32,7 @@ HEAD = (
     b' xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">\n'
 )
 HREF = "/calendars/svc/BBX-team/ev-1.ics"
+NOT_FOUND = b"HTTP/1.1 404 Not Found"
 # What an entity in a DOCTYPE can do: expand a thousandfold, or name a local file.
 DECLARATIONS = {
     "a bare DOCTYPE": "<!DOCTYPE d:multistatus>",
@@ -100,15 +101,31 @@ def vcalendar(*props: bytes, newline: bytes = b"\r\n") -> bytes:
     return newline.join(lines) + newline
 
 
-def response(href: str, data: bytes) -> bytes:
-    """One object of the answer; sabre escapes the iCalendar text and writes CR as `&#13;`."""
-    text = data.replace(b"&", b"&amp;").replace(b"<", b"&lt;").replace(b">", b"&gt;")
+def propstat(prop: bytes, status: bytes = b"HTTP/1.1 200 OK") -> bytes:
     return (
-        b" <d:response>\n  <d:href>" + href.encode() + b"</d:href>\n"
-        b"  <d:propstat>\n   <d:prop>\n    <cal:calendar-data>"
-        + text.replace(b"\r", b"&#13;")
-        + b"</cal:calendar-data>\n   </d:prop>\n"
-        b"   <d:status>HTTP/1.1 200 OK</d:status>\n  </d:propstat>\n </d:response>\n"
+        b"  <d:propstat>\n   <d:prop>\n    " + prop + b"\n   </d:prop>\n"
+        b"   <d:status>" + status + b"</d:status>\n  </d:propstat>\n"
+    )
+
+
+def response(href: str, data: bytes | None, *more: bytes) -> bytes:
+    """One object of the answer; sabre escapes the iCalendar text and writes CR as `&#13;`.
+
+    `data` None leaves out the propstat that carries `calendar-data`; `more` adds others.
+    """
+    found = b""
+    if data is not None:
+        text = data.replace(b"&", b"&amp;").replace(b"<", b"&lt;").replace(b">", b"&gt;")
+        found = propstat(
+            b"<cal:calendar-data>" + text.replace(b"\r", b"&#13;") + b"</cal:calendar-data>"
+        )
+    return (
+        b" <d:response>\n  <d:href>"
+        + href.encode()
+        + b"</d:href>\n"
+        + found
+        + b"".join(more)
+        + b" </d:response>\n"
     )
 
 
@@ -163,6 +180,21 @@ def test_parse_11_cancelled_event_with_garbage_start() -> None:
 @scenario("caldav/parse.feature", "A duration beyond any date fails the read")
 def test_parse_14_duration_beyond_any_date() -> None:
     """DURATION reaches reduce as text; the alarm's TRIGGER overflows inside icalendar."""
+
+
+@scenario("caldav/parse.feature", "Calendar data the server could not find fails the read")
+def test_parse_2_calendar_data_not_found() -> None:
+    """An object without its data would read as a free slot (Q-14)."""
+
+
+@scenario("caldav/parse.feature", "A missing entity tag does not stop the read")
+def test_parse_2_missing_entity_tag() -> None:
+    """A 404 for any other requested property is ignored (NFR-C1)."""
+
+
+@scenario("caldav/parse.feature", "An instance the server left unexpanded fails the read")
+def test_parse_12_unexpanded_instance() -> None:
+    """Only the first instance would block; every later one would be a free slot (FR-2)."""
 
 
 @given("the owner's time zone is Europe/Berlin")
@@ -284,6 +316,34 @@ def answers_out_of_range(world: World, href: str, name: str, value: str) -> None
     world.body = answer(response(href, vcalendar(b"DTSTART:20261102T080000Z", *props)))
 
 
+@given(parsers.parse('calendar 1 answers for "{href}" that {what} was not found'))
+def answers_not_found(world: World, href: str, what: str) -> None:
+    # sabre's shape for a missing property, and a status for the whole response.
+    missing = {
+        "its calendar data": propstat(b"<cal:calendar-data/>", NOT_FOUND),
+        "the whole object": b"  <d:status>" + NOT_FOUND + b"</d:status>\n",
+    }[what]
+    world.body = answer(response(href, None, missing))
+
+
+@given(
+    "calendar 1 answers with an event from 2026-11-02 08:00 UTC to 09:00 UTC and says its "
+    "entity tag was not found"
+)
+def answers_etag_not_found(world: World) -> None:
+    event = vcalendar(b"DTSTART:20261102T080000Z", b"DTEND:20261102T090000Z")
+    world.body = answer(response(HREF, event, propstat(b"<d:getetag/>", NOT_FOUND)))
+
+
+@given(
+    parsers.parse('calendar 1 answers with a weekly event at "{href}" that still holds its {rule}')
+)
+def answers_unexpanded(world: World, href: str, rule: str) -> None:
+    line = {"RRULE": b"RRULE:FREQ=WEEKLY;COUNT=4", "RDATE": b"RDATE:20261109T080000Z"}[rule]
+    event = vcalendar(b"DTSTART:20261102T080000Z", b"DTEND:20261102T090000Z", line)
+    world.body = answer(response(href, event))
+
+
 @when("Milchglas reads the answer")
 def reads_the_answer(world: World, caplog: pytest.LogCaptureFixture) -> None:
     _LISTENERS.append(world.opened)
@@ -373,3 +433,12 @@ def nothing_holds(world: World, values: str) -> None:
     for value in re.findall(r'"([^"]+)"', values):
         assert value not in str(world.error)
         assert not any(value in line for line in world.logged)
+
+
+def test_parse_2_reads_calendar_data_only_from_a_200_propstat() -> None:
+    """Data under any other status is no object the server vouches for, however whole."""
+    event = vcalendar(b"DTSTART:20261102T080000Z", b"DTEND:20261102T090000Z")
+    data = b"<cal:calendar-data>" + event.replace(b"\r", b"&#13;") + b"</cal:calendar-data>"
+    body = answer(response(HREF, None, propstat(data, NOT_FOUND)))
+    with pytest.raises(MalformedEventError, match="no calendar-data with status 200"):
+        multistatus.parse(body, calendar=1, status=207, tz=ZoneInfo("UTC"), owner_emails=())
