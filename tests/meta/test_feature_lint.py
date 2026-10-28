@@ -24,6 +24,12 @@ adds the form rules of novibe's `.gherkin-lintrc` and its requirements step, on 
 
 Every finding names file, line and rule. A rule fails on its own bad case and stays silent
 on its near-miss, so a check that cannot fail would show here.
+
+Limits, kept on purpose: restricted-pattern reads step text only, as the issue asks, where
+gherkin-lint also reads feature, scenario and background names and descriptions; whether a
+scenario states an outcome and whether a `Then` can be seen from outside stay review in the
+requirements step; `@long-running` passes tag-allowed but is a pytest marker that
+`pyproject.toml` does not register yet.
 """
 
 import re
@@ -161,6 +167,7 @@ def outline(
 
 
 def repeated_scenarios(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
+    """The scenarios, rules included, whose name an earlier scenario of the feature uses."""
     seen: dict[str, int] = {}
     for scenario, _ in cases(feature["children"], []):
         name, line = scenario["name"], scenario["location"]["line"]
