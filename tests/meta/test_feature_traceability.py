@@ -11,7 +11,8 @@ scenario under `tests/features/`:
   (pytest-bdd applies all three), and that tag is a row ID.
 - unbound: a function under `tests/` binds it as `@scenario("<path>", "<name>")`, both
   arguments literal strings and the path relative to `tests/features/`; a scenario tagged
-  `@backlog` (specified, not built yet) may stay unbound, and the hook skips it when bound.
+  `@backlog` (specified, not built yet) may stay unbound; when bound, the hook expects it to
+  fail, strictly, so a built scenario that keeps the tag fails the run.
 - bound_twice: no second function binds it.
 - misnamed: the binding function is `test_<id>` or `test_<id>_…`, the ID lower-cased with
   dashes as underscores, so pytest collects it and GATE-17 counts it as a citation.
@@ -23,6 +24,9 @@ ID tags and the feature's `@id:<ticket>` out of the markers; any other tag still
 """
 
 import ast
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -249,11 +253,63 @@ def test_id_tag_is_no_marker(tag: str) -> None:
     assert not hasattr(_bound, "pytestmark")
 
 
-def test_backlog_tag_skips_the_scenario() -> None:
+def test_backlog_tag_expects_the_scenario_to_fail() -> None:
     def bound() -> None: ...
 
     assert pytest_bdd_apply_tag("backlog", bound) is True
-    assert [mark.name for mark in getattr(bound, "pytestmark", [])] == ["skip"]
+    [mark] = getattr(bound, "pytestmark", [])
+    assert (mark.name, mark.kwargs.get("strict")) == ("xfail", True)
+
+
+BACKLOG_FEATURE = """\
+Feature: Sample
+
+  @backlog
+  Scenario: Not built
+    Given nothing yet
+
+  @backlog
+  Scenario: Built
+    Given a thing
+"""
+
+BACKLOG_TESTS = """\
+from pytest_bdd import given, scenario
+
+
+@scenario("sample.feature", "Not built")
+def test_not_built() -> None: ...
+
+
+@scenario("sample.feature", "Built")
+def test_built() -> None: ...
+
+
+@given("a thing")
+def _thing() -> None: ...
+"""
+
+
+def test_built_backlog_scenario_fails_the_run(tmp_path: Path) -> None:
+    """A bound `@backlog` scenario whose steps pass fails; one with a missing step does not."""
+    (tmp_path / "sample.feature").write_text(BACKLOG_FEATURE, encoding="utf-8")
+    (tmp_path / "test_sample.py").write_text(BACKLOG_TESTS, encoding="utf-8")
+    (tmp_path / "conftest.py").write_text(
+        "from tests.conftest import pytest_bdd_apply_tag  # noqa: F401\n", encoding="utf-8"
+    )
+    run = subprocess.run(  # noqa: S603 - the interpreter running this suite
+        [
+            *(sys.executable, "-m", "pytest", "-c", os.devnull, "--rootdir", str(tmp_path)),
+            *("-p", "no:cacheprovider", "-q", "-rX", str(tmp_path)),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=os.environ | {"PYTHONPATH": str(REPO)},
+    )
+    assert run.returncode == 1, run.stdout
+    assert "XPASS(strict)" in run.stdout
+    assert "1 failed, 1 xfailed" in run.stdout
 
 
 @pytest.mark.parametrize("tag", ["slow", "alpha-1", "ALPHA", "ALPHA-1x", "id", "backlogged"])

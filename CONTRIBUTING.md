@@ -107,8 +107,8 @@ docstring. Gate details: [TOOLING.md](TOOLING.md).
   tag (`@ORCH-FETCH-2`), and exactly one function binds it:
   `@scenario("<path>", "<name>")` on `test_<id>_…` (`test_orch_fetch_2_…`). A feature
   carries its issue as `@id:<number>`. A scenario that is specified but not built yet
-  carries `@backlog`: it may stay unbound, and a bound one is skipped; the change that
-  builds it removes the tag. Properties, fuzzing and gates stay plain pytest. GATE-22
+  carries `@backlog`: it may stay unbound, and a bound one is expected to fail, so once it
+  passes the run fails until the change that builds it removes the tag. Properties, fuzzing and gates stay plain pytest. GATE-22
   checks the binding and the form: a feature description, at most five steps, exactly one
   `When`, a `Then`, Given-When-Then in order, a Background of at most four Givens, a Rule
   only for two scenarios or more, no name or step that names a click, a button, an
