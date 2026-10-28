@@ -108,11 +108,14 @@ docstring. Gate details: [TOOLING.md](TOOLING.md).
   `@scenario("<path>", "<name>")` on `test_<id>_…` (`test_orch_fetch_2_…`). A feature
   carries its issue as `@id:<number>`. A scenario that is specified but not built yet
   carries `@backlog`: it may stay unbound, and a bound one is expected to fail, so once it
-  passes the run fails until the change that builds it removes the tag. Properties, fuzzing and gates stay plain pytest. GATE-22
+  passes the run fails until the change that builds it removes the tag. Properties,
+  fuzzing and gates stay plain pytest. GATE-22
   checks the binding and the form: a feature description, at most five steps, exactly one
   `When`, a `Then`, Given-When-Then in order, a Background of at most four Givens, a Rule
   only for two scenarios or more, no name or step that names a click, a button, an
-  endpoint, HTTP, JSON or SQL, `Examples` that match the `<variables>` of an outline, no
+  endpoint, HTTP, JSON or SQL, `Examples` that match the `<variables>` of an outline, `And`
+  where a keyword would repeat, no tag twice on one node, only documentation addresses
+  (`example.com`, `.test`, `192.0.2.0/24`, `2001:db8::/32`: RFC 2606, 5737, 3849), no
   comment (put the reason in the scenario's description), only the tags `@id:<number>`, `@backlog`, `@long-running` (a marker:
   register it in `pyproject.toml` first) and row IDs. A failing scenario names file,
   line and rule: `uv run pytest tests/meta/test_feature_lint.py`.
