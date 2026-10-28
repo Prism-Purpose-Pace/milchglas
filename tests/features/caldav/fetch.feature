@@ -124,3 +124,27 @@ Feature: Fetch from the CalDAV server
       When the client fetches the calendars
       Then the server received queries for Privat and then Arbeit
       And the server received no request for Familie
+
+  @id:77
+  Rule: Read only a calendar that someone else owns and the service user cannot change (FR-1, NFR-S3)
+
+    @backlog @ORCH-FETCH-8
+    Scenario Outline: A calendar the service user must not read from ends the fetch
+      Given the configuration lists Privat enabled, Familie disabled and Arbeit enabled
+      And the server describes Arbeit as a <resource> owned by <owner> with <privileges>
+      When the client fetches the calendars
+      Then the fetch fails naming calendars[2] as <refusal>
+      And the server received no query for Arbeit
+
+      Examples:
+        | resource   | owner         | privileges  | refusal                      |
+        | collection | svc-milchglas | read, write | not a calendar               |
+        | calendar   | svc-milchglas | read, write | owned by the service user    |
+        | calendar   | the owner     | read, write | writable by the service user |
+
+    # Nextcloud grants a read-only share write-properties, so the share can be renamed.
+    @backlog @ORCH-FETCH-8
+    Scenario: A calendar the owner shares read-only is fetched
+      Given the server describes Privat as a calendar owned by the owner with read, write-properties
+      When the client fetches one calendar
+      Then the fetch succeeds after one check and one query
