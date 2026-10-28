@@ -1,8 +1,10 @@
 """CalDAV requests with the request and retry rules of FR-1 and Q-15."""
 
 import base64
+import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from http import HTTPStatus
@@ -11,6 +13,8 @@ from typing import Protocol
 
 TIMEOUT_SECONDS = 10
 BACKOFF_SECONDS = (1, 2, 4)  # Q-15: the waits before the three retries
+# A host name or IP address as `urlsplit` lower-cases it; anything else stays out of the error.
+_HOST = re.compile(r"[a-z0-9.:-]{1,253}")
 
 
 class FetchError(Exception):
@@ -28,8 +32,22 @@ class Opener(Protocol):
 
 
 def build_opener() -> urllib.request.OpenerDirector:
-    """The opener of every request: no cookie jar, and no proxy from the environment (NFR-S7)."""
-    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    """The opener of every request: HTTP(S) only, and no redirect, cookie jar or proxy.
+
+    Without a redirect handler a 3xx falls through to the default error handler, which
+    raises it as an HTTPError (NFR-S7). urllib's own redirect handler would parse
+    `Location` before it refuses a REPORT, and a malformed one escapes as a bare ValueError.
+    """
+    opener = urllib.request.OpenerDirector()
+    for handler in (
+        urllib.request.UnknownHandler(),
+        urllib.request.HTTPHandler(),
+        urllib.request.HTTPSHandler(),
+        urllib.request.HTTPDefaultErrorHandler(),
+        urllib.request.HTTPErrorProcessor(),
+    ):
+        opener.add_handler(handler)
+    return opener
 
 
 def fetch(
@@ -63,6 +81,9 @@ def _request(opener: Opener, url: str, authorization: str) -> bytes:
     except urllib.error.HTTPError as error:
         error.close()  # the error holds the open response; the refresher must not leak it
         msg = f"HTTP {error.code}"
+        # A 3xx names where it pointed (NFR-S7).
+        if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
+            msg += _redirect_target(error.headers.get("Location"))
         # Only 5xx: a retried 401 or 429 turns a wrong password into a lockout (Q-15).
         raise FetchError(msg, retryable=error.code >= HTTPStatus.INTERNAL_SERVER_ERROR) from None
     except urllib.error.URLError as error:
@@ -76,3 +97,12 @@ def _request(opener: Opener, url: str, authorization: str) -> bytes:
     except TimeoutError:
         msg = "timeout"
         raise FetchError(msg, retryable=True) from None
+
+
+def _redirect_target(location: str | None) -> str:
+    """` redirect to <host>`, or ` redirect` for a relative or unreadable `Location`."""
+    try:
+        host = urllib.parse.urlsplit(location or "").hostname
+    except ValueError:  # a malformed IPv6 literal
+        host = None
+    return f" redirect to {host}" if host and _HOST.fullmatch(host) else " redirect"

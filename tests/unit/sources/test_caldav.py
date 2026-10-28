@@ -42,6 +42,7 @@ class World:
     challenge: bool = False
     cookies: list[str | None] = field(default_factory=list)
     set_cookie: bool = False
+    location: str | None = None
     timeouts: list[float] = field(default_factory=list)
     waits: list[float] = field(default_factory=list)
     error: FetchError | None = None
@@ -77,8 +78,14 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(answer)
         if world.set_cookie:
             self.send_header("Set-Cookie", "nc_session_id=synthetic; Path=/; HttpOnly")
+        if world.location:
+            self.send_header("Location", world.location)
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def do_GET(self) -> None:
+        """What a client that follows a 301 or 302 sends instead."""
+        self.do_REPORT()
 
     @override
     def log_message(self, *args: object) -> None:
@@ -96,9 +103,7 @@ class _RecordingOpener:
         return response
 
 
-@pytest.fixture
-def world() -> Iterator[World]:
-    world = World()
+def _serve(world: World) -> Iterator[World]:
     server = _Server(world)
     threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
     world.url = f"http://127.0.0.1:{server.server_port}/calendars/demo/"
@@ -106,6 +111,17 @@ def world() -> Iterator[World]:
     world.release.set()
     server.shutdown()
     server.server_close()
+
+
+@pytest.fixture
+def world() -> Iterator[World]:
+    yield from _serve(World())
+
+
+@pytest.fixture
+def second() -> Iterator[World]:
+    """A second server, the target of a redirect; it would answer 207."""
+    yield from _serve(World(script=[207]))
 
 
 @scenario("caldav/fetch.feature", "A client error ends the fetch after one request")
@@ -136,6 +152,27 @@ def test_orch_fetch_9_first_request_carries_the_credentials() -> None:
 @scenario("caldav/fetch.feature", "A cookie the server sets is not sent back")
 def test_orch_fetch_9_cookie_is_not_sent_back() -> None:
     """The HTTP client keeps no cookies (FR-1): the same opener serves the whole run."""
+
+
+@scenario("caldav/fetch.feature", "A redirect ends the fetch without following it")
+def test_orch_fetch_5_redirect_is_not_followed() -> None:
+    """A followed redirect resends the credentials wherever the server points (T-03)."""
+
+
+@pytest.mark.parametrize(
+    "location",
+    [None, "/calendars/other/", "http://[::1/", "http://ev\x1bil.example/"],
+    ids=["none", "relative", "malformed-ipv6", "control-character"],
+)
+def test_orch_fetch_5_redirect_error_names_no_unreadable_host(
+    world: World, location: str | None
+) -> None:
+    """Only a readable host from the untrusted `Location` reaches the error (NFR-P4)."""
+    world.script = [307]
+    world.location = location
+    with pytest.raises(FetchError) as caught:
+        fetch(world.url, user=USER, secret=SECRET, opener=_RecordingOpener(world))
+    assert str(caught.value) == "HTTP 307 redirect"
 
 
 def _never_connects(*_args: object, **_kwargs: object) -> NoReturn:
@@ -173,6 +210,13 @@ def server_sets_cookie_then_207(world: World) -> None:
     world.script = [503, 207]
 
 
+@given(parsers.parse("the server answers {status:d} pointing to a second server"))
+def server_redirects(world: World, second: World, status: int) -> None:
+    world.script = [status]
+    # Another name for the loopback host, so the error can only name it from the Location.
+    world.location = second.url.replace("127.0.0.1", "localhost")
+
+
 @given("the server refuses every connection")
 def server_refuses(world: World) -> None:
     with socket.socket() as probe:
@@ -199,6 +243,18 @@ def client_fetches(world: World) -> None:
 def fails_naming_status(world: World, status: int) -> None:
     assert world.error is not None
     assert str(status) in str(world.error)
+
+
+@then(parsers.parse("the fetch fails naming status {status:d} and the second server's host"))
+def fails_naming_status_and_host(world: World, status: int) -> None:
+    assert world.error is not None
+    assert str(status) in str(world.error)
+    assert "localhost" in str(world.error)
+
+
+@then("the second server received no request")
+def second_received_none(second: World) -> None:
+    assert second.received == 0
 
 
 @then("the server received exactly 1 request")

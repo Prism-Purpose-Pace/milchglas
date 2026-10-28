@@ -75,7 +75,7 @@ Feature: Fetch from the CalDAV server
   @id:77
   Rule: Never follow the server to another address (NFR-S7)
 
-    @backlog @ORCH-FETCH-5
+    @ORCH-FETCH-5
     Scenario Outline: A redirect ends the fetch without following it
       Given the server answers <status> pointing to a second server
       When the client fetches one calendar
