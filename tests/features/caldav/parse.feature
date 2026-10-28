@@ -48,7 +48,7 @@ Feature: Read the calendar server's answer
       And reading reports no error
 
     @backlog @PARSE-8
-    Scenario Outline: An answer that is not XML fails without quoting it
+    Scenario Outline: An answer that is not a multistatus fails without quoting it
       Given calendar 1 answers with status 207 and the body "<body>"
       When Milchglas reads the answer
       Then reading fails naming status 207 and <size> bytes
@@ -58,6 +58,7 @@ Feature: Read the calendar server's answer
         | body                                            | size |
         | BBX-not a calendar                              | 18   |
         | <d:multistatus xmlns:d="DAV:"><d:response>BBX- | 46   |
+        | <d:error xmlns:d="DAV:">BBX-</d:error>          | 38   |
 
     @backlog @PARSE-10
     Scenario Outline: An answer that declares markup is refused unread
