@@ -42,6 +42,7 @@ the expected-blocks oracle assumes until the spec changes.
 | PARSE-13 | Unfolding runs on bytes before UTF-8 decoding, CRLF + space and LF + space; a fold inside a multibyte character parses to the right text; a 200-octet line parses (the emitter stays strict, EMIT-7) | NFR-C1 | unit | exists |
 | PARSE-14 | Out-of-range DURATION (for example `-P999999999DT1S`) → the source layer raises its malformed-event error; refresh fails, last feed kept, neither value nor event text in error or log | Q-14, NFR-P4 | unit | exists |
 | PARSE-15 | Blocks parsed from the captured answer and emitted → exactly the committed feed bytes; goldens change only through an explicit update option | NFR-C1, AC-6 | unit | planned |
+| PARSE-16 | An event that ends before it starts yields no block and one warning that names the calendar by index and the object by href hash, never a value | FR-4, NFR-P4 | unit | exists |
 | E2E-1 | Oracle default: a timed block overlapping an all-day block stays separate; the no-overlap, no-touch rule applies per kind | Q-9, AC-1 | unit | planned |
 | E2E-2 | Oracle default: an all-day event with `TRANSP:TRANSPARENT` blocks; `allday_mode` decides | Q-12, AC-5 | unit | planned |
 | E2E-3 | Oracle default: the UID salt is the non-secret `uid_salt` of `config.json`, printed once by `init` | Q-13, D-7c | unit | planned |
