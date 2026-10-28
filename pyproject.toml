@@ -1,13 +1,13 @@
 # Milchglas — project metadata, dev tooling and tool configuration.
 #
-# Single version source: every dev tool (ruff, mypy, ty, pytest, …) is declared in
+# Single version source: every dev tool (ruff, mypy, basedpyright, pytest, …) is declared in
 # [dependency-groups] and pinned by uv.lock. The pre-commit hooks and CI call them
 # through `uv run --frozen`, so hook, terminal and CI run the identical version.
 # Bump a tool with `uv lock --upgrade-package <tool>`, never by editing a hook rev.
 #
 # Runtime dependencies are added with the first feature that imports them; they must
 # stay pure Python (docs/spec.md §7). mypy --strict is the type gate (spec AC-12),
-# basedpyright the second; ty runs advisory only.
+# basedpyright the second.
 
 [project]
 name = "milchglas"
@@ -251,7 +251,6 @@ dev = [
     "pytest-bdd>=9.0.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.16.7",
-    "ty>=0.0.80",
 ]
 mutation = [
     "mutmut>=3.8.0",

@@ -1,6 +1,6 @@
 # Tooling — `python` stack
 
-**Single version source:** every Python tool (ruff, mypy, basedpyright, ty, pytest,
+**Single version source:** every Python tool (ruff, mypy, basedpyright, pytest,
 pytest-cov, pytest-bdd, hypothesis) is an entry of the `dev` dependency group, pinned by `uv.lock`. mutmut, which
 only the weekly mutation run needs, sits in the `mutation` group of the same lock, so a
 plain `uv sync` stays lean. Hooks and CI call them via `uv run --frozen`, so hook,
@@ -31,7 +31,8 @@ bumps `uv.lock` and the SHA-pinned GitHub Actions weekly.
 | Deep secret scan (full history, verified) | pre-push | trufflehog (installed binary; `rev:` informational) |
 | Dependency CVE scan (blocking) | pre-push | osv-scanner v2.3.8 |
 
-- **Advisory, not a gate:** `uv run ty check` — a fast second opinion; ty is pre-1.0.
+- **Not used:** ty — basedpyright is the second type checker; ty is pre-1.0 and changes
+  its verdicts between releases. Revisit at ty 1.0.
 - **Not used:** bandit — ruff `S` implements 73 of its 75 checks; B613 (trojan source)
   is covered by ruff `PLE2502`, the rest (pytorch, huggingface, django) do not apply.
 
