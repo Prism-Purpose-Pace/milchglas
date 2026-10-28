@@ -105,8 +105,11 @@ docstring. Gate details: [TOOLING.md](TOOLING.md).
 - A behaviour that reads as an example of use can be a Gherkin scenario under
   `tests/features/`, run by pytest-bdd. The scenario carries its row ID as its only ID
   tag (`@ORCH-FETCH-2`), and exactly one function binds it:
-  `@scenario("<path>", "<name>")` on `test_<id>_…` (`test_orch_fetch_2_…`). Properties,
-  fuzzing and gates stay plain pytest. GATE-22 checks the binding.
+  `@scenario("<path>", "<name>")` on `test_<id>_…` (`test_orch_fetch_2_…`). A feature
+  carries its issue as `@id:<number>`. A scenario that is specified but not built yet
+  carries `@backlog`: it may stay unbound, and a bound one is skipped; the change that
+  builds it removes the tag. Properties, fuzzing and gates stay plain pytest. GATE-22
+  checks the binding.
 - Core behaviour gets golden tests: overlap and adjacency merge, grid rounding, DST
   transitions in Europe/Berlin, all-day, multi-day, tentative, cancelled, declined,
   RRULE with EXDATE and overridden instances, window clipping, UID determinism, line
