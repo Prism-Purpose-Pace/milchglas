@@ -133,6 +133,15 @@ def test_window_rejects_a_naive_now() -> None:
         (day("2026-10-26", "2026-10-27"), []),
         # Day block straddling the window end.
         (day("2026-10-24", "2026-10-28"), [day("2026-10-24", "2026-10-26")]),
+        # CLIP-7: a block that is cut is rebuilt, and the rebuilt one keeps its flag.
+        (
+            timed("2026-09-27T23:50+02:00", "2026-09-28T00:10+02:00", tentative=True),
+            [timed("2026-09-28T00:00+02:00", "2026-09-28T00:10+02:00", tentative=True)],
+        ),
+        (
+            day("2026-09-26", "2026-09-29", tentative=True),
+            [day("2026-09-28", "2026-09-29", tentative=True)],
+        ),
     ],
     ids=[
         "CORE-CLIP-1",
@@ -144,6 +153,8 @@ def test_window_rejects_a_naive_now() -> None:
         "day-ends-at-start",
         "day-starts-at-end",
         "day-straddles-end",
+        "CORE-CLIP-7-timed",
+        "CORE-CLIP-7-day",
     ],
 )
 def test_clip_cuts_blocks_to_the_window(block: Block, expected: list[Block]) -> None:
