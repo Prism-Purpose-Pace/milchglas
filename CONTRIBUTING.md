@@ -109,8 +109,9 @@ docstring. Gate details: [TOOLING.md](TOOLING.md).
   carries its issue as `@id:<number>`. A scenario that is specified but not built yet
   carries `@backlog`: it may stay unbound, and a bound one is skipped; the change that
   builds it removes the tag. Properties, fuzzing and gates stay plain pytest. GATE-22
-  checks the binding and the form: at most five steps, exactly one `When`, a `Then`, no
-  step that names a click, a button, an endpoint, HTTP, JSON or SQL, `Examples` that
+  checks the binding and the form: a feature description, at most five steps, exactly one
+  `When`, a `Then`, Given-When-Then in order, a Background of at most four Givens, no name
+  or step that names a click, a button, an endpoint, HTTP, JSON or SQL, `Examples` that
   match the `<variables>` of an outline, no comment (put the reason in the scenario's
   description), only the tags `@id:<number>`, `@backlog`, `@long-running` (a marker:
   register it in `pyproject.toml` first) and row IDs. A failing scenario names file,
