@@ -89,6 +89,9 @@ ignore = [
 # emit takes one argument per field of the published feed (blocks, summary, salt, ttl,
 # version, now, dtstamps); a parameter object would only rename them.
 "src/milchglas/core/emit.py" = ["PLR0913"]
+# fetch opens the calendar URL built from CALDAV_URL; its scheme is the configuration's
+# rule (https only, FR-1 and NFR-S7: ORCH-CFG-2), not something a request can check.
+"src/milchglas/sources/caldav.py" = ["S310"]
 # These tests hand naive datetimes to core on purpose: core must refuse them.
 "tests/unit/core/test_emit.py" = ["DTZ001"]
 "tests/unit/core/test_model.py" = ["DTZ001"]
@@ -170,6 +173,8 @@ addopts = [
 markers = [
     "contract: needs a live sabre/dav server (Baïkal container); run with -m contract",
 ]
+# pytest-bdd: `scenario("caldav/fetch.feature", …)` resolves under this folder.
+bdd_features_base_dir = "tests/features/"
 filterwarnings = ["error"]
 xfail_strict = true
 
@@ -207,6 +212,7 @@ dev = [
     "hypothesis>=6.168.0",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
+    "pytest-bdd>=9.0.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.16.7",
     "ty>=0.0.80",

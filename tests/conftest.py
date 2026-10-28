@@ -5,10 +5,15 @@ failing example reproduces from the printed blob. HYPOTHESIS_PROFILE overrides e
 """
 
 import os
+import re
 import time
+from collections.abc import Callable
 
 import pytest
 from hypothesis import settings
+
+# A catalogue ID such as AREA-3 or AREA-SUB-3: the shape of the ID column of the catalogue.
+CATALOGUE_ID = re.compile(r"[A-Z0-9]+(?:-[A-Z0-9]+)*-\d+")
 
 # GATE-20: CI runners run in UTC, which hides a conversion to local time where UTC is
 # meant. A zone with DST and a half-hour offset makes every such slip move a block.
@@ -29,3 +34,17 @@ def _no_inherited_git_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     for name in [name for name in os.environ if name.startswith("GIT_")]:
         monkeypatch.delenv(name)
+
+
+def pytest_bdd_apply_tag(tag: str, function: Callable[..., object]) -> bool | None:
+    """Give the feature-file tags that are no markers their meaning (GATE-22).
+
+    A catalogue ID names the scenario's row and `@id:<ticket>` the feature's ticket, so
+    `--strict-markers` must not refuse them. `@backlog` marks a scenario as specified but not
+    built yet: it is skipped. Any other tag stays a marker and has to be registered in
+    `pyproject.toml`.
+    """
+    if tag == "backlog":
+        pytest.mark.skip(reason="@backlog: specified, not built yet")(function)
+        return True
+    return True if CATALOGUE_ID.fullmatch(tag) or tag.startswith("id:") else None
