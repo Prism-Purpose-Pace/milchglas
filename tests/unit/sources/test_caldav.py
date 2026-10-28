@@ -1,9 +1,10 @@
 """Bindings of `tests/features/caldav/fetch.feature`, run against a loopback CalDAV stand-in.
 
 The world is a real HTTP server on 127.0.0.1 that answers each request from a script and,
-like Nextcloud, can challenge a request without the service user's credentials. The client
-is the production opener behind a recorder: it notes the timeout `fetch` asks for and passes
-a short one on, so a server that never answers costs a quarter second, not 10 s.
+like Nextcloud, can challenge a request without the service user's credentials. It keeps
+every request it receives. The client is the production opener behind a recorder: it notes
+the timeout `fetch` asks for and passes a short one on, so a server that never answers
+costs a quarter second, not 10 s.
 
 Two cases need no server. A refused connection is a loopback port nobody listens on, so
 the kernel refuses it. A connection that times out cannot be made on loopback without
@@ -12,20 +13,27 @@ in `socket.create_connection`, and urllib's own handling of it runs unchanged.
 """
 
 import base64
+import dataclasses
 import socket
 import threading
 import urllib.request
+import xml.etree.ElementTree as ET
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
+from email.message import Message
 from http.client import HTTPResponse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BufferedIOBase
 from typing import NoReturn, override
+from zoneinfo import ZoneInfo
 
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
-from milchglas.sources.caldav import FetchError, build_opener, fetch
+from milchglas.config import Calendar
+from milchglas.core.model import Window, window
+from milchglas.sources.caldav import Account, FetchError, build_opener, fetch
 
 SHORT_TIMEOUT = 0.25  # what reaches the socket; the recorder keeps what `fetch` asked for
 HANG = None  # a script entry: read the request, never answer
@@ -34,16 +42,33 @@ CHUNK = b"x" * 2**16  # filler: the client must stop by size, before it parses a
 USER = "svc-milchglas"
 SECRET = "synthetic-app-password"
 CREDENTIALS = "Basic " + base64.b64encode(f"{USER}:{SECRET}".encode()).decode("ascii")
+HOME = "/remote.php/dav/calendars/svc-milchglas/"
+PRIVAT = Calendar(href=f"{HOME}privat_shared_by_owner/", name="Privat", enabled=True)
+FAMILIE = Calendar(href=f"{HOME}familie_shared_by_owner/", name="Familie", enabled=False)
+ARBEIT = Calendar(href=f"{HOME}arbeit_shared_by_owner/", name="Arbeit", enabled=True)
+BERLIN = ZoneInfo("Europe/Berlin")
+DAV = "{DAV:}"
+CALDAV = "{urn:ietf:params:xml:ns:caldav}"
+
+
+@dataclass(frozen=True)
+class Received:
+    method: str
+    path: str
+    headers: Message
+    body: bytes
 
 
 @dataclass
 class World:
-    url: str = ""
+    account: Account = field(default_factory=lambda: Account("", USER, SECRET))
+    calendars: tuple[Calendar, ...] = (PRIVAT,)
+    window: Window = field(
+        default_factory=lambda: window(datetime(2026, 10, 28, tzinfo=UTC), BERLIN, 33)
+    )
     script: list[int | None] = field(default_factory=list)
-    received: int = 0
-    authorizations: list[str | None] = field(default_factory=list)
+    requests: list[Received] = field(default_factory=list)
     challenge: bool = False
-    cookies: list[str | None] = field(default_factory=list)
     set_cookie: bool = False
     location: str | None = None
     body_size: int = 0
@@ -66,11 +91,9 @@ class _Handler(BaseHTTPRequestHandler):
     def do_REPORT(self) -> None:
         assert isinstance(self.server, _Server)
         world = self.server.world
-        world.received += 1
-        authorization = self.headers.get("Authorization")
-        world.authorizations.append(authorization)
-        world.cookies.append(self.headers.get("Cookie"))
-        if world.challenge and authorization != CREDENTIALS:
+        body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        world.requests.append(Received(self.command, self.path, self.headers, body))
+        if world.challenge and self.headers.get("Authorization") != CREDENTIALS:
             # Nextcloud's answer to a request without valid credentials.
             self.send_response(401)
             self.send_header("WWW-Authenticate", 'Basic realm="Nextcloud", charset="UTF-8"')
@@ -128,7 +151,9 @@ class _RecordingOpener:
 def _serve(world: World) -> Iterator[World]:
     server = _Server(world)
     threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
-    world.url = f"http://127.0.0.1:{server.server_port}/calendars/demo/"
+    world.account = dataclasses.replace(
+        world.account, origin=f"http://127.0.0.1:{server.server_port}"
+    )
     yield world
     world.release.set()
     server.shutdown()
@@ -191,6 +216,16 @@ def test_orch_fetch_5_redirect_is_not_followed() -> None:
     """A followed redirect resends the credentials wherever the server points (T-03)."""
 
 
+@scenario("caldav/fetch.feature", "The query covers the window in UTC")
+def test_orch_fetch_7_query_covers_the_window_in_utc() -> None:
+    """sabre runs a calendar-query only at Depth 1 (FR-1)."""
+
+
+@scenario("caldav/fetch.feature", "Only enabled calendars are asked, in configuration order")
+def test_orch_fetch_7_only_enabled_calendars_in_order() -> None:
+    """A disabled calendar is neither asked nor counted (FR-1)."""
+
+
 @pytest.mark.parametrize(
     "location",
     [None, "/calendars/other/", "http://[::1/", "http://ev\x1bil.example/"],
@@ -203,7 +238,7 @@ def test_orch_fetch_5_redirect_error_names_no_unreadable_host(
     world.script = [307]
     world.location = location
     with pytest.raises(FetchError) as caught:
-        fetch(world.url, user=USER, secret=SECRET, opener=_RecordingOpener(world))
+        list(fetch(world.account, world.calendars, world.window, opener=_RecordingOpener(world)))
     assert str(caught.value) == "HTTP 307 redirect"
 
 
@@ -246,7 +281,7 @@ def server_sets_cookie_then_207(world: World) -> None:
 def server_redirects(world: World, second: World, status: int) -> None:
     world.script = [status]
     # Another name for the loopback host, so the error can only name it from the Location.
-    world.location = second.url.replace("127.0.0.1", "localhost")
+    world.location = second.account.origin.replace("127.0.0.1", "localhost") + PRIVAT.href
 
 
 @given("the server answers 207 with 64 MiB of calendar data and no length")
@@ -266,19 +301,37 @@ def server_refuses(world: World) -> None:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    world.url = f"http://127.0.0.1:{port}/calendars/demo/"
+    world.account = dataclasses.replace(world.account, origin=f"http://127.0.0.1:{port}")
+
+
+@given("the window runs from 2026-10-20 to 2026-11-22 in Europe/Berlin")
+def window_across_summer_time_end(world: World) -> None:
+    world.window = window(datetime(2026, 10, 20, 9, tzinfo=UTC), BERLIN, 33)
+    assert (world.window.first_day, world.window.end_day) == (
+        date(2026, 10, 20),
+        date(2026, 11, 22),
+    )
+    world.script = [207]
+
+
+@given("the configuration lists Privat enabled, Familie disabled and Arbeit enabled")
+def three_calendars(world: World) -> None:
+    world.calendars = (PRIVAT, FAMILIE, ARBEIT)
+    world.script = [207, 207]
 
 
 @when("the client fetches one calendar")
+@when("the client fetches the calendars")
 def client_fetches(world: World) -> None:
     try:
-        world.body = fetch(
-            world.url,
-            user=USER,
-            secret=SECRET,
+        for _index, body in fetch(
+            world.account,
+            world.calendars,
+            world.window,
             opener=_RecordingOpener(world),
             sleep=world.waits.append,
-        )
+        ):
+            world.body = body
     except FetchError as error:
         world.error = error
 
@@ -298,7 +351,7 @@ def fails_naming_status_and_host(world: World, status: int) -> None:
 
 @then("the second server received no request")
 def second_received_none(second: World) -> None:
-    assert second.received == 0
+    assert second.requests == []
 
 
 @then("the fetch fails naming the 16 MiB limit")
@@ -322,29 +375,68 @@ def server_cut_off(world: World) -> None:
 
 @then("the server received exactly 1 request")
 def received_one(world: World) -> None:
-    assert world.received == 1
+    assert len(world.requests) == 1
 
 
 @then("the fetch succeeds after 2 requests")
 def succeeds_after_two(world: World) -> None:
     assert world.error is None
-    assert world.received == 2
+    assert len(world.requests) == 2
 
 
 @then("the fetch succeeds after 1 request")
 def succeeds_after_one(world: World) -> None:
     assert world.error is None
-    assert world.received == 1
+    assert len(world.requests) == 1
 
 
 @then("no request reached the server without the credentials")
 def no_request_without_credentials(world: World) -> None:
-    assert world.authorizations == [CREDENTIALS] * world.received
+    assert [r.headers.get("Authorization") for r in world.requests] == [CREDENTIALS]
 
 
 @then("no request reached the server with a cookie")
 def no_request_with_cookie(world: World) -> None:
-    assert world.cookies == [None] * world.received
+    assert [r.headers.get("Cookie") for r in world.requests] == [None, None]
+
+
+@then("the server received a calendar query at depth 1")
+def received_calendar_query(world: World) -> None:
+    assert world.error is None
+    [query] = world.requests
+    assert (query.method, query.path, query.headers.get("Depth")) == ("REPORT", PRIVAT.href, "1")
+    assert ET.fromstring(query.body).tag == f"{CALDAV}calendar-query"
+
+
+@then(
+    "it asked for the events from 20261019T220000Z to 20261121T230000Z, "
+    "expanded over the same range"
+)
+def asked_for_the_window(world: World) -> None:
+    query = ET.fromstring(world.requests[0].body)
+    comp = query.find(f"{CALDAV}filter/{CALDAV}comp-filter[@name='VCALENDAR']")
+    assert comp is not None
+    time_range = comp.find(f"{CALDAV}comp-filter[@name='VEVENT']/{CALDAV}time-range")
+    expand = query.find(f"{DAV}prop/{CALDAV}calendar-data/{CALDAV}expand")
+    window_in_utc = {"start": "20261019T220000Z", "end": "20261121T230000Z"}
+    assert time_range is not None
+    assert time_range.attrib == window_in_utc
+    assert expand is not None
+    assert expand.attrib == window_in_utc
+
+
+@then("the server received queries for Privat and then Arbeit")
+def asked_privat_then_arbeit(world: World) -> None:
+    assert world.error is None
+    assert [(r.method, r.path) for r in world.requests] == [
+        ("REPORT", PRIVAT.href),
+        ("REPORT", ARBEIT.href),
+    ]
+
+
+@then("the server received no request for Familie")
+def nothing_for_familie(world: World) -> None:
+    assert FAMILIE.href not in [r.path for r in world.requests]
 
 
 @then("the client waited 1 s")

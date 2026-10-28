@@ -199,7 +199,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-FETCH-4 | Body over the 16 MiB cap → aborted mid-stream and not retried, failure as in FETCH-3; a body of exactly 16 MiB is read whole | Q-15 | unit | exists |
 | ORCH-FETCH-5 | 301, 302, 307, 308 never followed → failure whose error names the status and the Location host; a second port named in `Location` receives no request | NFR-S7 | unit | exists |
 | ORCH-FETCH-6 | Basic auth header built from `CALDAV_USER` and `CALDAV_SECRET` | FR-1, NFR-S2 | unit | planned |
-| ORCH-FETCH-7 | REPORT carries `Depth: 1`; its body has `<C:time-range>` and `<C:expand>` over the same UTC window (`…Z`); only `enabled` calendars are requested, in config order | FR-1, AC-10 | unit | planned |
+| ORCH-FETCH-7 | REPORT carries `Depth: 1`; its body has `<C:time-range>` and `<C:expand>` over the same UTC window (`…Z`); only `enabled` calendars are requested, in config order | FR-1, AC-10 | unit | exists |
 | ORCH-FETCH-8 | PROPFIND `Depth: 0` guard before each REPORT fails the refresh (feed kept, calendar named by index) when the href is a collection but no calendar, the owner is the service user, or the privilege set holds `{DAV:}write`; a read-only calendar passes; a 207 without responses on a non-calendar never reaches success | FR-1, NFR-S3, Q-16 | unit | planned |
 | ORCH-FETCH-9 | The first request already carries `Authorization` (exactly one request per successful fetch, none without it); a `Set-Cookie` is never sent back | FR-1 | unit | exists |
 | ORCH-FETCH-10 | Calendars are fetched, parsed and reduced one at a time: with ten fake calendars at most one response body is alive (counter in the fake transport) | Q-15 | unit | planned |

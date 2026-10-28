@@ -104,8 +104,9 @@ ignore = [
 # test directory is a package, otherwise equal test basenames in tests/unit and
 # tests/contract collide in both mypy and pytest.
 "tests/**/*.py" = ["S101", "PLR2004"]
-# The CalDAV world's server checks a made-up app password, never a real one.
-"tests/unit/sources/test_caldav.py" = ["S105"]
+# The CalDAV world's server checks a made-up app password, never a real one, and parses
+# the request bodies the client under test wrote, never input from outside.
+"tests/unit/sources/test_caldav.py" = ["S105", "S314"]
 # One test builds a throwaway git repository to prove the guard's range semantics.
 "tests/scripts/test_check_public_tree.py" = ["S101", "PLR2004", "S603", "S607"]
 # Plants a hook's git environment at a decoy repository and runs a test file under it.
