@@ -18,6 +18,7 @@ adds the form rules of novibe's `.gherkin-lintrc` and its requirements step, on 
   `Examples` with rows, every column is used by a step, and every `<variable>` of a step has a
   column in each `Examples` block. A variable counts in step text, doc string and data table,
   where pytest-bdd substitutes it (`pytest_bdd.parser.PARAM_RE`), and a background step counts.
+- no-comments: a `#` line is a comment and fails; the reason goes into a scenario description.
 - dupe-feature-name, dupe-scenario-name: a feature name is unique across the files, a
   scenario name within its feature, rules included (pytest-bdd looks a scenario up by name).
 
@@ -197,6 +198,12 @@ def head(at: partial[Finding], feature: Feature) -> Iterator[Finding]:
 
 def check(file: str, document: GherkinDocument) -> Iterator[Finding]:
     at = partial(Finding, file)
+    for comment in document["comments"]:
+        yield at(
+            comment["location"]["line"],
+            "no-comments",
+            "move the reason into a scenario description",
+        )
     feature = cast("Feature | None", document.get("feature"))  # absent from an empty file
     if feature is None:
         yield at(1, "no-scenario", "no Feature")
@@ -276,7 +283,7 @@ BAD = {
     "parse-docstring": (GOOD + '      """\n      open\n', [(13, "parse")]),
     "parse-language": ("# language: xx\n" + GOOD, [(1, "parse")]),
     "no-scenario-empty": ("", [(1, "no-scenario")]),
-    "no-scenario-comment-only": ("# nothing\n", [(1, "no-scenario")]),
+    "no-scenario-comment-only": ("# nothing\n", [(1, "no-comments"), (1, "no-scenario")]),
     "no-scenario-misspelt": (
         GOOD.replace("    @ALPHA-1\n    Scenario:", "    Scenaro:"),
         [(2, "no-scenario")],
@@ -546,6 +553,45 @@ def test_feature_names_that_differ_are_silent(tmp_path: Path) -> None:
         },
     )
     assert lint(root) == []
+
+
+COMMENT_BAD = {
+    "above-the-feature": ("# note\n" + GOOD, [(1, "no-comments")]),
+    "between-steps": (
+        GOOD.replace("      When it runs\n", "      # why\n      When it runs\n"),
+        [(9, "no-comments")],
+    ),
+    "at-the-end": (GOOD + "    # done\n", [(11, "no-comments")]),
+    "in-an-examples-table": (
+        OUTLINE.replace("      | cat   | done  |\n", "      # why\n      | cat   | done  |\n"),
+        [(12, "no-comments")],
+    ),
+    "two-comments": ("# one\n" + GOOD + "# two\n", [(1, "no-comments"), (12, "no-comments")]),
+}
+
+
+@pytest.mark.parametrize(("text", "expected"), COMMENT_BAD.values(), ids=COMMENT_BAD.keys())
+def test_comment_is_reported_on_its_line(
+    tmp_path: Path, text: str, expected: list[tuple[int, str]]
+) -> None:
+    assert found(tmp_path, text) == expected
+
+
+COMMENT_SILENT = {
+    "hash-in-a-doc-string": GOOD.replace(
+        "Then it is done", 'Then it is done\n      """\n      # not a comment\n      """'
+    ),
+    "hash-inside-a-step": GOOD.replace("a thing", "a thing #1"),
+    "hash-in-a-table-cell": GOOD.replace("Then it is done", "Then it is done\n      | # |"),
+    "description-instead": GOOD.replace(
+        "    Scenario: First\n", "    Scenario: First\n      Why: it is the first.\n\n"
+    ),
+}
+
+
+@pytest.mark.parametrize("text", COMMENT_SILENT.values(), ids=COMMENT_SILENT.keys())
+def test_hash_that_is_no_comment_is_silent(tmp_path: Path, text: str) -> None:
+    assert found(tmp_path, text) == []
 
 
 # Step texts that name how the system is used, not what it does: one per pattern of novibe's

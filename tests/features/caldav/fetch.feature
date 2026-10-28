@@ -110,9 +110,10 @@ Feature: Fetch from the CalDAV server
   @id:77
   Rule: Ask every enabled calendar, in configuration order, for the window (FR-1)
 
-    # The window spans the end of summer time on 2026-10-25: its two ends have different offsets.
     @ORCH-FETCH-7
     Scenario: The query covers the window in UTC
+      The window spans the end of summer time on 2026-10-25: its two ends have different offsets.
+
       Given the window runs from 2026-10-20 to 2026-11-22 in Europe/Berlin
       When the client fetches one calendar
       Then the server received a calendar query at depth 1
@@ -142,9 +143,10 @@ Feature: Fetch from the CalDAV server
         | calendar   | svc-milchglas | read, write | owned by the service user    |
         | calendar   | the owner     | read, write | writable by the service user |
 
-    # Nextcloud grants a read-only share write-properties, so the share can be renamed.
     @ORCH-FETCH-8
     Scenario: A calendar the owner shares read-only is fetched
+      Nextcloud grants a read-only share write-properties, so the share can be renamed.
+
       Given the server describes Privat as a calendar owned by the owner with read, write-properties
       When the client fetches one calendar
       Then the fetch succeeds after one check and one query
