@@ -289,3 +289,51 @@ def test_generated_cases_reach_the_edges_of_an_offset_change_prop_14(
     # Without this the property above could hold only because the search never gets there.
     # A day-part end in a fold is 3 draws in 1000: 20000 draws leave a miss at e**-60.
     find(_cases(), reached, settings=settings(max_examples=20000))
+
+
+# --- an all-day DURATION counts whole days (PROP-15) ---------------------------------------
+
+
+@st.composite
+def _allday_durations(draw: st.DrawFn) -> tuple[str, int, bool]:
+    """A DURATION text for a date start, its length in days, and whether it is a whole number."""
+    sign = draw(st.sampled_from(["", "+", "-"]))
+    weeks, days, whole_days = (
+        draw(st.integers(0, 3)),
+        draw(st.integers(0, 3)),
+        draw(st.integers(0, 3)),
+    )
+    part_of_a_day = draw(st.one_of(st.just(0), st.integers(1, 86399)))  # seconds
+    hours, rest = divmod(whole_days * 86400 + part_of_a_day, 3600)
+    minutes, seconds = divmod(rest, 60)
+    text = f"{sign}P{weeks}W{days}DT{hours}H{minutes}M{seconds}S"
+    length = 7 * weeks + days + whole_days
+    return text, -length if sign == "-" else length, part_of_a_day == 0
+
+
+@given(st.dates(date(2000, 1, 1), date(2100, 12, 31)), _allday_durations())
+def test_allday_duration_is_whole_days_or_malformed_prop_15(
+    start: date, drawn: tuple[str, int, bool]
+) -> None:
+    text, days, whole = drawn
+    ics = "\r\n".join(
+        [
+            "BEGIN:VCALENDAR",
+            "BEGIN:VEVENT",
+            "UID:generated",
+            f"DTSTART;VALUE=DATE:{start:%Y%m%d}",
+            f"DURATION:{text}",
+            "END:VEVENT",
+            "END:VCALENDAR",
+            "",
+        ]
+    )
+    result = _reduce((ics, text), "Europe/Berlin")
+    if not whole:
+        assert isinstance(result, MalformedEventError)
+    elif days == 0:
+        assert result is Skip.EMPTY
+    elif days < 0:
+        assert result is Skip.NEGATIVE
+    else:
+        assert result == DayBlock(start, start + timedelta(days=days))
