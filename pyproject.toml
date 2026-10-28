@@ -6,8 +6,8 @@
 # Bump a tool with `uv lock --upgrade-package <tool>`, never by editing a hook rev.
 #
 # Runtime dependencies are added with the first feature that imports them; they must
-# stay pure Python (docs/spec.md §7). mypy --strict is the type gate (spec AC-12);
-# ty runs advisory only.
+# stay pure Python (docs/spec.md §7). mypy --strict is the type gate (spec AC-12),
+# basedpyright the second; ty runs advisory only.
 
 [project]
 name = "milchglas"
