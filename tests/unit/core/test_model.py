@@ -39,8 +39,22 @@ WINDOW = window(at("2026-09-28T00:00+02:00"), BERLIN, 28)
         ),  # aware, but not canonical UTC (DET-7 hashes UTC only)
         (at("2026-10-01T09:00Z"), at("2026-10-01T09:00Z")),  # zero length
         (at("2026-10-01T09:00Z"), at("2026-10-01T08:00Z")),  # negative
+        # One bad side is enough: the other side is a valid UTC instant.
+        (datetime(2026, 10, 1, 8), at("2026-10-01T09:00Z")),
+        (datetime(2026, 10, 1, 8, tzinfo=BERLIN), at("2026-10-01T09:00Z")),
+        (at("2026-10-01T08:00Z"), datetime(2026, 10, 1, 9)),
+        (at("2026-10-01T08:00Z"), datetime(2026, 10, 1, 11, tzinfo=BERLIN)),
     ],
-    ids=["naive", "zoned", "zero", "negative"],
+    ids=[
+        "naive",
+        "zoned",
+        "zero",
+        "negative",
+        "CORE-BLK-1-start-naive",
+        "CORE-BLK-1-start-zoned",
+        "CORE-BLK-1-end-naive",
+        "CORE-BLK-1-end-zoned",
+    ],
 )
 def test_timed_block_rejects_non_utc_or_empty_spans(start: datetime, end: datetime) -> None:
     with pytest.raises(ValueError, match="TimedBlock"):
@@ -56,9 +70,18 @@ def test_timed_block_accepts_a_positive_utc_span() -> None:
     )
 
 
-def test_day_block_rejects_datetimes() -> None:
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [
+        (datetime(2026, 10, 1, tzinfo=UTC), datetime(2026, 10, 2, tzinfo=UTC)),
+        (datetime(2026, 10, 1, tzinfo=UTC), date(2026, 10, 2)),
+        (date(2026, 10, 1), datetime(2026, 10, 2, tzinfo=UTC)),
+    ],
+    ids=["both", "CORE-BLK-1-start", "CORE-BLK-1-end"],
+)
+def test_day_block_rejects_datetimes(start: date, end: date) -> None:
     with pytest.raises(TypeError, match="DayBlock"):
-        DayBlock(datetime(2026, 10, 1, tzinfo=UTC), datetime(2026, 10, 2, tzinfo=UTC))
+        DayBlock(start, end)
 
 
 @pytest.mark.parametrize(
