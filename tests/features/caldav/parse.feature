@@ -103,19 +103,24 @@ Feature: Read the calendar server's answer
 
   Rule: Only a complete object expanded by the server counts (FR-2, Q-14)
 
-    @backlog @PARSE-2
-    Scenario: Calendar data the server could not find fails the read
-      Given calendar 1 answers for "/calendars/svc/BBX-team/ev-5.ics" that its calendar data was not found
+    @PARSE-2
+    Scenario Outline: Calendar data the server could not find fails the read
+      Given calendar 1 answers for "/calendars/svc/BBX-team/ev-5.ics" that <what> was not found
       When Milchglas reads the answer
       Then reading fails as a malformed event naming calendar 1 and the hash of "/calendars/svc/BBX-team/ev-5.ics"
 
-    @backlog @PARSE-2
+      Examples:
+        | what              |
+        | its calendar data |
+        | the whole object  |
+
+    @PARSE-2
     Scenario: A missing entity tag does not stop the read
       Given calendar 1 answers with an event from 2026-11-02 08:00 UTC to 09:00 UTC and says its entity tag was not found
       When Milchglas reads the answer
       Then the owner is busy from 2026-11-02 08:00 UTC to 2026-11-02 09:00 UTC
 
-    @backlog @PARSE-12
+    @PARSE-12
     Scenario Outline: An instance the server left unexpanded fails the read
       Given calendar 1 answers with a weekly event at "/calendars/svc/BBX-team/ev-7.ics" that still holds its <rule>
       When Milchglas reads the answer

@@ -28,7 +28,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
 | PARSE-1 | Captured answer for the seeded demo calendars, window pinned → blocks equal the committed expected-blocks file; every no-block event is absent | AC-1 to AC-5 | unit | planned |
-| PARSE-2 | A `calendar-data` propstat with any status but 200, or a response without `calendar-data`, is a parse error that fails the refresh; a 404 for any other requested property is ignored | NFR-C1, Q-14 | unit | planned |
+| PARSE-2 | A `calendar-data` propstat with any status but 200, or a response without `calendar-data`, is a parse error that fails the refresh; a 404 for any other requested property is ignored | NFR-C1, Q-14 | unit | exists |
 | PARSE-3 | Server dialect parses: CRLF and LF-only lines, `&#13;`, folded lines, `X-` props, `calendar-data` as escaped text; CDATA and raw CRLF are synthetic robustness fixtures | NFR-C1 | unit | planned |
 | PARSE-4 | Weekly series + EXDATE + moved instance → exactly the real occurrences; the override is its own VEVENT without RRULE and counts once; an instance whose override the owner declined is absent | AC-2, FR-2, FR-3 | unit | planned |
 | PARSE-5 | Expanded instance with DURATION instead of DTEND (UTC DTSTART): the parser hands the DURATION text to reduce, builds no `timedelta` first (spy), and the length follows Q-20 | Q-20, AC-3 | unit | exists |
@@ -38,7 +38,7 @@ the expected-blocks oracle assumes until the spec changes.
 | PARSE-9 | Fuzz: arbitrary bytes into the parse step → blocks or the module's own parse error, nothing else; no exception message holds a sentinel. The harness imports the package under `atheris.instrument_imports()` and keeps the literal line `import atheris`; dependency group limited to linux/amd64; one time-boxed, non-required CI job | NFR-C1 | property | planned |
 | PARSE-10 | DOCTYPE or entity declaration in a multistatus → rejected before parsing (expat handler, stdlib only); entity bomb and external entity naming a local file → refresh fails, last feed byte-identical, no file read | Q-14, NFR-C1, NFR-O3 | unit | exists |
 | PARSE-11 | One unparsable object among valid ones (garbage DTSTART; any parser error, including a non-empty `errors` list in lenient mode, even on a cancelled event) → refresh fails; the error names the object by href hash and the calendar by index; the sentinel is in no log or exception text | Q-14, NFR-P4, AC-8 | unit | exists |
-| PARSE-12 | Expanded instance that still holds RRULE or RDATE while local expansion is off → unparsable → refresh fails, last feed kept | Q-14, FR-2 | unit | planned |
+| PARSE-12 | Expanded instance that still holds RRULE or RDATE while local expansion is off → unparsable → refresh fails, last feed kept | Q-14, FR-2 | unit | exists |
 | PARSE-13 | Unfolding runs on bytes before UTF-8 decoding, CRLF + space and LF + space; a fold inside a multibyte character parses to the right text; a 200-octet line parses (the emitter stays strict, EMIT-7) | NFR-C1 | unit | exists |
 | PARSE-14 | Out-of-range DURATION (for example `-P999999999DT1S`) → the source layer raises its malformed-event error; refresh fails, last feed kept, neither value nor event text in error or log | Q-14, NFR-P4 | unit | exists |
 | PARSE-15 | Blocks parsed from the captured answer and emitted → exactly the committed feed bytes; goldens change only through an explicit update option | NFR-C1, AC-6 | unit | planned |
