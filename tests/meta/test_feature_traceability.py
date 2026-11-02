@@ -11,10 +11,16 @@ scenario under `tests/features/`:
   (pytest-bdd applies all three), and that tag is a row ID.
 - unbound: a function under `tests/` binds it as `@scenario("<path>", "<name>")`, both
   arguments literal strings and the path relative to `tests/features/`; a scenario tagged
-  `@backlog` (specified, not built yet) may stay unbound, and the hook skips it when bound.
+  `@backlog` (specified, not built yet) may stay unbound; when bound, the hook expects it to
+  fail, strictly, so a built scenario that keeps the tag fails the run.
 - bound_twice: no second function binds it.
 - misnamed: the binding function is `test_<id>` or `test_<id>_…`, the ID lower-cased with
   dashes as underscores, so pytest collects it and GATE-17 counts it as a citation.
+
+A fifth check, vacuous_then: every `@then` step function under `tests/` holds an `assert`,
+a `pytest.raises` or a call to an `assert_*` helper, so no outcome passes by asserting
+nothing (D-18). An assertion inside a helper with another name reads as missing: name the
+helper `assert_*`.
 
 A binding the check cannot read (`scenarios()`, a computed path) leaves its scenario
 unbound, so the gap is reported, never hidden. The hook in `tests/conftest.py` keeps the
@@ -23,6 +29,9 @@ ID tags and the feature's `@id:<ticket>` out of the markers; any other tag still
 """
 
 import ast
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -72,6 +81,38 @@ def bindings(root: Path) -> list[tuple[Key, str]]:
     return found
 
 
+def asserts(function: ast.FunctionDef) -> bool:
+    """True when the function holds an `assert`, a `pytest.raises` or an `assert_*` call."""
+    for node in ast.walk(function):
+        match node:
+            case ast.Assert() | ast.Call(func=ast.Attribute(attr="raises")):
+                return True
+            case ast.Call(func=ast.Name(id=str() as name) | ast.Attribute(attr=str() as name)):
+                if name.startswith("assert_"):
+                    return True
+            case _:
+                pass
+    return False
+
+
+def vacuous_thens(root: Path) -> list[str]:
+    """Each `@then` step function under tests/ that asserts nothing, as `path:line: name`."""
+    found: list[str] = []
+    for path in sorted((root / "tests").rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.FunctionDef) or asserts(node):
+                continue
+            for decorator in node.decorator_list:
+                match decorator:
+                    case ast.Call(func=ast.Name(id="then") | ast.Attribute(attr="then")):
+                        found.append(
+                            f"{path.relative_to(root).as_posix()}:{node.lineno}: {node.name}"
+                        )
+                    case _:
+                        pass
+    return found
+
+
 def problems(root: Path) -> Problems:
     rows = parse_catalogue((root / CATALOGUE).read_text(encoding="utf-8"))
     tags = scenario_tags(root)
@@ -115,6 +156,10 @@ def problems(root: Path) -> Problems:
 
 def test_every_scenario_runs_under_its_id() -> None:
     assert problems(REPO) == {"tags": [], "unbound": [], "bound_twice": [], "misnamed": []}
+
+
+def test_every_then_step_asserts() -> None:
+    assert vacuous_thens(REPO) == []
 
 
 # --- the checks on synthetic features and bindings ---------------------------------------
@@ -249,11 +294,116 @@ def test_id_tag_is_no_marker(tag: str) -> None:
     assert not hasattr(_bound, "pytestmark")
 
 
-def test_backlog_tag_skips_the_scenario() -> None:
+def test_backlog_tag_expects_the_scenario_to_fail() -> None:
     def bound() -> None: ...
 
     assert pytest_bdd_apply_tag("backlog", bound) is True
-    assert [mark.name for mark in getattr(bound, "pytestmark", [])] == ["skip"]
+    [mark] = getattr(bound, "pytestmark", [])
+    assert (mark.name, mark.kwargs.get("strict")) == ("xfail", True)
+
+
+BACKLOG_FEATURE = """\
+Feature: Sample
+
+  @backlog
+  Scenario: Not built
+    Given nothing yet
+
+  @backlog
+  Scenario: Built
+    Given a thing
+"""
+
+BACKLOG_TESTS = """\
+from pytest_bdd import given, scenario
+
+
+@scenario("sample.feature", "Not built")
+def test_not_built() -> None: ...
+
+
+@scenario("sample.feature", "Built")
+def test_built() -> None: ...
+
+
+@given("a thing")
+def _thing() -> None: ...
+"""
+
+
+STEPS = """\
+import pytest
+from pytest_bdd import given, parsers, then
+
+
+@then("it is checked")
+def _checked(value: int) -> None:
+    assert value == 1
+
+
+@then("it raises")
+def _raises() -> None:
+    with pytest.raises(ValueError):
+        int("x")
+
+
+@then("the helper checks it")
+def _helper(feed: str) -> None:
+    assert_feed(feed)
+
+
+@given("a thing")
+def _thing() -> None: ...
+"""
+
+
+def steps(tmp_path: Path, code: str) -> Path:
+    return tree(tmp_path, {"tests/unit/test_steps.py": code})
+
+
+def test_then_steps_that_assert_are_silent(tmp_path: Path) -> None:
+    assert vacuous_thens(steps(tmp_path, STEPS)) == []
+
+
+@pytest.mark.parametrize(
+    ("code", "name"),
+    [
+        ('@then("it is done")\ndef _done() -> None: ...\n', "_done"),
+        (
+            (
+                '@then(parsers.parse("it is {state}"))\ndef _state(state: str) -> None:\n'
+                "    print(state)\n"
+            ),
+            "_state",
+        ),
+        ('@pytest_bdd.then("x")\ndef _x() -> None:\n    pass\n', "_x"),
+    ],
+    ids=["ellipsis", "print-only", "module-attribute"],
+)
+def test_then_step_that_asserts_nothing_is_reported(tmp_path: Path, code: str, name: str) -> None:
+    assert vacuous_thens(steps(tmp_path, code)) == [f"tests/unit/test_steps.py:2: {name}"]
+
+
+def test_built_backlog_scenario_fails_the_run(tmp_path: Path) -> None:
+    """A bound `@backlog` scenario whose steps pass fails; one with a missing step does not."""
+    (tmp_path / "sample.feature").write_text(BACKLOG_FEATURE, encoding="utf-8")
+    (tmp_path / "test_sample.py").write_text(BACKLOG_TESTS, encoding="utf-8")
+    (tmp_path / "conftest.py").write_text(
+        "from tests.conftest import pytest_bdd_apply_tag  # noqa: F401\n", encoding="utf-8"
+    )
+    run = subprocess.run(  # noqa: S603 - the interpreter running this suite
+        [
+            *(sys.executable, "-m", "pytest", "-c", os.devnull, "--rootdir", str(tmp_path)),
+            *("-p", "no:cacheprovider", "-q", "-rX", str(tmp_path)),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=os.environ | {"PYTHONPATH": str(REPO)},
+    )
+    assert run.returncode == 1, run.stdout
+    assert "XPASS(strict)" in run.stdout
+    assert "1 failed, 1 xfailed" in run.stdout
 
 
 @pytest.mark.parametrize("tag", ["slow", "alpha-1", "ALPHA", "ALPHA-1x", "id", "backlogged"])

@@ -41,10 +41,11 @@ def pytest_bdd_apply_tag(tag: str, function: Callable[..., object]) -> bool | No
 
     A catalogue ID names the scenario's row and `@id:<ticket>` the feature's ticket, so
     `--strict-markers` must not refuse them. `@backlog` marks a scenario as specified but not
-    built yet: it is skipped. Any other tag stays a marker and has to be registered in
+    built yet: it is expected to fail, strictly, so a scenario built without removing the
+    tag fails the run (D-18). Any other tag stays a marker and has to be registered in
     `pyproject.toml`.
     """
     if tag == "backlog":
-        pytest.mark.skip(reason="@backlog: specified, not built yet")(function)
+        pytest.mark.xfail(strict=True, reason="@backlog: specified, not built yet")(function)
         return True
     return True if CATALOGUE_ID.fullmatch(tag) or tag.startswith("id:") else None
