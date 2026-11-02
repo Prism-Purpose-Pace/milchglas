@@ -25,8 +25,8 @@ location or attendee.
 
 > [!IMPORTANT]
 > **Status: pre-alpha.** The specification, the toolchain, the pure pipeline core, the
-> configuration loader, the token commands, the web surface and the CalDAV client and parser are
-> in place; the refresh run that joins them is being built. Do not use it in production yet. Progress: [docs/spec.md](docs/spec.md).
+> configuration loader, the token commands, the web surface, the CalDAV client and parser and
+> one refresh run are in place; the refresher loop and the deployment are being built. Do not use it in production yet. Progress: [docs/spec.md](docs/spec.md).
 
 ## Why
 

@@ -5,10 +5,11 @@ Human contributors: [CONTRIBUTING.md](CONTRIBUTING.md) holds the same rules.
 
 Milchglas reads CalDAV calendars read-only, reduces every event to anonymous time
 intervals and publishes a busy-only ICS feed. Spec: [docs/spec.md](docs/spec.md).
-**Status: no refresh yet** — built: the pure pipeline core (`src/milchglas/core/`: model,
-reduce, emit; fixtures in `tests/fixtures/`), `config.py`, `state.py`, the token commands in
-`__main__.py`, `web/` and the CalDAV client and parser (`sources/`); `refresh.py`, which wires
-fetch, pipeline and feed write into one run, is not built yet.
+**Status: no refresher loop or deployment yet** — built: the pure pipeline core
+(`src/milchglas/core/`: model, reduce, emit; fixtures in `tests/fixtures/`), `config.py`,
+`state.py`, the token commands in `__main__.py`, `web/`, the CalDAV client and parser
+(`sources/`) and one refresh run (`refresh.py`, `refresh` and `refresh --dry-run`); the
+refresher loop and `deploy/` are not built yet.
 Toolchain rationale: [TOOLING.md](TOOLING.md).
 
 ## Stack
@@ -28,7 +29,7 @@ Toolchain rationale: [TOOLING.md](TOOLING.md).
 | Judges (advisory, D-18) | `uv run --script scripts/judge_features.py` (changed feature files; runs `claude --print` on your Claude Code login) · calibrate: `uv run --script scripts/judge_features.py --calibrate tests/meta/judge-set` |
 | Mutation (advisory) | `uv run --group mutation mutmut run` · survivors: `uv run --group mutation mutmut results` |
 | Token | `uv run python -m milchglas init` (once: token, `uid_salt`, `token_sha256`) · `rotate-token` (both print only) |
-| Run (planned) | `uv run python -m milchglas refresh` (one idempotent run) · `--loop --interval 900` (refresher) |
+| Run | `uv run python -m milchglas refresh` (one idempotent run) · planned: `--loop --interval 900` (refresher) |
 | Gates | commit stage `python3 scripts/gates.py` · push stage `python3 scripts/gates.py run --hook-stage pre-push --all-files` — green means both |
 
 ## Spec markers (binding)
@@ -51,8 +52,8 @@ Layout: `src/milchglas/core/` (model, reduce, emit — pure, no I/O; ruff bans I
 there), `config.py` (loader, minimal digest reader), `state.py` (atomic writes, last success
 / last error, run lock), `web/` (WSGI app serving `/f/<token>.ics` and `/healthz`;
 `wsgi:create()` is the gunicorn entry), `sources/` (`caldav.py` the request rules of FR-1,
-`multistatus.py` the parser); planned: `refresh.py` (orchestration), `deploy/<option>/`,
-`docs/runbook.md`, `docs/consumers.md`.
+`multistatus.py` the parser), `refresh.py` (orchestration of one run); planned:
+`deploy/<option>/`, `docs/runbook.md`, `docs/consumers.md`.
 
 - Non-secret config: one `config.json` (`tz`, `window_days`, `grid_minutes`, `summary`,
   `ttl_seconds`, `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[]`,
