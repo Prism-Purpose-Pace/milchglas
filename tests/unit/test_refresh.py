@@ -25,10 +25,10 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from milchglas import refresh as refresh_module
-from milchglas.config import Config, parse
+from milchglas.config import Calendar, Config, ConfigError, parse
 from milchglas.core.model import Block, DayBlock, TimedBlock, clip, merge, round_to_grid, window
 from milchglas.refresh import build, refresh
-from milchglas.sources.caldav import Account, FetchError
+from milchglas.sources.caldav import Account, FetchError, fetch
 from milchglas.state import FEED, STATE, BusyError, State, read_state, run_lock
 from tests.support.feed import assert_feed_invariants, parse_feed
 
@@ -468,3 +468,67 @@ def test_a_feed_that_cannot_be_read_counts_as_unreadable_det_8(tmp_path: Path) -
     previous = refresh_module._previous  # noqa: SLF001 - a read error a fixture cannot make as root
     assert previous(tmp_path) == b""  # a directory: IsADirectoryError
     assert previous(tmp_path / "missing") is None
+
+
+@pytest.mark.parametrize(
+    "href",
+    [
+        ".evil.example/dav/",
+        "https://other.example/x",
+        "//other.example/x",
+        "file:///etc/passwd",
+        "/a/../b",
+        "/a/%2e%2e/b",
+        "/a/%2E/b",
+        "/a/b?x=1",
+        "/a/b#x",
+        "/a\\b",
+        "/a/ b",
+        "",
+    ],
+    ids=[
+        "ORCH-CFG-10-sibling-host",
+        "ORCH-CFG-10-scheme",
+        "ORCH-CFG-10-authority",
+        "ORCH-CFG-10-file",
+        "ORCH-CFG-10-dot-dot",
+        "ORCH-CFG-10-encoded-dot-dot",
+        "ORCH-CFG-10-encoded-dot",
+        "ORCH-CFG-10-query",
+        "ORCH-CFG-10-fragment",
+        "ORCH-CFG-10-backslash",
+        "ORCH-CFG-10-space",
+        "ORCH-CFG-10-empty",
+    ],
+)
+@pytest.mark.parametrize("mode", ["run", "dry-run"])
+def test_a_bad_href_fails_before_any_request(world: World, href: str, mode: str) -> None:
+    world.configure([HREF, href])
+
+    with pytest.raises(ConfigError) as raised:
+        world.run(dry_run=mode == "dry-run")
+
+    assert world.requests == []
+    assert str(raised.value) == (
+        "calendars[1].href: must be an absolute path without scheme, host or dot segments"
+    )
+
+
+def test_a_percent_encoded_href_is_requested_byte_for_byte_orch_cfg_10(world: World) -> None:
+    href = "/remote.php/dav/calendars/svc-milchglas/caf%C3%A9_shared_by_owner/"
+    world.configure([href])
+    world.answers[href] = multistatus()
+
+    world.run()
+
+    assert world.requests == [f"PROPFIND {href}", f"REPORT {href}"]
+
+
+def test_fetch_refuses_an_href_that_leaves_the_origin_orch_cfg_10(world: World) -> None:
+    unchecked = Calendar(href=".evil.example/dav/", name="x", enabled=True)
+    span = window(NOW, BERLIN, 33)
+
+    with pytest.raises(FetchError, match=r"^calendars\[0\]: href leaves the origin"):
+        list(fetch(ACCOUNT, [unchecked], span, opener=world))
+
+    assert world.requests == []
