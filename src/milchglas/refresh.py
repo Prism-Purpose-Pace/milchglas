@@ -17,7 +17,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, final
 
 from milchglas import __version__
 from milchglas.config import Calendar, Config, ConfigError, load
@@ -119,6 +119,7 @@ class Stop(Protocol):
     def wait(self, timeout: float) -> bool: ...
 
 
+@final
 class SignalStop:
     """Set by SIGTERM without taking a lock (a `threading.Event` would, and can deadlock).
 
