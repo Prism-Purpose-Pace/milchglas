@@ -2,7 +2,7 @@
 # Both bases are pinned by tag and digest; Dependabot proposes new digests and holds the
 # 3.12 minor (.github/dependabot.yml). No pip: uv installs only what uv.lock pins.
 
-FROM docker.io/astral/uv:0.12.12@sha256:73d2665b478d8fa2de1cf105c6841f8e9cb6b09e568fc7700440c09f8fcd7ac4 AS uv
+FROM docker.io/astral/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a AS uv
 
 FROM docker.io/library/python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30 AS build
 COPY --from=uv /uv /usr/local/bin/uv
