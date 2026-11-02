@@ -32,6 +32,10 @@ import gunicorn, icalendar, milchglas  # the runtime dependencies are there
 echo "web: read-only root, tmpfs /tmp, no capabilities, no-new-privileges"
 config_dir=$(mktemp -d)
 chmod 0755 "$config_dir"
+# web refuses to start without a valid token_sha256 (WEB-13): the digest of a throwaway value.
+digest=$(printf 'container-check' | sha256sum | cut -d' ' -f1)
+printf '{"token_sha256": "%s"}\n' "$digest" >"$config_dir/config.json"
+chmod 0644 "$config_dir/config.json"
 docker volume create milchglas-check-state >/dev/null
 docker run -d --name "$name" \
   --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true \
@@ -43,7 +47,7 @@ for _ in $(seq 1 30); do
   [ "$status" != "000" ] && break
   sleep 1
 done
-# No state and no config yet: /healthz must say 503, and the container stay healthy.
+# No state yet (no last success): /healthz must say 503, and the container stay healthy.
 [ "$status" = "503" ] || { echo "/healthz answered $status"; docker logs "$name"; exit 1; }
 for _ in $(seq 1 30); do
   health=$(docker inspect --format '{{.State.Health.Status}}' "$name")
