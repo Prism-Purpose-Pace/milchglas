@@ -1,0 +1,59 @@
+# Option B (spec section 9, D-9): one image, two services on a self-hosted PaaS whose edge
+# proxy terminates TLS and routes the operator's subdomain to `web` on port 8000.
+#
+# Secrets come from the platform, set for `refresher` only, runtime-only and locked (OR4);
+# this file holds no value for them. `web` refuses to start when any CALDAV_* reaches it
+# (D-13). config.json lives in a mounted directory, not a single-file mount: an editor that
+# writes a new file and renames it would stay invisible behind a single-file bind mount.
+#
+# Memory (GATE-9): parsing one 16 MiB multistatus answer (38 464 objects, the Q-15 cap)
+# peaked at 59 MiB RSS for the whole Python process, measured 2026-11-02 on CPython 3.12.3
+# with the locked icalendar; 256 MiB leaves four times that as headroom.
+
+name: milchglas
+
+x-hardening: &hardening
+  build:
+    context: ../..
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  ulimits:
+    core: 0
+  pids_limit: 64
+  restart: unless-stopped
+
+services:
+  web:
+    <<: *hardening
+    expose:
+      - "8000"
+    environment:
+      MILCHGLAS_LOG_LEVEL: ${MILCHGLAS_LOG_LEVEL:-INFO}
+    volumes:
+      - state:/var/lib/milchglas:ro
+      - ./config:/etc/milchglas:ro
+    mem_limit: 192m
+
+  refresher:
+    <<: *hardening
+    command: [python, -m, milchglas, refresh, --loop, --interval, "900"]
+    environment:
+      CALDAV_URL: ${CALDAV_URL}
+      CALDAV_USER: ${CALDAV_USER}
+      CALDAV_SECRET: ${CALDAV_SECRET}
+      MILCHGLAS_LOG_LEVEL: ${MILCHGLAS_LOG_LEVEL:-INFO}
+    volumes:
+      - state:/var/lib/milchglas
+      - ./config:/etc/milchglas:ro
+    mem_limit: 256m
+    # SIGTERM lets the run in progress finish its write; a run takes seconds.
+    stop_grace_period: 30s
+    healthcheck:
+      disable: true
+
+volumes:
+  state: {}
