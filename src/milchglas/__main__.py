@@ -1,4 +1,4 @@
-"""`python -m milchglas init | rotate-token | refresh [--dry-run]` (NFR-O1, D-14, Q-13).
+"""`python -m milchglas init | rotate-token | refresh [--dry-run | --loop]` (NFR-O1, D-14, Q-13).
 
 `init` and `rotate-token` print and write no file: the operator pastes the printed members
 into `config.json`, which Option B mounts read-only, and copies the token straight into the
@@ -6,6 +6,7 @@ consumer dialogs. Run them on the operator's own machine, never in a platform we
 
 `refresh` is one idempotent run: exit 0 on success, 1 when the run failed and the last good
 feed was kept, 2 when the environment is incomplete and nothing was requested.
+`refresh --loop --interval 900` is the refresher: it runs until SIGTERM and exits 0.
 """
 
 import argparse
@@ -14,7 +15,9 @@ import json
 import logging
 import os
 import secrets
+import signal
 import sys
+import threading
 import urllib.parse
 import zoneinfo
 from collections.abc import Mapping, Sequence
@@ -22,7 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from milchglas.config import config_path
-from milchglas.refresh import refresh
+from milchglas.refresh import ConfigWatch, loop, refresh
 from milchglas.sources.caldav import Account
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -44,9 +47,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     once.add_argument(
         "--dry-run", action="store_true", help="print counts only; write nothing, take no lock"
     )
+    once.add_argument("--loop", action="store_true", help="keep running until SIGTERM")
+    once.add_argument(
+        "--interval", type=int, default=900, help="seconds between runs of --loop (default 900)"
+    )
     args = parser.parse_args(argv)
     if args.command == "refresh":
-        return _refresh(os.environ, dry_run=args.dry_run)
+        if args.loop and (args.dry_run or args.interval < 1):
+            parser.error("--loop needs a positive --interval and no --dry-run")
+        return _refresh(
+            os.environ, dry_run=args.dry_run, interval=args.interval if args.loop else None
+        )
     # 256 bits from a CSPRNG (NFR-S1); only the digest goes into config.json (D-14).
     token = secrets.token_urlsafe(32)
     members = {"token_sha256": hashlib.sha256(token.encode()).hexdigest()}
@@ -58,7 +69,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _refresh(environ: Mapping[str, str], *, dry_run: bool) -> int:
+def _refresh(environ: Mapping[str, str], *, dry_run: bool, interval: int | None = None) -> int:
     try:
         _logging(environ)
         account = _account(environ)
@@ -66,6 +77,17 @@ def _refresh(environ: Mapping[str, str], *, dry_run: bool) -> int:
     except UsageError as error:
         sys.stderr.write(f"milchglas: {error}\n")
         return 2
+    if interval is not None:
+        stop, watch = threading.Event(), ConfigWatch()
+        # SIGTERM only sets the event: a run in progress finishes its write first.
+        signal.signal(signal.SIGTERM, lambda _signum, _frame: stop.set())
+        return loop(
+            lambda: refresh(
+                config_path(environ), var_dir, account, now=datetime.now(UTC), watch=watch
+            ),
+            interval=interval,
+            stop=stop,
+        )
     try:
         report = refresh(
             config_path(environ), var_dir, account, now=datetime.now(UTC), dry_run=dry_run
