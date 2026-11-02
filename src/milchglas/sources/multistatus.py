@@ -80,8 +80,18 @@ def parse(
     Q-14 is decided here, before `reduce_event` sees an event: an object the parser reports
     any error for fails the read, even a cancelled one whose times reduce never reads.
     """
+    return parse_counted(body, calendar=calendar, status=status, tz=tz, owner_emails=owner_emails)[
+        1
+    ]
+
+
+def parse_counted(
+    body: bytes, *, calendar: int, status: int, tz: ZoneInfo, owner_emails: Collection[str]
+) -> tuple[int, list[Block]]:
+    """`parse`, together with the number of objects the answer held (Q-16)."""
     blocks: list[Block] = []
-    for href, data in _Answer(body, status).read():
+    objects = _Answer(body, status).read()
+    for href, data in objects:
         # An href names the calendar and the event file, so only its hash is shown (NFR-P4).
         where = f"calendar {calendar}, object {hashlib.sha256(href).hexdigest()[:16]}"
         failure = None
@@ -104,7 +114,7 @@ def parse(
             # Raised outside the except block, so no library exception stays attached.
             msg = f"{where}: {failure}"
             raise MalformedEventError(msg)
-    return blocks
+    return len(objects), blocks
 
 
 def _events(data: bytes | None) -> list[Component]:
