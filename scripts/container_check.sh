@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Build the Option B image and check it and a hardened `web` container (spec section 9).
 # Runs in CI (job `container`) and on any host with Docker: bash scripts/container_check.sh
-# Not yet covered here: the Baikal smoke run and the refresher's SIGTERM in a container.
+# Not yet covered here: the Baikal smoke run.
 set -euo pipefail
 
 image=milchglas:check
 name=milchglas-check-web
+refresher=milchglas-check-refresher
 cleanup() {
-  docker rm -f "$name" >/dev/null 2>&1 || true
+  docker rm -f "$name" "$refresher" >/dev/null 2>&1 || true
   docker volume rm -f milchglas-check-state >/dev/null 2>&1 || true
   rm -rf "${config_dir:-}"
 }
@@ -63,4 +64,42 @@ if docker logs "$name" 2>&1 | grep -i -E 'control.?socket|warning'; then
   echo "gunicorn logged a warning at start"; exit 1
 fi
 docker inspect --format '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}} {{.HostConfig.SecurityOpt}}' "$name"
+
+echo "web: a malformed request line leaves no token in the log (WEB-21)"
+token=SYNTHETICfeedTOKEN0123456789abcdefghijklmno  # synthetic, shaped like a feed token
+for line in "GET /f/$token.ics" "GET /f/$token.ics HTTP/1.1 extra" "GET /f/$token.ics HTTP/9.9"; do
+  exec 3<>/dev/tcp/127.0.0.1/8000
+  printf '%s\r\nHost: x\r\n\r\n' "$line" >&3
+  head -c 12 <&3 | grep -q '^HTTP/1.1 400' || { echo "no 400 for a malformed line"; exit 1; }
+  exec 3<&- 3>&-
+done
+sleep 1
+docker logs "$name" 2>&1 | grep -q 'Invalid request; the request line is withheld' \
+  || { echo "gunicorn logged no constant line"; exit 1; }
+if docker logs "$name" 2>&1 | grep -q "$token"; then
+  echo "the token reached the web log"; exit 1
+fi
+
+echo "refresher: the image runs refresh --loop and stops on SIGTERM (#111)"
+docker run --rm --entrypoint python "$image" -m milchglas refresh --help >/dev/null \
+  || { echo "the image has no refresh command"; exit 1; }
+# An unreachable source: each run fails and the loop waits for its next slot.
+docker run -d --name "$refresher" \
+  --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true \
+  --tmpfs /var/lib/milchglas:uid=10001,gid=10001,mode=0700 -v "$config_dir":/etc/milchglas:ro \
+  -e CALDAV_URL=https://127.0.0.1:1/ -e CALDAV_USER=check -e CALDAV_SECRET=check \
+  -e MILCHGLAS_LOG_LEVEL=INFO --no-healthcheck \
+  --entrypoint python "$image" -m milchglas refresh --loop --interval 900 >/dev/null
+for _ in $(seq 1 30); do
+  docker logs "$refresher" 2>&1 | grep -q 'refresh failed' && break
+  sleep 1
+done
+docker logs "$refresher" 2>&1 | grep -q 'refresh failed' \
+  || { echo "the refresher logged no run"; docker logs "$refresher"; exit 1; }
+started=$(date +%s)
+docker stop --time 20 "$refresher" >/dev/null
+elapsed=$(( $(date +%s) - started ))
+code=$(docker inspect --format '{{.State.ExitCode}}' "$refresher")
+[ "$code" = "0" ] && [ "$elapsed" -lt 15 ] \
+  || { echo "SIGTERM: exit $code after ${elapsed}s"; docker logs "$refresher"; exit 1; }
 echo "container check passed"

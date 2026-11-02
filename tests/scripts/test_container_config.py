@@ -59,6 +59,15 @@ def test_the_image_installs_with_uv_only_and_runs_as_non_root_gate_3() -> None:
     assert not _CALDAV.search(text)
 
 
+def test_web_starts_gunicorn_with_the_log_redaction_web_21() -> None:
+    command = re.search(r"^CMD (\[.*?\])$", DOCKERFILE.read_text(), flags=re.MULTILINE | re.DOTALL)
+
+    assert command
+    argv = [part.strip(' "\\\n') for part in command.group(1).strip("[]").split(",")]
+    assert argv[0] == "gunicorn"
+    assert argv[argv.index("--config") + 1] == "python:milchglas.web.gunicorn_conf"
+
+
 def test_both_services_carry_every_hardening_key_gate_3() -> None:
     services = compose()["services"]
 
