@@ -474,6 +474,9 @@ def test_a_feed_that_cannot_be_read_counts_as_unreadable_det_8(tmp_path: Path) -
     "href",
     [
         ".evil.example/dav/",
+        "@evil.example/dav/",
+        ":8443@evil.example/dav/",
+        "remote.php/dav/calendars/svc/work/",
         "https://other.example/x",
         "//other.example/x",
         "file:///etc/passwd",
@@ -488,6 +491,9 @@ def test_a_feed_that_cannot_be_read_counts_as_unreadable_det_8(tmp_path: Path) -
     ],
     ids=[
         "ORCH-CFG-10-sibling-host",
+        "ORCH-CFG-10-userinfo-host",
+        "ORCH-CFG-10-port-userinfo-host",
+        "ORCH-CFG-10-relative",
         "ORCH-CFG-10-scheme",
         "ORCH-CFG-10-authority",
         "ORCH-CFG-10-file",
