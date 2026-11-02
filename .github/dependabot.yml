@@ -31,3 +31,21 @@ updates:
     commit-message:
       prefix: ci
       include: scope
+
+  # The Option B image (Dockerfile): a new digest of the pinned tags arrives as a pull
+  # request; minor and major Python versions are held, the image stays on 3.12 (D-9).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    labels: [dependencies]
+    assignees: [philippsied]
+    commit-message:
+      prefix: build
+      include: scope
