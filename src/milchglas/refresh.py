@@ -6,15 +6,18 @@ step keeps the last good feed byte for byte and records the error by class, cale
 and HTTP status only (G5, D-7d, NFR-P4).
 """
 
+import contextlib
+import dataclasses
 import logging
+import threading
 import time
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
 from milchglas import __version__
-from milchglas.config import Config, ConfigError, load
+from milchglas.config import Calendar, Config, ConfigError, load
 from milchglas.core.emit import emit, stamps
 from milchglas.core.model import Block, Window, clip, merge, round_to_grid, window
 from milchglas.core.reduce import MalformedEventError
@@ -28,6 +31,19 @@ _MULTI_STATUS = 207  # what `fetch` returned the body for; anything else raised 
 _OWN_MESSAGES = (ConfigError, FetchError, ParseError, MalformedEventError)
 
 
+@dataclass(slots=True)
+class ConfigWatch:
+    """The configuration of the last run, so the next one can log what changed (AC-22)."""
+
+    last: Config | None = field(default=None)
+
+    def seen(self, config: Config) -> None:
+        if self.last is not None and (changed := _changed_keys(self.last, config)):
+            # Key names only: a value may be a pasted secret or name a calendar (NFR-P4).
+            _LOG.info("config changed: %s", ", ".join(changed))
+        self.last = config
+
+
 @dataclass(frozen=True, slots=True)
 class _Run:
     config_file: Path
@@ -35,6 +51,7 @@ class _Run:
     account: Account
     now: datetime
     opener: Opener | None
+    watch: ConfigWatch | None
 
 
 @dataclass(slots=True)
@@ -48,7 +65,7 @@ class Report:
     end_day: date | None = None  # exclusive
 
 
-def refresh(  # noqa: PLR0913 - opener and dry_run are keyword-only switches
+def refresh(  # noqa: PLR0913 - everything after `now` is a keyword-only switch
     config_file: Path,
     var_dir: Path,
     account: Account,
@@ -56,6 +73,7 @@ def refresh(  # noqa: PLR0913 - opener and dry_run are keyword-only switches
     now: datetime,
     opener: Opener | None = None,
     dry_run: bool = False,
+    watch: ConfigWatch | None = None,
 ) -> Report:
     """Publish the feed for `now`, or raise and keep the last good one.
 
@@ -63,7 +81,7 @@ def refresh(  # noqa: PLR0913 - opener and dry_run are keyword-only switches
     refresher runs. A run that finds the lock held raises BusyError and touches nothing.
     """
     started, outcome, report = time.monotonic(), "failed", Report()
-    run = _Run(config_file, var_dir, account, now, opener)
+    run = _Run(config_file, var_dir, account, now, opener, watch)
     try:
         if dry_run:
             _produce(run, report)
@@ -88,6 +106,33 @@ def refresh(  # noqa: PLR0913 - opener and dry_run are keyword-only switches
             time.monotonic() - started,
         )
     return report
+
+
+def loop(
+    run_once: Callable[[], object],
+    *,
+    interval: float,
+    stop: threading.Event,
+    clock: Callable[[], float] = time.monotonic,
+) -> int:
+    """Run at t0, t0 + interval, ... until `stop` is set; return the exit code 0 (FR-10).
+
+    A failed run does not end the loop: its summary line and the state already name it,
+    and the last good feed stays. A run that overruns skips the slots it missed. `stop` is
+    set by SIGTERM: during a run the run finishes its write first, during a wait the loop
+    ends at once.
+    """
+    start, slot = clock(), 0
+    while not stop.is_set():
+        # A failure is logged and recorded by `refresh` itself; the loop goes on.
+        with contextlib.suppress(Exception):
+            run_once()
+        slot += 1
+        now = clock()
+        slot = max(slot, int((now - start) // interval) + 1)
+        if stop.wait(start + slot * interval - now):
+            break
+    return 0
 
 
 def build(
@@ -133,6 +178,8 @@ def _publish(run: _Run, report: Report) -> None:
 def _produce(run: _Run, report: Report) -> bytes:
     # Read on every run, so an edit applies without a restart (FR-12).
     config = load(run.config_file, run.now)
+    if run.watch is not None:
+        run.watch.seen(config)
     span = window(run.now, config.tz, config.window_days)
     report.first_day, report.end_day = span.first_day, span.end_day
     blocks: list[Block] = []
@@ -169,3 +216,22 @@ def _describe(error: Exception) -> str:
     if isinstance(error, _OWN_MESSAGES):
         return f"{type(error).__name__}: {error}"
     return type(error).__name__
+
+
+def _changed_keys(old: Config, new: Config) -> list[str]:
+    """The names of the keys whose values differ, calendars by index and member."""
+    changed = [
+        item.name
+        for item in dataclasses.fields(Config)
+        if item.name != "calendars" and getattr(old, item.name) != getattr(new, item.name)
+    ]
+    if len(old.calendars) != len(new.calendars):
+        changed.append("calendars")
+    else:
+        changed += [
+            f"calendars[{index}].{member.name}"
+            for index, (before, after) in enumerate(zip(old.calendars, new.calendars, strict=True))
+            for member in dataclasses.fields(Calendar)
+            if getattr(before, member.name) != getattr(after, member.name)
+        ]
+    return sorted(changed)
