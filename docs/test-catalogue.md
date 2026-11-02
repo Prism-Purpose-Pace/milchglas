@@ -215,13 +215,13 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-WRITE-5 | Injected `ENOSPC` (full disk) → previous feed byte-identical | AC-7, FR-8 | unit | exists |
 | ORCH-CFG-1 | `enabled: false` edited between two runs → that calendar's blocks are gone, no restart; config is re-read every refresh, also after an edit that replaces the file (write and rename) | AC-10, FR-12 | unit | planned |
 | ORCH-CFG-2 | Invalid config fails before any request, keeps the old feed and names only the field: unknown `tz`, a `grid_minutes` that fails CORE-RND-8, empty `calendars`, zero calendars with `enabled: true`, duplicate hrefs, `owner_emails` not a list | AC-22, Q-16 | unit | planned |
-| ORCH-CFG-3 | Missing `CALDAV_SECRET` → exit 2, message names the variable only | NFR-S2, NFR-O1 | unit | planned |
+| ORCH-CFG-3 | Missing `CALDAV_SECRET` → exit 2, message names the variable only | NFR-S2, NFR-O1 | unit | exists |
 | ORCH-CFG-4 | Unknown key → rejected, names the key never the value; a key named like the secret variable is rejected too; the committed example configuration holds no secret, is refused naming `uid_salt` as committed and passes the loader once an `init`-shaped salt is pasted; a `uid_salt` other than 32 lower-case hex characters is rejected | AC-22, NFR-S2 | unit | exists |
 | ORCH-CFG-5 | No `window_days` → 33-day window; 0 and 91 rejected, 1 and 90 accepted | D-6, AC-22 | unit | exists |
 | ORCH-CFG-6 | Missing `uid_salt` → exit non-zero, names the key, no request, old feed kept; `refresh` never generates a salt | Q-13, AC-22, NFR-O1 | unit | planned |
 | ORCH-CFG-7 | Plaintext `token` key → rejected, names the field never the value; `token_sha256` that is not 64 hex characters → refresh fails | D-14, AC-22 | unit | planned |
 | ORCH-CFG-8 | Control character in a string that reaches the output (`summary`) → configuration error before any request | FR-7, AC-22 | unit | planned |
-| ORCH-CFG-9 | `CALDAV_URL` not `https` → refresh fails before any request, keeps the feed, names only the variable | NFR-S7, AC-22 | unit | planned |
+| ORCH-CFG-9 | `CALDAV_URL` not `https` → refresh fails before any request, keeps the feed, names only the variable | NFR-S7, AC-22 | unit | exists |
 | ORCH-CFG-10 | Hrefs `https://other/x`, `//other/x`, `file:///etc/passwd`, `/a/../b`, `/a/%2e%2e/b` → configuration error with zero outbound requests; a valid href with percent-encoding is requested byte for byte | NFR-S7, AC-22 | unit | planned |
 | ORCH-CFG-11 | A changed configuration logs the names of the changed keys, never values (toggling `enabled` logs one line naming the key) | AC-22 | unit | planned |
 | ORCH-CFG-12 | `MILCHGLAS_CONFIG` names the configuration file for `refresh` and `web`; unset, it is `./config.json` | D-16 | unit | planned |
