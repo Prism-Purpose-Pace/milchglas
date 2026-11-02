@@ -148,3 +148,15 @@ jobs:
       - uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
         with:
           advanced-security: false
+
+  # The Option B image and a hardened web container (scripts/container_check.sh). Not a
+  # required check yet: it pulls the base images from Docker Hub.
+  container:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash scripts/container_check.sh
