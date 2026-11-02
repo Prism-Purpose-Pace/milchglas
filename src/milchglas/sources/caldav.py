@@ -232,8 +232,14 @@ def _calendar_query(window: Window) -> bytes:
 def _dav_request(
     account: Account, href: str, method: str, depth: str, body: bytes
 ) -> urllib.request.Request:
+    url = account.origin + href
+    # A second guard behind the configuration check: the credential never leaves the origin.
+    target, origin = urllib.parse.urlsplit(url), urllib.parse.urlsplit(account.origin)
+    if (target.scheme, target.netloc) != (origin.scheme, origin.netloc) or not href.startswith("/"):
+        msg = "href leaves the origin of CALDAV_URL"
+        raise FetchError(msg, retryable=False)
     request = urllib.request.Request(
-        account.origin + href,
+        url,
         data=body,
         method=method,
         headers={"Depth": depth, "Content-Type": "application/xml; charset=utf-8"},
