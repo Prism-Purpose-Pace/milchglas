@@ -27,7 +27,7 @@ import pytest
 from milchglas import refresh as refresh_module
 from milchglas.config import Calendar, Config, ConfigError, parse
 from milchglas.core.model import Block, DayBlock, TimedBlock, clip, merge, round_to_grid, window
-from milchglas.refresh import build, refresh
+from milchglas.refresh import ConfigWatch, build, refresh
 from milchglas.sources.caldav import Account, FetchError, fetch
 from milchglas.state import FEED, STATE, BusyError, State, read_state, run_lock
 from tests.support.feed import assert_feed_invariants, parse_feed
@@ -146,8 +146,18 @@ class World:
         answer = self.answers[path]
         return cast("HTTPResponse", Answer(Body(answer() if callable(answer) else answer)))
 
-    def run(self, now: datetime = NOW, *, dry_run: bool = False) -> None:
-        refresh(self.config_file, self.var_dir, ACCOUNT, now=now, opener=self, dry_run=dry_run)
+    def run(
+        self, now: datetime = NOW, *, dry_run: bool = False, watch: ConfigWatch | None = None
+    ) -> None:
+        refresh(
+            self.config_file,
+            self.var_dir,
+            ACCOUNT,
+            now=now,
+            opener=self,
+            dry_run=dry_run,
+            watch=watch,
+        )
 
     @property
     def feed(self) -> bytes:
