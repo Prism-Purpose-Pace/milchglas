@@ -5,6 +5,23 @@ Feature: Fetch from the CalDAV server
   for a moment gets another try; an answer that a retry cannot
   change ends the fetch at once.
 
+  @id:77 @ORCH-FETCH-5
+  Scenario Outline: A redirect ends the fetch without following it
+    Never follow the server to another address (NFR-S7).
+
+    Given the server answers <status> pointing to a second server
+    When the client fetches one calendar
+    Then the fetch fails naming status <status> and the second server's host
+    And the second server received no request
+    And the server received exactly 1 request
+
+    Examples:
+      | status |
+      | 301    |
+      | 302    |
+      | 307    |
+      | 308    |
+
   Rule: Retry only what can recover (FR-1, Q-15)
 
     @ORCH-FETCH-2
@@ -73,24 +90,6 @@ Feature: Fetch from the CalDAV server
       And no request reached the server with a cookie
 
   @id:77
-  Rule: Never follow the server to another address (NFR-S7)
-
-    @ORCH-FETCH-5
-    Scenario Outline: A redirect ends the fetch without following it
-      Given the server answers <status> pointing to a second server
-      When the client fetches one calendar
-      Then the fetch fails naming status <status> and the second server's host
-      And the second server received no request
-      And the server received exactly 1 request
-
-      Examples:
-        | status |
-        | 301    |
-        | 302    |
-        | 307    |
-        | 308    |
-
-  @id:77
   Rule: Stop reading an answer that grows past 16 MiB (Q-15)
 
     @ORCH-FETCH-4
@@ -110,9 +109,10 @@ Feature: Fetch from the CalDAV server
   @id:77
   Rule: Ask every enabled calendar, in configuration order, for the window (FR-1)
 
-    # The window spans the end of summer time on 2026-10-25: its two ends have different offsets.
     @ORCH-FETCH-7
     Scenario: The query covers the window in UTC
+      The window spans the end of summer time on 2026-10-25: its two ends have different offsets.
+
       Given the window runs from 2026-10-20 to 2026-11-22 in Europe/Berlin
       When the client fetches one calendar
       Then the server received a calendar query at depth 1
@@ -142,9 +142,10 @@ Feature: Fetch from the CalDAV server
         | calendar   | svc-milchglas | read, write | owned by the service user    |
         | calendar   | the owner     | read, write | writable by the service user |
 
-    # Nextcloud grants a read-only share write-properties, so the share can be renamed.
     @ORCH-FETCH-8
     Scenario: A calendar the owner shares read-only is fetched
+      Nextcloud grants a read-only share write-properties, so the share can be renamed.
+
       Given the server describes Privat as a calendar owned by the owner with read, write-properties
       When the client fetches one calendar
       Then the fetch succeeds after one check and one query

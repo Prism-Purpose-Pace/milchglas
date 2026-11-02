@@ -107,9 +107,20 @@ docstring. Gate details: [TOOLING.md](TOOLING.md).
   tag (`@ORCH-FETCH-2`), and exactly one function binds it:
   `@scenario("<path>", "<name>")` on `test_<id>_…` (`test_orch_fetch_2_…`). A feature
   carries its issue as `@id:<number>`. A scenario that is specified but not built yet
-  carries `@backlog`: it may stay unbound, and a bound one is skipped; the change that
-  builds it removes the tag. Properties, fuzzing and gates stay plain pytest. GATE-22
-  checks the binding.
+  carries `@backlog`: it may stay unbound, and a bound one is expected to fail, so once it
+  passes the run fails until the change that builds it removes the tag. Properties,
+  fuzzing and gates stay plain pytest. GATE-22
+  checks the binding and the form: a feature description, at most five steps, exactly one
+  `When`, a `Then`, Given-When-Then in order, a Background of at most four Givens, a Rule
+  only for two scenarios or more, no name or step that names a click, a button, an
+  endpoint, HTTP, JSON or SQL, `Examples` that match the `<variables>` of an outline, `And`
+  where a keyword would repeat, no tag twice on one node, only documentation addresses
+  (`example.com`, `.test`, `192.0.2.0/24`, `2001:db8::/32`: RFC 2606, 5737, 3849), no
+  comment (put the reason in the scenario's description), only the tags `@id:<number>`, `@backlog`, `@long-running` (a marker:
+  register it in `pyproject.toml` first) and row IDs. Every `@then` step asserts (an
+  `assert`, `pytest.raises` or an `assert_*` helper), and a feature keeps the `@id` it
+  had on `main`. A failing scenario names file,
+  line and rule: `uv run pytest tests/meta/test_feature_lint.py`.
 - Core behaviour gets golden tests: overlap and adjacency merge, grid rounding, DST
   transitions in Europe/Berlin, all-day, multi-day, tentative, cancelled, declined,
   RRULE with EXDATE and overridden instances, window clipping, UID determinism, line
@@ -132,6 +143,10 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
 - A pull request needs one approval of its last push; the maintainer reviews. The criteria
   for maintainers and automated reviewers are in [REVIEW.md](REVIEW.md).
 - Fill in the pull request template, including the privacy checklist.
+- A pull request that changes a feature file carries the output of
+  `uv run --script scripts/judge_features.py` under "Judge findings" in its body. The four
+  judges are advisory until each passes its calibration (D-18); they run
+  through the `claude` CLI on your own login and never run in CI.
 - `main` is protected: pull requests are rebase-merged, history stays linear. Squash is
   disabled because a squash commit replaces the commits' authors with the merging
   account's profile name; a rebase keeps the authors but still records that profile

@@ -184,6 +184,15 @@ repos:
         always_run: true
         pass_filenames: false
         stages: [pre-push]
+      # D-18: a judge whose rubric section says `Status: blocking` (it passed its calibration)
+      # fails a push that changes a feature file it flags. With no blocking judge the script
+      # passes at once, without a key or a request.
+      - id: judge-features
+        name: feature judges (blocking ones, D-18)
+        language: system
+        entry: uv run --script scripts/judge_features.py --blocking
+        files: ^tests/features/.*\.feature$
+        stages: [pre-push]
       # pre-commit hands pre-push hooks one ref at most (none for a push without a new commit);
       # the legacy entry reads git's own list. Refuses a commit while the shim is missing.
       - id: check-push-guard-installed
