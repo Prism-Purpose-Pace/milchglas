@@ -132,6 +132,8 @@ def fetch(
             msg = f"calendars[{index}]: {error}"
             raise FetchError(msg, retryable=False) from None
         yield index, answer
+        # Dropped before the next request: one answer alive at a time bounds memory (Q-15).
+        del answer
 
 
 def _check(opener: Opener, request: urllib.request.Request, sleep: Callable[[float], None]) -> None:
