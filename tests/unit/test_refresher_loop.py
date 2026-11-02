@@ -8,6 +8,7 @@ SIGTERM to `python -m milchglas refresh --loop`.
 import json
 import logging
 import os
+import selectors
 import signal
 import subprocess
 import sys
@@ -21,7 +22,7 @@ from typing import override
 import pytest
 
 from milchglas.config import ConfigError
-from milchglas.refresh import ConfigWatch, loop
+from milchglas.refresh import ConfigWatch, SignalStop, loop
 from milchglas.state import read_state
 from tests.unit.test_refresh import HREF, NOW, World, event, multistatus
 from tests.unit.test_refresh import world as world  # noqa: PLC0414 - the shared fixture
@@ -110,7 +111,8 @@ def test_sigterm_while_sleeping_exits_at_once_orch_loop_2() -> None:
     assert time.monotonic() - started < 5
 
 
-def test_a_real_sigterm_ends_the_loop_with_exit_0_orch_loop_2(tmp_path: Path) -> None:
+def _start_loop(tmp_path: Path) -> subprocess.Popen[str]:
+    """The refresher as the image runs it; every run fails at once on a refused port."""
     config = tmp_path / "config.json"
     config.write_text(
         json.dumps(
@@ -129,22 +131,78 @@ def test_a_real_sigterm_ends_the_loop_with_exit_0_orch_loop_2(tmp_path: Path) ->
         "CALDAV_SECRET": "BBX-synthetic",
         "MILCHGLAS_CONFIG": str(config),
         "MILCHGLAS_VAR_DIR": str(tmp_path / "var"),
+        "MILCHGLAS_LOG_LEVEL": "INFO",  # the summary line this test waits for is INFO
     }
-    process = subprocess.Popen(
+    return subprocess.Popen(
         [sys.executable, "-m", "milchglas", "refresh", "--loop", "--interval", "900"],
         env=environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
+
+
+def _first_line(process: subprocess.Popen[str], deadline: float = 10) -> str:
+    """The first stdout line, or a failure after `deadline` seconds instead of a hang."""
     assert process.stdout is not None
-    line = process.stdout.readline()  # the first run's summary: the loop is now asleep
-    process.send_signal(signal.SIGTERM)
-    out, err = process.communicate(timeout=10)
+    with selectors.DefaultSelector() as selector:
+        selector.register(process.stdout, selectors.EVENT_READ)
+        assert selector.select(timeout=deadline), "no summary line within the deadline"
+    return str(process.stdout.readline())
+
+
+@pytest.mark.parametrize("signals", [1, 3], ids=["ORCH-LOOP-2-once", "ORCH-LOOP-2-repeated"])
+def test_a_real_sigterm_while_waiting_ends_the_loop_with_exit_0(
+    tmp_path: Path, signals: int
+) -> None:
+    process = _start_loop(tmp_path)
+    try:
+        line = _first_line(process)  # the first run's summary: the loop is now waiting
+        for _ in range(signals):
+            process.send_signal(signal.SIGTERM)
+        out, err = process.communicate(timeout=10)
+    finally:
+        process.kill()
+        process.communicate()
 
     assert "refresh failed (FetchError" in line
     assert process.returncode == 0
     assert "BBX-" not in line + out + err
+
+
+def test_a_signal_stop_wakes_a_wait_without_a_lock_orch_loop_2() -> None:
+    stop = SignalStop()
+    try:
+        threading.Timer(0.2, os.kill, (os.getpid(), signal.SIGTERM)).start()
+        started = time.monotonic()
+
+        assert stop.wait(30) is True
+        assert time.monotonic() - started < 5
+        assert stop.is_set()
+    finally:
+        stop.close()
+    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
+
+
+def test_a_signal_before_the_wait_ends_it_at_once_orch_loop_2() -> None:
+    stop = SignalStop()
+    try:
+        os.kill(os.getpid(), signal.SIGTERM)
+        started = time.monotonic()
+
+        assert stop.wait(30) is True
+        assert time.monotonic() - started < 1
+    finally:
+        stop.close()
+
+
+def test_a_signal_stop_without_a_signal_waits_out_the_timeout() -> None:
+    stop = SignalStop()
+    try:
+        assert stop.wait(0.05) is False
+        assert stop.wait(-1) is False
+    finally:
+        stop.close()
 
 
 def test_disabling_a_calendar_removes_its_blocks_on_the_next_run_orch_cfg_1(
