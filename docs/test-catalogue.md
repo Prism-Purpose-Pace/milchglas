@@ -179,14 +179,14 @@ the expected-blocks oracle assumes until the spec changes.
 
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
-| DET-1 | Two refreshes, identical fetch bodies, clock +15 min → byte-identical `feed.ics` | AC-6 | unit | planned |
-| DET-2 | An unchanged block keeps the DTSTAMP recorded in the previous feed file after the clock advances | AC-6, D-7c | unit | planned |
-| DET-3 | One event moved → exactly one UID disappears and one appears with `DTSTAMP == clock.now()`; every other line is unchanged | AC-6 | unit | planned |
-| DET-4 | No previous feed → every DTSTAMP equals `clock.now()`; on an unchanged run none does | AC-6 | unit | planned |
+| DET-1 | Two refreshes, identical fetch bodies, clock +15 min → byte-identical `feed.ics` | AC-6 | unit | exists |
+| DET-2 | An unchanged block keeps the DTSTAMP recorded in the previous feed file after the clock advances | AC-6, D-7c | unit | exists |
+| DET-3 | One event moved → exactly one UID disappears and one appears with `DTSTAMP == clock.now()`; every other line is unchanged | AC-6 | unit | exists |
+| DET-4 | No previous feed → every DTSTAMP equals `clock.now()`; on an unchanged run none does | AC-6 | unit | exists |
 | DET-5 | `uid_salt` change → every UID changes (documented); same salt → stable; the salt comes only from `config.json` | Q-13, D-7c | unit | exists |
-| DET-6 | 365 daily refreshes with a fake clock over fixtures spanning both DST days: invariants hold every day, bytes change only on days the window boundary crosses a block, DTSTAMPs of persisting blocks never change, runtime at most 2 s | AC-6, NFR-C1 | unit | planned |
+| DET-6 | 365 daily refreshes with a fake clock over fixtures spanning both DST days: invariants hold every day, bytes change only on days the window boundary crosses a block, DTSTAMPs of persisting blocks never change, runtime at most 2 s | AC-6, NFR-C1 | unit | exists |
 | DET-7 | The same instant as `…Z`, `TZID=Europe/Berlin` and `TZID=America/New_York` → identical UID and identical feed bytes | D-7c, NFR-C1 | unit | exists |
-| DET-8 | Unreadable previous feed (truncated, not UTF-8, not a calendar) does not stop the refresh: every DTSTAMP equals now and one warning with counts only is logged | D-7c, AC-6 | unit | planned |
+| DET-8 | Unreadable previous feed (truncated, not UTF-8, not a calendar) does not stop the refresh: every DTSTAMP equals now and one warning with counts only is logged | D-7c, AC-6 | unit | exists |
 | DET-9 | Under `python -m milchglas`, `zoneinfo.TZPATH` is empty (set once in `__main__`, never in `core/`), so the pinned `tzdata` decides every DST rule and the feed bytes do not depend on the host | NFR-O3, FR-6 | unit | exists |
 
 ## 7. Orchestration and config (fakes: scripted fetcher, fake clock, `tmp_path`)
@@ -195,14 +195,14 @@ the expected-blocks oracle assumes until the spec changes.
 |---|---|---|---|---|
 | ORCH-FETCH-1 | 10 s timeout reaches the opener; a timeout is retried: four attempts with injected backoff 1, 2, 4 s, then failure | FR-1, Q-15 | unit | exists |
 | ORCH-FETCH-2 | 500, 502, 503 retried; every 4xx, `401`, `403` and `429` included, fails at once after exactly one request (a retry would deepen a brute-force lockout); one 503 then 207 → success | FR-1, Q-15 | unit | exists |
-| ORCH-FETCH-3 | Any fetch or parse failure → `feed.ics` bytes and mtime unchanged, `last_error` set, `last_success` unchanged, one-shot exit code 1 | AC-7, D-7d, FR-8 | unit | planned |
+| ORCH-FETCH-3 | Any fetch or parse failure → `feed.ics` bytes and mtime unchanged, `last_error` set, `last_success` unchanged, one-shot exit code 1 | AC-7, D-7d, FR-8 | unit | exists |
 | ORCH-FETCH-4 | Body over the 16 MiB cap → aborted mid-stream and not retried, failure as in FETCH-3; a body of exactly 16 MiB is read whole; a PROPFIND answer over 64 KiB fails before it is parsed | Q-15 | unit | exists |
 | ORCH-FETCH-5 | 301, 302, 307, 308 never followed → failure whose error names the status and the Location host; a second port named in `Location` receives no request | NFR-S7 | unit | exists |
 | ORCH-FETCH-6 | Basic auth header built from `CALDAV_USER` and `CALDAV_SECRET` | FR-1, NFR-S2 | unit | planned |
 | ORCH-FETCH-7 | REPORT carries `Depth: 1`; its body has `<C:time-range>` and `<C:expand>` over the same UTC window (`…Z`); only `enabled` calendars are requested, in config order | FR-1, AC-10 | unit | exists |
 | ORCH-FETCH-8 | PROPFIND `Depth: 0` guard before each REPORT fails the refresh (feed kept, calendar named by index) when the href is a collection but no calendar, the owner is the service user, or the privilege set holds `{DAV:}write`; a read-only calendar passes (`read` and `write-properties`, as Nextcloud grants a read-only share); a missing or unreadable property fails closed; a 207 without responses on a non-calendar never reaches success | FR-1, NFR-S3, Q-16 | unit | exists |
 | ORCH-FETCH-9 | The first request already carries `Authorization` (exactly one request per successful fetch, none without it); a `Set-Cookie` is never sent back | FR-1 | unit | exists |
-| ORCH-FETCH-10 | Calendars are fetched, parsed and reduced one at a time: with ten fake calendars at most one response body is alive (counter in the fake transport) | Q-15 | unit | planned |
+| ORCH-FETCH-10 | Calendars are fetched, parsed and reduced one at a time: with ten fake calendars at most one response body is alive (counter in the fake transport) | Q-15 | unit | exists |
 | ORCH-FETCH-11 | A refused connection is not retried: one attempt, then a failure that names the refused connection (only timeouts and 5xx are retried) | FR-1, Q-15 | unit | exists |
 | ORCH-FETCH-12 | No failure text or debug output carries server bytes or the credential: an answer that breaks off or is no HTTP (bad status line, cut chunked body, over 100 headers, no answer) fails as `connection failed: <class>`, its text kept out even of `__context__`; a `CALDAV_USER` or `CALDAV_SECRET` that UTF-8 cannot encode is refused by key; a process-wide `http.client` debug level prints no `Authorization` | NFR-P4, NFR-S2, T-10 | unit | exists |
 | ORCH-NET-1 | `CALDAV_URL` with an untrusted TLS certificate fails the refresh; the feed stays byte-identical | NFR-S7 | unit | planned |
@@ -210,34 +210,34 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-NET-3 | The contract suite's plain-HTTP switch is test-only: production code never reads it, so with the switch absent an `http` URL is rejected | NFR-S7 | unit | planned |
 | ORCH-WRITE-1 | Success → unique temp file in the feed's own directory, `fsync`, `os.replace`, directory `fsync`; no `*.tmp` left; `feed.ics` mode `0644`, var dir `0700` | FR-8, NFR-S4 | unit | exists |
 | ORCH-WRITE-2 | Failure injected after the temp write, before the replace → old feed intact, temp file removed | AC-7, FR-8 | unit | exists |
-| ORCH-WRITE-3 | Crash injected between `os.replace` and the state write → next run: byte-identical feed, state repaired | AC-6, AC-7 | unit | planned |
-| ORCH-WRITE-4 | State is written atomically; a corrupt or missing `state.json` counts as absent, the refresh still works, `/healthz` is 503 until the next success | FR-8, FR-11 | unit | planned |
+| ORCH-WRITE-3 | Crash injected between `os.replace` and the state write → next run: byte-identical feed, state repaired | AC-6, AC-7 | unit | exists |
+| ORCH-WRITE-4 | State is written atomically; a corrupt or missing `state.json` counts as absent, the refresh still works, `/healthz` is 503 until the next success | FR-8, FR-11 | unit | exists |
 | ORCH-WRITE-5 | Injected `ENOSPC` (full disk) → previous feed byte-identical | AC-7, FR-8 | unit | exists |
 | ORCH-CFG-1 | `enabled: false` edited between two runs → that calendar's blocks are gone, no restart; config is re-read every refresh, also after an edit that replaces the file (write and rename) | AC-10, FR-12 | unit | planned |
 | ORCH-CFG-2 | Invalid config fails before any request, keeps the old feed and names only the field: unknown `tz`, a `grid_minutes` that fails CORE-RND-8, empty `calendars`, zero calendars with `enabled: true`, duplicate hrefs, `owner_emails` not a list | AC-22, Q-16 | unit | planned |
-| ORCH-CFG-3 | Missing `CALDAV_SECRET` → exit 2, message names the variable only | NFR-S2, NFR-O1 | unit | planned |
+| ORCH-CFG-3 | Missing `CALDAV_SECRET` → exit 2, message names the variable only | NFR-S2, NFR-O1 | unit | exists |
 | ORCH-CFG-4 | Unknown key → rejected, names the key never the value; a key named like the secret variable is rejected too; the committed example configuration holds no secret, is refused naming `uid_salt` as committed and passes the loader once an `init`-shaped salt is pasted; a `uid_salt` other than 32 lower-case hex characters is rejected | AC-22, NFR-S2 | unit | exists |
 | ORCH-CFG-5 | No `window_days` → 33-day window; 0 and 91 rejected, 1 and 90 accepted | D-6, AC-22 | unit | exists |
 | ORCH-CFG-6 | Missing `uid_salt` → exit non-zero, names the key, no request, old feed kept; `refresh` never generates a salt | Q-13, AC-22, NFR-O1 | unit | planned |
 | ORCH-CFG-7 | Plaintext `token` key → rejected, names the field never the value; `token_sha256` that is not 64 hex characters → refresh fails | D-14, AC-22 | unit | planned |
 | ORCH-CFG-8 | Control character in a string that reaches the output (`summary`) → configuration error before any request | FR-7, AC-22 | unit | planned |
-| ORCH-CFG-9 | `CALDAV_URL` not `https` → refresh fails before any request, keeps the feed, names only the variable | NFR-S7, AC-22 | unit | planned |
-| ORCH-CFG-10 | Hrefs `https://other/x`, `//other/x`, `file:///etc/passwd`, `/a/../b`, `/a/%2e%2e/b` → configuration error with zero outbound requests; a valid href with percent-encoding is requested byte for byte | NFR-S7, AC-22 | unit | planned |
+| ORCH-CFG-9 | `CALDAV_URL` not `https` → refresh fails before any request, keeps the feed, names only the variable | NFR-S7, AC-22 | unit | exists |
+| ORCH-CFG-10 | Hrefs `https://other/x`, `//other/x`, `file:///etc/passwd`, `/a/../b`, `/a/%2e%2e/b` → configuration error with zero outbound requests; a valid href with percent-encoding is requested byte for byte | NFR-S7, AC-22 | unit | exists |
 | ORCH-CFG-11 | A changed configuration logs the names of the changed keys, never values (toggling `enabled` logs one line naming the key) | AC-22 | unit | planned |
 | ORCH-CFG-12 | `MILCHGLAS_CONFIG` names the configuration file for `refresh` and `web`; unset, it is `./config.json` | D-16 | unit | planned |
 | ORCH-CFG-13 | `ttl_seconds` 0 and below is rejected naming the key; 1, the smallest positive value, and 900 are accepted | AC-22, FR-7 | unit | exists |
-| ORCH-EMPTY-1 | Every enabled calendar passes the guard and returns zero events → valid header-only feed written, invariants pass, `last_success` set; distinct from a failure | Q-16, NFR-R1 | unit | planned |
+| ORCH-EMPTY-1 | Every enabled calendar passes the guard and returns zero events → valid header-only feed written, invariants pass, `last_success` set; distinct from a failure | Q-16, NFR-R1 | unit | exists |
 | ORCH-EMPTY-2 | State records the returned object count per calendar; a calendar dropping from non-zero to zero, and a feed dropping from non-empty to zero blocks, each record one warning with counts only in state and log | Q-16 | unit | planned |
 | ORCH-LOG-1 | Full refresh over fixtures with sentinels (also malformed SUMMARY, DESCRIPTION, LOCATION) at `MILCHGLAS_LOG_LEVEL=DEBUG` → no log record (message, args, exception text), no stdout or stderr line, no state field holds a sentinel | AC-8, NFR-P1 | unit | planned |
 | ORCH-LOG-2 | `CALDAV_SECRET`, its base64 form, the `Authorization` header and the feed token (distinct injected values) appear in no log record, exception text, stdout or stderr, state field or HTTP response | AC-8, NFR-S2, NFR-S5 | unit | planned |
 | ORCH-LOG-3 | A library error whose message quotes the value (`BBY-`) → the record holds exception class, calendar index and HTTP status only; no line names a calendar or an href | NFR-P4, AC-8 | unit | planned |
-| ORCH-LOG-4 | Exactly one summary line per refresh with counts only: calendars, objects, blocks, duration, outcome | NFR-O1, NFR-P4 | unit | planned |
+| ORCH-LOG-4 | Exactly one summary line per refresh with counts only: calendars, objects, blocks, duration, outcome | NFR-O1, NFR-P4 | unit | exists |
 | ORCH-LOG-5 | `DEBUG` never enables `http.client` debug output; a `401`, `429` or timeout reports status or exception class only, no credential text | NFR-P4, NFR-S2 | unit | planned |
 | ORCH-LOOP-1 | `--loop --interval 900` with fake clock and injected sleep runs at t0, t0+900, …; a failing run does not end the loop | FR-10 | unit | planned |
 | ORCH-LOOP-2 | SIGTERM during a run → the run finishes its write, exit 0; SIGTERM while sleeping → immediate exit (in-process handler call, plus one subprocess smoke test with a real signal) | NFR-O1 | unit | planned |
-| ORCH-LOCK-1 | Second refresh while the var-dir lock is held → non-zero exit, feed and state untouched, one complete feed remains | FR-8, AC-7 | unit | planned |
+| ORCH-LOCK-1 | Second refresh while the var-dir lock is held → non-zero exit, feed and state untouched, one complete feed remains | FR-8, AC-7 | unit | exists |
 | ORCH-CLI-1 | `refresh --now 2026-09-28T00:00:00+02:00` pins the clock; a naive `--now` is rejected | FR-5 | unit | planned |
-| ORCH-CLI-2 | `refresh --dry-run` prints counts and timestamps only, writes neither feed nor state (mtimes unchanged) and takes no lock; no command prints raw source data | NFR-O1 | unit | planned |
+| ORCH-CLI-2 | `refresh --dry-run` prints counts and timestamps only, writes neither feed nor state (mtimes unchanged) and takes no lock; no command prints raw source data | NFR-O1 | unit | exists |
 | ORCH-CLI-3 | `init` prints once the token and the members `"uid_salt"` and `"token_sha256"` (hex SHA-256 of the token as UTF-8 bytes) and writes no file: working directory, state directory and `config.json` are unchanged | D-14, NFR-O1, Q-13 | unit | exists |
 | ORCH-CLI-4 | `rotate-token` prints a new token and its `"token_sha256"` and writes no file; the token is the URL-safe encoding of 32 CSPRNG bytes (256 bits), two runs differ | D-14, NFR-S1, AC-20 | unit | exists |
 | ORCH-CLI-5 | The printed token appears nowhere except the output of `init` and `rotate-token` (logs, state, feed, config searched) | NFR-S2, NFR-S5 | unit | exists |
