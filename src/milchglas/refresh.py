@@ -9,12 +9,15 @@ and HTTP status only (G5, D-7d, NFR-P4).
 import contextlib
 import dataclasses
 import logging
-import threading
+import os
+import select
+import signal
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from typing import Protocol
 
 from milchglas import __version__
 from milchglas.config import Calendar, Config, ConfigError, load
@@ -108,11 +111,57 @@ def refresh(  # noqa: PLR0913 - everything after `now` is a keyword-only switch
     return report
 
 
+class Stop(Protocol):
+    """What `loop` asks of its stop signal: the part of `threading.Event` it uses."""
+
+    def is_set(self) -> bool: ...
+
+    def wait(self, timeout: float) -> bool: ...
+
+
+class SignalStop:
+    """Set by SIGTERM without taking a lock (a `threading.Event` would, and can deadlock).
+
+    The handler only flips a flag. The wakeup fd receives one byte per signal at C level,
+    so a `wait` already in `select` returns at once, and a signal that lands between the
+    flag check and `select` still leaves a byte to read.
+    """
+
+    def __init__(self) -> None:
+        self._set = False
+        self._read, self._write = os.pipe()
+        for fd in (self._read, self._write):
+            os.set_blocking(fd, False)
+        self._previous_fd = signal.set_wakeup_fd(self._write)
+        self._previous_handler = signal.signal(signal.SIGTERM, self._handle)
+
+    def _handle(self, _signum: int, _frame: object) -> None:
+        self._set = True
+
+    def is_set(self) -> bool:
+        return self._set
+
+    def wait(self, timeout: float) -> bool:
+        if not self._set:
+            select.select([self._read], [], [], max(timeout, 0))
+        with contextlib.suppress(BlockingIOError):
+            while os.read(self._read, 512):
+                pass
+        return self._set
+
+    def close(self) -> None:
+        """Restore the previous handler and wakeup fd, then close the pipe."""
+        signal.signal(signal.SIGTERM, self._previous_handler)
+        signal.set_wakeup_fd(self._previous_fd)
+        os.close(self._read)
+        os.close(self._write)
+
+
 def loop(
     run_once: Callable[[], object],
     *,
     interval: float,
-    stop: threading.Event,
+    stop: Stop,
     clock: Callable[[], float] = time.monotonic,
 ) -> int:
     """Run at t0, t0 + interval, ... until `stop` is set; return the exit code 0 (FR-10).
