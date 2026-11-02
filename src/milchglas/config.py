@@ -6,6 +6,7 @@ value pasted into the wrong place (a token, a password) must not reach a log lin
 
 import json
 import re
+import urllib.parse
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -35,6 +36,8 @@ _KEYS = frozenset(
     }
 )
 _CALENDAR_KEYS = frozenset({"href", "name", "enabled"})
+# A query, a fragment, a backslash, whitespace or any control character.
+_UNSAFE_HREF = re.compile(r"[?#\\\s\x00-\x1f\x7f]")
 _MAX_WINDOW_DAYS = 90
 
 
@@ -194,6 +197,9 @@ def _calendars(entries: list[object]) -> tuple[Calendar, ...]:
             name=_get(entry, "name", str, where=f"{key}."),
             enabled=_get(entry, "enabled", bool, where=f"{key}."),
         )
+        if not _is_href(calendar.href):
+            msg = f"{key}.href: must be an absolute path without scheme, host or dot segments"
+            raise ConfigError(msg)
         if calendar.href in {known.href for known in calendars}:
             # Named by index: a calendar's href and name stay out of every message (NFR-P4).
             msg = f"{key}.href: duplicate"
@@ -203,6 +209,18 @@ def _calendars(entries: list[object]) -> tuple[Calendar, ...]:
         msg = "calendars: at least one calendar must be enabled"
         raise ConfigError(msg)
     return tuple(calendars)
+
+
+def _is_href(href: str) -> bool:
+    """An absolute path on `CALDAV_URL`'s origin, as the PROPFIND answer spells it (NFR-S7).
+
+    `origin + href` must stay on the origin: anything but a leading single slash, a scheme,
+    a query, a fragment, a control character or a dot segment, decoded or not, could move
+    the request and its credential elsewhere.
+    """
+    if not href.startswith("/") or href.startswith("//") or _UNSAFE_HREF.search(href):
+        return False
+    return all(urllib.parse.unquote(segment) not in {".", ".."} for segment in href.split("/"))
 
 
 def _digest(value: object) -> str:
