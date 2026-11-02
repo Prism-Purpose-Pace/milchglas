@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
-from typing import override
+from typing import final, override
 
 import pytest
 
@@ -36,6 +36,7 @@ class Clock:
     waits: list[float] = field(default_factory=list)
 
 
+@final
 class FakeStop(threading.Event):
     """`wait` moves the fake clock instead of sleeping; `stop_after` waits end the loop."""
 
