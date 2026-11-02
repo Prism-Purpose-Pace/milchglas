@@ -15,9 +15,7 @@ import json
 import logging
 import os
 import secrets
-import signal
 import sys
-import threading
 import urllib.parse
 import zoneinfo
 from collections.abc import Mapping, Sequence
@@ -25,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from milchglas.config import config_path
-from milchglas.refresh import ConfigWatch, loop, refresh
+from milchglas.refresh import ConfigWatch, SignalStop, loop, refresh
 from milchglas.sources.caldav import Account
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -78,16 +76,18 @@ def _refresh(environ: Mapping[str, str], *, dry_run: bool, interval: int | None 
         sys.stderr.write(f"milchglas: {error}\n")
         return 2
     if interval is not None:
-        stop, watch = threading.Event(), ConfigWatch()
-        # SIGTERM only sets the event: a run in progress finishes its write first.
-        signal.signal(signal.SIGTERM, lambda _signum, _frame: stop.set())
-        return loop(
-            lambda: refresh(
-                config_path(environ), var_dir, account, now=datetime.now(UTC), watch=watch
-            ),
-            interval=interval,
-            stop=stop,
-        )
+        # SIGTERM only sets a flag: a run in progress finishes its write first.
+        stop, watch = SignalStop(), ConfigWatch()
+        try:
+            return loop(
+                lambda: refresh(
+                    config_path(environ), var_dir, account, now=datetime.now(UTC), watch=watch
+                ),
+                interval=interval,
+                stop=stop,
+            )
+        finally:
+            stop.close()
     try:
         report = refresh(
             config_path(environ), var_dir, account, now=datetime.now(UTC), dry_run=dry_run
