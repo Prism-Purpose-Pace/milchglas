@@ -173,7 +173,7 @@ stamp=$(date -u +%Y%m%dT%H%M%SZ)
 put() {
   local uid=$1 body=$2
   local code
-  code=$(printf 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//milchglas//smoke//EN\r\nBEGIN:VEVENT\r\nUID:%s\r\nDTSTAMP:%s\r\n%sEND:VEVENT\r\nEND:VCALENDAR\r\n' \
+  code=$(printf 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//milchglas//smoke//EN\r\nBEGIN:VEVENT\r\nUID:%s\r\nDTSTAMP:%s\r\n%bEND:VEVENT\r\nEND:VCALENDAR\r\n' \
     "$uid" "$stamp" "$body" |
     dav -o /dev/null -w '%{http_code}' -u "owner:$owner_pass" -X PUT \
       -H 'Content-Type: text/calendar; charset=utf-8' --data-binary @- "$calendar/$uid.ics")
