@@ -6,7 +6,7 @@
 
 **Status:** Draft · **Date:** 2026-10-21 · **Supersedes:** Architecture & Implementation Concept v0.1 (2026-09-13), now folded into Sections 7, 9 and 12 of this PRD.
 
-> **For contributors and AI agents:** Section 0 explains the markers used. Build the MVP scope (Section 6, "MVP" column) first. Everything in Section 12 is backlog and must not be pulled forward without an explicit maintainer decision. Deployment options are in Section 9; the default target is Option B unless the maintainer decides otherwise (Decision D-9).
+> **For contributors and AI agents:** Section 0 explains the markers used. Build the MVP scope (Section 6, "MVP" column) first. Everything in Section 12 is backlog and must not be pulled forward without an explicit maintainer decision. Deployment options are in Section 9; the target is Option B (Decision D-9).
 
 ---
 
@@ -191,7 +191,7 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 | D-6 | Window: today → +33 days (meetergo's default booking window of 30 calendar days, today, and a two-day buffer for refresher outages) | Proposed; confirm [OPEN Q-2] | Covers the booking horizon with a staleness margin; shorter windows leave bookable days |
 | D-7 | Mandatory even in MVP: (a) correct recurrence expansion, (b) merged intervals (set union), (c) deterministic UIDs, (d) never overwrite the last good feed on failure | Decided | Correctness and safety, not architecture |
 | D-8 | Output as `VEVENT`s in UTC, all-day as `DATE`, `SUMMARY` "Blocker Privat" (configurable), `TRANSP:OPAQUE` | Proposed; decided after AC-0.1 and AC-0.2 pass with the shipped header and one `VALUE=DATE` block | OX and meetergo consume VEVENTs; UTC avoids VTIMEZONE; stable UIDs prevent OX churn. Without `METHOD`, RFC 5545 section 3.8.7.2 defines DTSTAMP as the last revision of the component, which is what Milchglas emits (D-7c). If either consumer rejects the `METHOD`-less header in AC-0.1 or AC-0.2, `METHOD:PUBLISH` returns and D-7c records that a regenerated, byte-identical feed is the same object instance. |
-| D-9 | Deployment target | **Open — see Section 9**; recommendation: Option B now | |
+| D-9 | Deployment target: Option B, Docker containers on the operator's self-hosted PaaS; the core stays deployable as Option A | Decided 2026-11-02 | The platform is already in operation and deploys by Git push; Option A stays the landing spot if the PaaS is dropped (Section 9.2) |
 | D-10 | Documentation language English; runbook may be German | Proposed [OPEN Q-7] | Maintainer defaults |
 | D-11 | Secrets only via environment (or `0600` file); never entered or shown in any UI | Proposed | Avoids crypto dependency; standard on self-hosted PaaS platforms |
 | D-12 | Implementation language for the MVP: Python 3.12 (NFR-O3); a rewrite (e.g. Go) is evaluated only after the MVP works and is deployed (Section 12) | Decided 2026-10-21 | Toolchain, gates and test plan exist in Python; an evaluation of Go for testability, scalability, extensibility and security found no gain for the MVP that outweighs switching now |
@@ -355,7 +355,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 - **Effort:** 1 evening if a VPS with free ports exists; +1 hour for Caddy/TLS.
 - **Pros:** minimal moving parts; best hardening; no Docker.  **Cons:** awkward when the PaaS host already owns ports 80/443; a second VPS adds cost and upkeep; no Git-push deploys.
 
-### Option B — Docker container(s) on a self-hosted PaaS (recommended for now)
+### Option B — Docker container(s) on a self-hosted PaaS (the target, D-9)
 - **Shape:** one image (`python:3.12-slim`, non-root UID, `read_only` FS, `tmpfs /tmp`, volume for state). Compose services: `web` (gunicorn serving `/f/<token>.ics` and `/healthz`) and `refresher` (`python -m milchglas refresh --loop --interval 900`). Traefik (or the PaaS's built-in proxy) provides TLS on an operator-chosen subdomain, e.g. `k7q2.example.org`. Python 3.12 receives security fixes only and reaches end of life around 2028-10 (PEP 693); the image moves to a newer minor before then.
   - Hardening, both services: non-root `user`, `read_only: true`, `tmpfs /tmp`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `ulimits: core: 0`, memory and pids limits, no Docker socket; the volume mounted read-only in `web`; `config.json` read-only in both; only `web` publishes a port. The Dockerfile pins `python:3.12-slim` by digest, installs only with `uv sync --frozen --no-dev`, and creates and chowns the state directory (a non-root process can write an empty named volume only then). Dependabot watches the image with an ignore rule that holds the 3.12 minor. Whether the platform keeps `read_only`, `cap_drop`, `security_opt` and `tmpfs` is unverified until `docker inspect` checks it after deployment (AC-13).
   - gunicorn runs with `--no-control-socket` (since 25.1.0 it opens a control socket under `$XDG_RUNTIME_DIR` or `$HOME/.gunicorn` by default, which fails on a read-only root and is only logged), `--worker-tmp-dir /tmp`, no access log, and a worker timeout.
@@ -400,7 +400,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | Effort to MVP | ~1 evening | ~1 evening | 2–3 evenings | 1–2 evenings |
 | Portability of state | copy dir ★ | copy volume ★ | copy app root | copy dir |
 
-### 9.2 Recommendation (for D-9)
+### 9.2 Recommendation (decided as D-9)
 1. **Now: Option B.** A single container host is the most common self-hosting setup, deploys by Git push, and keeps the Python core host-independent. Build the MVP there first.
 2. **Keep the core deployable as Option A**: the shared Python core needs no change for it, and it is the cleanest landing spot if the PaaS is ever dropped, whether on a new VPS or the same one without the PaaS. The unit files themselves stay in the backlog (Section 12) until a move off the PaaS host is planned.
 3. **If shared hosting is a hard requirement, choose D over C.** Cron and static serving are first-class on shared hosting; Passenger-Python is not. Accept the PHP port and reuse the golden fixtures so both implementations must produce byte-identical feeds.
@@ -494,7 +494,7 @@ All four options share Sections 6–8 unless stated. Differences are in scheduli
 | Q-5 | Mobile subscription wanted in v1? | no |
 | Q-6 | Hostname (operator-chosen subdomain?) and DNS location | an operator-chosen subdomain, e.g. `k7q2.example.org` |
 | Q-7 | Runbook / consumer docs in German? | German |
-| Q-8 | Deployment decision D-9: B now, A later? Or D because shared hosting must host it? | B |
+| Q-8 | Deployment decision D-9: B now, A later? Or D because shared hosting must host it? | Answered 2026-11-02: B now, A as the landing spot (D-9) |
 | Q-9 | A timed busy block overlaps an all-day busy block: merge them into one, or keep both? | Keep both; the no-overlap, no-touch rule of AC-1 applies per kind |
 | Q-10 | Tentative flag of a merged block when tentative and confirmed events overlap | Tentative only if every merged interval is tentative (the MVP emits tentative as plain busy, FR-14) |
 | Q-11 | Does the owner's own `PARTSTAT=TENTATIVE` mark a block as tentative? | Yes, same as `STATUS:TENTATIVE` |
