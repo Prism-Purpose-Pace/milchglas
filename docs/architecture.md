@@ -61,9 +61,8 @@ anonymous feed (spec D-4). Nextcloud sharing is used for least privilege, never 
 
 ## 2. Containers (Option B, default)
 
-Option B is the recommended target: one image, two Compose services on a self-hosted PaaS
-(for example Coolify), TLS from the platform's edge proxy (spec section 9, Option B; D-9
-recommendation in 9.2). Option A reuses the same containers (see the Option A part below).
+Option B is the deployment target (D-9): one image, two Compose services on a self-hosted
+PaaS (for example Coolify), TLS from the platform's edge proxy (spec section 9, Option B). Option A reuses the same containers (see the Option A part below).
 
 ![Container view, Option B: event content exists only in the refresher's memory; web serves the reduced feed from the shared volume](diagrams/c4-container.svg)
 
