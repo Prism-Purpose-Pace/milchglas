@@ -42,6 +42,8 @@ EXPOSE 8000
 # Liveness only: 200 or 503 from /healthz passes, silence fails (WEB-17, D-7d).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["python", "-m", "milchglas.web.liveness"]
-# `web`. The refresher's command is set in compose.yaml.
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "30", \
+# `web`. The refresher's command is set in compose.yaml. The config module only filters
+# gunicorn's error log, which would otherwise quote request lines (WEB-21, NFR-S5).
+CMD ["gunicorn", "--config", "python:milchglas.web.gunicorn_conf", \
+     "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "30", \
      "--no-control-socket", "--worker-tmp-dir", "/tmp", "milchglas.web.wsgi:create()"]
