@@ -41,7 +41,7 @@ class RequestRedaction(logging.Filter):
         return True
 
 
-def on_starting(server: object) -> None:  # noqa: ARG001  (gunicorn's hook signature)
+def on_starting(_server: object) -> None:
     """The gunicorn hook: install the filter once on its error and access loggers."""
     for name in ("gunicorn.error", "gunicorn.access"):
         logger = logging.getLogger(name)

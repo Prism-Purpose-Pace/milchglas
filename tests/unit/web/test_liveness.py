@@ -24,7 +24,7 @@ def _server(status: int) -> ThreadingHTTPServer:
             self.end_headers()
 
         @override
-        def log_message(self, *_args: object) -> None:
+        def log_message(self, format: str, *args: object) -> None:
             pass
 
     return ThreadingHTTPServer(("127.0.0.1", 0), Answer)
