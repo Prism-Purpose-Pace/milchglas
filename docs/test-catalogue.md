@@ -270,7 +270,7 @@ the expected-blocks oracle assumes until the spec changes.
 | WEB-14 | Run-time re-read finds a malformed or truncated `token_sha256`, or an unparsable `config.json`: `web` keeps the last valid digest (old token 200, anything else the identical 404), logs one line naming the key (no value) on every re-read, `/healthz` is 503; after the fix it is 200 and the new token works within one re-read | Q-23, FR-11 | unit | exists |
 | WEB-15 | An invalid unrelated key (for example `grid_minutes` 7) beside a valid `token_sha256`: the right token still gets 200 and `/healthz` is unaffected, because `web` reads only `token_sha256` | Q-23, NFR-S1 | unit | exists |
 | WEB-16 | Refresh against an unreachable source: the feed is unchanged and `/healthz` turns 503 once 60 min have passed (fake clock) | AC-7, FR-11 | unit | planned |
-| WEB-17 | Container health check tests liveness only: with `state.json` two hours old `/healthz` is 503 and the `web` container stays `healthy`; it passes on any HTTP answer, 200 or 503 (a stub answering 503 → exit 0), and fails only when nothing answers | AC-21, FR-11, D-7d | gate | planned |
+| WEB-17 | Container health check tests liveness only: with `state.json` two hours old `/healthz` is 503 and the `web` container stays `healthy`; it passes on any HTTP answer, 200 or 503 (a stub answering 503 → exit 0), and fails only when nothing answers | AC-21, FR-11, D-7d | gate | exists |
 
 ## 10. Gates (`GATE-n` automated, `MAN-n` executed by the maintainer; results go into `docs/consumers.md` or `docs/runbook.md`)
 
