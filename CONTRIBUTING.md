@@ -145,6 +145,10 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
   release notes are unchanged. A daily branch whose commit fails `public-guard` or
   `secret-scan` is replaced by a new one (`…/day-YYYY-MM-DD-2`); it is never
   force-pushed.
+- Once the daily pull request is marked ready, nothing more is pushed to its branch: a push
+  dismisses the approval. Later work goes into the next daily branch. If `main` moved,
+  "Update branch" brings it in; when that update needs a conflict resolution, GitHub can no
+  longer rebase-merge the branch, so the day's commits move to a new branch instead.
 - A pull request of its own, never part of a daily pull request: changes to CI and
   tooling (`.github/`, `scripts/`, `.pre-commit-config.yaml`), to dependencies
   (`pyproject.toml`, `uv.lock`), to deployment (`deploy/`), to the web surface
