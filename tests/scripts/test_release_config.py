@@ -17,6 +17,21 @@ import milchglas
 
 REPO = Path(__file__).resolve().parents[2]
 LOCK_JSONPATH = "$.package[?(@.name.value=='milchglas')].version"
+# Every commit type the commit-msg hook accepts (scripts/check_commit_msg.py) plus the
+# revert git writes; the changelog must place each of them.
+COMMIT_TYPES = {
+    "feat",
+    "fix",
+    "perf",
+    "revert",
+    "docs",
+    "style",
+    "chore",
+    "refactor",
+    "test",
+    "build",
+    "ci",
+}
 
 
 def test_uv_lock_extra_file_uses_the_tagged_toml_jsonpath() -> None:
@@ -83,4 +98,22 @@ def test_dependabot_cuts_a_release_only_for_what_the_image_ships() -> None:
         "uv": {"prefix": "fix", "prefix-development": "build", "include": "scope"},
         "docker": {"prefix": "fix", "include": "scope"},
         "github-actions": {"prefix": "ci", "include": "scope"},
+    }
+
+
+def test_changelog_lists_the_updates_that_cut_no_release() -> None:
+    # Custom sections replace the preset's whole list (conventional-changelog-
+    # conventionalcommits, whose default hides build and ci), so every type is listed.
+    # Shown build and ci sections put each dev-package and action update into the notes
+    # of the next release, next to the runtime updates under Bug Fixes.
+    config = json.loads((REPO / "release-please-config.json").read_text(encoding="utf-8"))
+    sections = {entry["type"]: entry.get("hidden", False) for entry in config["changelog-sections"]}
+    assert set(sections) == COMMIT_TYPES
+    assert {kind for kind, hidden in sections.items() if not hidden} == {
+        "feat",
+        "fix",
+        "perf",
+        "revert",
+        "build",
+        "ci",
     }
