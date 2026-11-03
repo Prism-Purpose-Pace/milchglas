@@ -1,6 +1,7 @@
 ## What and why
 
-<!-- One concern per pull request. Link the issue: "Closes #…" -->
+<!-- One concern per pull request, or a daily pull request with one concern per commit
+(CONTRIBUTING.md § Pull requests): list each commit's concern. Link the issues: "Closes #…" -->
 
 ## How it was verified
 

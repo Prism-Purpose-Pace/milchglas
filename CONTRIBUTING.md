@@ -136,7 +136,44 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
 
 ## Pull requests
 
-- Branch from `main`; one concern per pull request.
+- Branch from `main`; one concern per commit. An outside contribution is one concern per
+  pull request.
+- The maintainer's own work, and an agent's, is bundled per working day so that it needs
+  one review a day: one daily pull request from a branch named `…/day-YYYY-MM-DD` takes
+  the routine commits of that day (docs, tests, refactors, features outside the paths
+  below) and is rebase-merged at the end of the day. Rebase keeps every commit, so the
+  release notes are unchanged. Run `git pull --rebase` before each push, because other
+  sessions push to the same branch.
+- A daily branch whose commit fails `public-guard` or `secret-scan` is never force-pushed.
+  The failing commit stays public on the old branch and its pull request ref, so close the
+  pull request, delete the branch, rotate whatever leaked and report it as SECURITY.md
+  describes; the day's clean commits move to a new branch with the next free suffix
+  (`…/day-YYYY-MM-DD-2`, `-3`, …).
+- Once the daily pull request is marked ready, nothing more is pushed to its branch: a push
+  dismisses the approval. Later work goes into the next working day's branch, or, when it
+  cannot wait, into a new branch of the same day with the next free suffix
+  (`…/day-YYYY-MM-DD-2`). If `main` moved,
+  "Update branch" in its merge variant (never "Update with rebase", which force-pushes) is
+  the one push allowed after ready, and it needs a fresh approval; when that update needs a
+  conflict resolution, GitHub can no longer rebase-merge the branch, so the day's commits
+  move to a new branch instead.
+- A daily pull request merges only at the head that was approved: `gh pr merge N --rebase
+  --match-head-commit <approved SHA>` (TOOLING.md § Maintainer operations), so a push that
+  lands after the review cannot ride along.
+- A pull request of its own, never part of a daily pull request: changes to CI and
+  tooling (`.github/`, `scripts/`, `.pre-commit-config.yaml`), to the gate tests
+  (`tests/meta/`) and the type-check baseline (`.basedpyright/`), to dependencies
+  (`pyproject.toml`, `uv.lock`), to deployment (`deploy/`, `Dockerfile`, `.dockerignore`),
+  to the web surface (`src/milchglas/web/`), to the pipeline core and the feed output
+  (`src/milchglas/core/model.py`, `src/milchglas/core/reduce.py`,
+  `src/milchglas/core/emit.py`), to configuration, token and the last good feed
+  (`src/milchglas/config.py`, `src/milchglas/__main__.py`, `src/milchglas/state.py`,
+  `src/milchglas/refresh.py`), to the CalDAV source (`src/milchglas/sources/`), to the rule
+  files (`REVIEW.md`, `AGENTS.md`, `CLAUDE.md`, `SECURITY.md`, `CONTRIBUTING.md`), anything
+  else the REVIEW.md profile "Security-sensitive changes" covers (tokens, authentication,
+  parsing of external input, workflows), release pull requests and Dependabot. Everything
+  else is routine. A daily pull request that touches one of these paths is a BLOCK finding
+  (REVIEW.md RV-10).
 - All required checks must be green: lint, typecheck, test, public-guard, secret-scan,
   osv-scan, dependency-review and zizmor; CodeQL must report no new alert of severity
   error and no security alert of high or above.

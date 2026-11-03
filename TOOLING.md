@@ -124,6 +124,13 @@ bypass, so the checks still bind.
 gh pr merge N --rebase --admin
 ```
 
+A daily pull request (CONTRIBUTING.md § Pull requests) merges without `--admin` and only at
+the approved head, so a later push from another session cannot ride along:
+
+```bash
+gh pr merge N --rebase --match-head-commit <approved SHA>
+```
+
 A release PR is opened with `GITHUB_TOKEN`, so its checks do not start on their own.
 Close and reopen it to run them, wait for the required checks, then merge it:
 
