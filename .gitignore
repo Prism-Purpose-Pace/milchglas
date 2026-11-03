@@ -29,3 +29,6 @@ mutants/
 .env
 .env.local
 .env.*.local
+# The live configuration holds the token hash, the UID salt, owner e-mails and calendar
+# hrefs; only config.example.json is tracked.
+/config.json
