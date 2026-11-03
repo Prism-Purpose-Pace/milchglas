@@ -150,14 +150,19 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
   "Update branch" brings it in; when that update needs a conflict resolution, GitHub can no
   longer rebase-merge the branch, so the day's commits move to a new branch instead.
 - A pull request of its own, never part of a daily pull request: changes to CI and
-  tooling (`.github/`, `scripts/`, `.pre-commit-config.yaml`), to dependencies
-  (`pyproject.toml`, `uv.lock`), to deployment (`deploy/`), to the web surface
-  (`src/milchglas/web/`), to content reduction and the feed output
-  (`src/milchglas/core/reduce.py`, `src/milchglas/core/emit.py`), to the last good feed
-  (`src/milchglas/state.py`), to the CalDAV source (`src/milchglas/sources/`), anything
-  else the REVIEW.md profile
-  "Security-sensitive changes" covers (tokens, authentication, parsing of external input,
-  workflows), release pull requests and Dependabot.
+  tooling (`.github/`, `scripts/`, `.pre-commit-config.yaml`), to the gate tests
+  (`tests/meta/`) and the type-check baseline (`.basedpyright/`), to dependencies
+  (`pyproject.toml`, `uv.lock`), to deployment (`deploy/`, `Dockerfile`, `.dockerignore`),
+  to the web surface (`src/milchglas/web/`), to the pipeline core and the feed output
+  (`src/milchglas/core/model.py`, `src/milchglas/core/reduce.py`,
+  `src/milchglas/core/emit.py`), to configuration, token and the last good feed
+  (`src/milchglas/config.py`, `src/milchglas/__main__.py`, `src/milchglas/state.py`,
+  `src/milchglas/refresh.py`), to the CalDAV source (`src/milchglas/sources/`), to the rule
+  files (`REVIEW.md`, `AGENTS.md`, `CLAUDE.md`, `SECURITY.md`, `CONTRIBUTING.md`), anything
+  else the REVIEW.md profile "Security-sensitive changes" covers (tokens, authentication,
+  parsing of external input, workflows), release pull requests and Dependabot. Everything
+  else is routine. A daily pull request that touches one of these paths is a BLOCK finding
+  (REVIEW.md RV-10).
 - All required checks must be green: lint, typecheck, test, public-guard, secret-scan,
   osv-scan, dependency-review and zizmor; CodeQL must report no new alert of severity
   error and no security alert of high or above.
