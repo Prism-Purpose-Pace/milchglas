@@ -8,10 +8,11 @@ maintainer keeps the detailed record privately.
 ## Handing over the feed URL
 
 The feed URL is `https://<host>/f/<token>.ics`. `init` or `rotate-token` prints the token
-once on the server; afterwards the server holds only its SHA-256 (spec D-14).
+once; the server holds only its SHA-256 (spec D-14). Run either on your own machine, never
+in the platform's web terminal, which is a browser tab (spec NFR-O1, threat model T-62).
 
-- The URL is the secret. Copy it from the server terminal straight into the consumer's
-  dialog.
+- The URL is the secret. In the consumer's dialog type `https://<host>/f/`, paste the
+  printed token and append `.ics`.
 - Never send it by mail, chat or link shortener, and never open it in a browser tab: link
   previews, mail scanners, history and extensions store it (threat model T-35).
 - Whoever knows the URL sees only anonymous blocks; after a rotation (`rotate-token`) the
@@ -25,8 +26,8 @@ Once, in the web client:
 2. Paste the feed URL and confirm.
 3. The calendar appears under *Meine Kalender*. It is read-only.
 
-mailbox.org honours the feed's `REFRESH-INTERVAL` (`PT15M`), not the 7-day Open-Xchange
-default.
+mailbox.org honours the feed's `REFRESH-INTERVAL` (set by `ttl_seconds`), not the 7-day
+Open-Xchange default.
 
 ## meetergo (ICS calendar)
 
@@ -39,7 +40,7 @@ Once per profile, not per meeting type: meetergo connects an ICS calendar in the
   and cancelled ones do not (meetergo help, as of 2026-07-28). Milchglas writes every block
   as `TRANSP:OPAQUE` and `STATUS:CONFIRMED`.
 - Booking window: no meeting type may be bookable more than `window_days` - 3 calendar days
-  ahead (default 33 - 3 = 30). A window counted in weekdays is longer in calendar days; an
+  ahead (spec Q-2). A window counted in weekdays is longer in calendar days; an
   unlimited window is not allowed. A new meeting type starts with 30 calendar days. Before
   extending a window, raise `window_days` in `config.json` (spec L2, Q-2).
 
