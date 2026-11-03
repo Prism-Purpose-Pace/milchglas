@@ -133,6 +133,25 @@ gh pr checks N --required --watch
 gh pr merge N --rebase --admin
 ```
 
+Daily release: close a working day by merging its pull requests, then the green Dependabot
+pull requests, then the release pull request as above; every day with a releasable commit
+ships as one version. `main` requires an up-to-date branch. Dependabot rebases on its own
+only on a conflict and stops once someone else pushes to its branch, so ask it to
+rebase instead of using "Update branch":
+
+```bash
+gh pr list --author app/dependabot
+gh pr comment N --body "@dependabot rebase"
+gh pr checks N --required --watch
+gh pr merge N --rebase --admin
+```
+
+A version ships its `feat` and `fix` commits, including the runtime package and base image
+updates the Option B image installs (`fix(deps)`, from `.github/dependabot.yml`).
+Dev-package (`build(deps-dev)`) and action updates (`ci(deps)`) cut no release; they appear
+under Build System and Continuous Integration in the next one (`changelog-sections` in
+`release-please-config.json`).
+
 Re-run only the failed jobs of a run:
 
 ```bash
