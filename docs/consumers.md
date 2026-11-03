@@ -1,92 +1,87 @@
-# Konsumenten einrichten: mailbox.org und meetergo
+# Consumer setup: mailbox.org and meetergo
 
-Diese Seite beschreibt, wie die beiden Konsumenten den Milchglas-Feed lesen (Spec OR10,
-D-4), und hält fest, welche Gates bestanden sind (AC-0.1, AC-0.2, AC-0.4; MAN-1). Sie ist
-bewusst auf Deutsch (Spec Q-7). Hostnamen, Feed-Adressen, Tokens, Kontonamen,
-Kalendernamen und Details eines Betreiberkontos gehören nicht hierher; das ausführliche
-Protokoll führt der Maintainer privat.
+This page describes how the two consumers read the Milchglas feed (spec OR10, D-4) and
+records which gates passed (AC-0.1, AC-0.2, AC-0.4; MAN-1). Host names, feed URLs, tokens,
+account names, calendar names and details of an operator's account do not belong here; the
+maintainer keeps the detailed record privately.
 
-## Feed-Adresse weitergeben
+## Handing over the feed URL
 
-Die Feed-Adresse lautet `https://<host>/f/<token>.ics`. Das Token gibt `init` oder
-`rotate-token` einmal auf dem Server aus; auf dem Server liegt danach nur sein SHA-256
-(Spec D-14).
+The feed URL is `https://<host>/f/<token>.ics`. `init` or `rotate-token` prints the token
+once on the server; afterwards the server holds only its SHA-256 (spec D-14).
 
-- Die Adresse ist das Geheimnis. Kopiere sie direkt aus dem Server-Terminal in den
-  Dialog des Konsumenten.
-- Nie per Mail, Chat oder Kurzlink verschicken und nicht in einem Browser-Tab öffnen:
-  Link-Vorschauen, Mail-Scanner, Verlauf und Erweiterungen speichern sie (Threat Model
-  T-35).
-- Wer die Adresse kennt, sieht nur anonyme Blöcke; nach einer Rotation (`rotate-token`)
-  wird die neue Adresse in beiden Konsumenten eingetragen.
+- The URL is the secret. Copy it from the server terminal straight into the consumer's
+  dialog.
+- Never send it by mail, chat or link shortener, and never open it in a browser tab: link
+  previews, mail scanners, history and extensions store it (threat model T-35).
+- Whoever knows the URL sees only anonymous blocks; after a rotation (`rotate-token`) the
+  new URL is entered in both consumers.
 
-## mailbox.org (Abo eines iCal-Feeds)
+## mailbox.org (iCal feed subscription)
 
-Einmalig im Web-Client:
+Once, in the web client:
 
-1. Pfeil neben *Neuer Termin* → *Von URL (iCal) importieren* → *iCal-Feed abonnieren*.
-2. Feed-Adresse einfügen und bestätigen.
-3. Der Kalender erscheint unter *Meine Kalender*. Er ist nur lesbar.
+1. Arrow next to *Neuer Termin* → *Von URL (iCal) importieren* → *iCal-Feed abonnieren*.
+2. Paste the feed URL and confirm.
+3. The calendar appears under *Meine Kalender*. It is read-only.
 
-mailbox.org beachtet das `REFRESH-INTERVAL` des Feeds (`PT15M`), nicht den
-7-Tage-Standard von Open-Xchange.
+mailbox.org honours the feed's `REFRESH-INTERVAL` (`PT15M`), not the 7-day Open-Xchange
+default.
 
-## meetergo (ICS-Kalender)
+## meetergo (ICS calendar)
 
-Einmalig pro Profil, nicht pro Termintyp: meetergo verbindet einen ICS-Kalender im
-Profil (Eintrag *Proton/ICS Calendar*), und er gilt für alle Termintypen dieses Profils
-(meetergo-Hilfe „Connecting ICS calendars“, Stand 2026-09-16).
+Once per profile, not per meeting type: meetergo connects an ICS calendar in the profile
+(entry *Proton/ICS Calendar*), and it applies to every meeting type of that profile
+(meetergo help "Connecting ICS calendars", as of 2026-09-16).
 
-- meetergo verlangt eine öffentlich erreichbare HTTPS-Adresse ohne Anmeldung.
-- Jeder Termin im ICS-Kalender blockiert, auch ganztägige; ausgenommen sind nur Termine
-  mit Status frei und abgesagte (meetergo-Hilfe, Stand 2026-07-28). Milchglas schreibt
-  jeden Block als `TRANSP:OPAQUE` und `STATUS:CONFIRMED`.
-- Buchungsfenster: Jeder Termintyp darf höchstens `window_days` - 3 Kalendertage im
-  Voraus buchbar sein (Standard 33 - 3 = 30). Ein Fenster in Werktagen ist in
-  Kalendertagen länger; ein unbegrenztes Fenster ist nicht zulässig. Ein neuer
-  Termintyp startet mit 30 Kalendertagen. Wer ein Fenster verlängert, erhöht vorher
-  `window_days` in `config.json` (Spec L2, Q-2).
+- meetergo requires a publicly reachable HTTPS URL without authentication.
+- Every event in the ICS calendar blocks, all-day ones included; only events marked free
+  and cancelled ones do not (meetergo help, as of 2026-07-28). Milchglas writes every block
+  as `TRANSP:OPAQUE` and `STATUS:CONFIRMED`.
+- Booking window: no meeting type may be bookable more than `window_days` - 3 calendar days
+  ahead (default 33 - 3 = 30). A window counted in weekdays is longer in calendar days; an
+  unlimited window is not allowed. A new meeting type starts with 30 calendar days. Before
+  extending a window, raise `window_days` in `config.json` (spec L2, Q-2).
 
-## Gate-Ergebnisse (MAN-1)
+## Gate results (MAN-1)
 
-Geprüft mit einem synthetischen Testfeed, der den ausgelieferten Header trägt (ohne
-`METHOD`, `REFRESH-INTERVAL` und `X-PUBLISHED-TTL` `PT15M`), mit zwei UTC-Blöcken und
-einem Ganztagsblock (`VALUE=DATE`). Eine zweite Version verschob einen Block, mit neuer
-UID wie bei einem echten Refresh.
+Checked with a synthetic test feed that carries the shipped header (no `METHOD`,
+`REFRESH-INTERVAL` and `X-PUBLISHED-TTL` `PT15M`), with two UTC blocks and one all-day block
+(`VALUE=DATE`). A second version moved one block, with a new UID as in a real refresh.
 
-### AC-0.1 mailbox.org: bestanden
+### AC-0.1 mailbox.org: passed
 
-| Beobachtung | Ergebnis |
+| Observation | Result |
 |---|---|
-| Erscheint unter *Meine Kalender* | ja |
-| Alle Blöcke sichtbar | ja, mit `TRANSP:OPAQUE` und Status belegt |
-| Darstellung des Ganztagsblocks | als ganztägiger Termin, Status belegt |
-| Header ohne `METHOD` angenommen | ja |
-| Änderung sichtbar | innerhalb der 30 Minuten von AC-11 |
-| `PT15M` beachtet | ja, nicht der 7-Tage-Standard (V-1 bestanden) |
-| UID-Wechsel | alter Block entfernt, neuer Block da, kein Duplikat |
+| Appears under *Meine Kalender* | yes |
+| All blocks visible | yes, with `TRANSP:OPAQUE` and status busy |
+| How the all-day block shows | as an all-day event, status busy |
+| Header without `METHOD` accepted | yes |
+| Change visible | within the 30 minutes of AC-11 |
+| `PT15M` honoured | yes, not the 7-day default (V-1 passed) |
+| UID change | old block removed, new block present, no duplicate |
 
-### AC-0.2 meetergo: bestanden
+### AC-0.2 meetergo: passed
 
-| Beobachtung | Ergebnis |
+| Observation | Result |
 |---|---|
-| Zeitblock nicht buchbar | ja |
-| Ganztägiger Block: Tag ohne buchbaren Slot | ja |
-| Feed ohne Anmeldung als belegt gewertet | ja (V-5 bestanden) |
-| Header ohne `METHOD` und `VALUE=DATE` angenommen | ja |
-| Änderung wirksam | innerhalb der 30 Minuten von AC-11 |
-| Geltung | profilweit, für alle Termintypen |
+| Timed block not bookable | yes |
+| All-day block: day without a bookable slot | yes |
+| Unauthenticated feed treated as busy | yes (V-5 passed) |
+| Header without `METHOD` and `VALUE=DATE` accepted | yes |
+| Change effective | within the 30 minutes of AC-11 |
+| Scope | profile-wide, every meeting type |
 
-### AC-0.4 meetergo-Buchungsfenster: bestanden
+### AC-0.4 meetergo booking windows: passed
 
-| Beobachtung | Ergebnis |
+| Observation | Result |
 |---|---|
-| Jedes Buchungsfenster ≤ `window_days` - 3 Kalendertage | ja |
-| `window_days` | bleibt 33 |
+| Every booking window ≤ `window_days` - 3 calendar days | yes |
+| `window_days` | stays 33 |
 
-## Noch offen
+## Still open
 
-- Ob mailbox.org für ein Feed-Abo Zugangsdaten annimmt, ist nicht getestet und wird nicht
-  gebraucht: die Adresse selbst ist das Geheimnis (Spec W5).
-- Verhalten beider Konsumenten, wenn der Feed nicht erreichbar ist: V-9, MAN-14.
-- Keine Duplikate über zwei Refresh-Zyklen mit dem echten Feed: MAN-3.
+- Whether mailbox.org accepts credentials for a feed subscription is untested and not
+  needed: the URL itself is the secret (spec W5).
+- How both consumers behave while the feed is unreachable: V-9, MAN-14.
+- No duplicates over two refresh cycles with the real feed: MAN-3.

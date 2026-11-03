@@ -167,8 +167,8 @@ Apply the profile of every path the pull request touches and of every label it c
   runtime-only environment variables (OR4, NFR-S2).
 - **RV-OPS-2** (BLOCK P1) `web` and the refresher are merged into one service, or `web` gets a
   CalDAV variable (D-13).
-- **RV-OPS-3** (WARN) The runbook and consumer docs are not German (Q-7); the rest of the
-  documentation is English.
+- **RV-OPS-3** (WARN) Documentation, the runbook and consumer docs included, is not English
+  (Q-7, D-10); feed strings stay German (D-8).
 
 ### CI and tooling: `.github/`, `scripts/`, `.pre-commit-config.yaml`, label `ci`
 
