@@ -153,11 +153,14 @@ gh pr checks N --required --watch
 gh pr merge N --rebase --admin
 ```
 
-A version ships its `feat` and `fix` commits, including the runtime package and base image
-updates the Option B image installs (`fix(deps)`, from `.github/dependabot.yml`).
-Dev-package (`build(deps-dev)`) and action updates (`ci(deps)`) cut no release; they appear
-under Build System and Continuous Integration in the next one (`changelog-sections` in
-`release-please-config.json`).
+A releasable commit is any commit in a shown section of `changelog-sections`
+(`release-please-config.json`), Documentation, Build System and Continuous Integration
+included: release-please opens or updates the release pull request for each of them and
+skips a release only when its notes would be empty (`changelogEmpty` in release-please 17,
+`strategies/base.js`). So the runtime package and base image updates the Option B image
+installs (`fix(deps)`, from `.github/dependabot.yml`), dev-package updates
+(`build(deps-dev)`) and action updates (`ci(deps)`) each ship a version, and so does a day
+of documentation only.
 
 Re-run only the failed jobs of a run:
 
