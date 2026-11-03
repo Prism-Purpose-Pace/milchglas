@@ -150,7 +150,9 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
   describes; the day's clean commits move to a new branch with the next free suffix
   (`…/day-YYYY-MM-DD-2`, `-3`, …).
 - Once the daily pull request is marked ready, nothing more is pushed to its branch: a push
-  dismisses the approval. Later work goes into the next daily branch. If `main` moved,
+  dismisses the approval. Later work goes into the next working day's branch, or, when it
+  cannot wait, into a new branch of the same day with the next free suffix
+  (`…/day-YYYY-MM-DD-2`). If `main` moved,
   "Update branch" in its merge variant (never "Update with rebase", which force-pushes) is
   the one push allowed after ready, and it needs a fresh approval; when that update needs a
   conflict resolution, GitHub can no longer rebase-merge the branch, so the day's commits
