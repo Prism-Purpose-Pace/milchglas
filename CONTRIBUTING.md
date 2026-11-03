@@ -142,9 +142,13 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
   one review a day: one daily pull request from a branch named `…/day-YYYY-MM-DD` takes
   the routine commits of that day (docs, tests, refactors, features outside the paths
   below) and is rebase-merged at the end of the day. Rebase keeps every commit, so the
-  release notes are unchanged. A daily branch whose commit fails `public-guard` or
-  `secret-scan` is replaced by a new one (`…/day-YYYY-MM-DD-2`); it is never
-  force-pushed.
+  release notes are unchanged. Run `git pull --rebase` before each push, because other
+  sessions push to the same branch.
+- A daily branch whose commit fails `public-guard` or `secret-scan` is never force-pushed.
+  The failing commit stays public on the old branch and its pull request ref, so close the
+  pull request, delete the branch, rotate whatever leaked and report it as SECURITY.md
+  describes; the day's clean commits move to a new branch with the next free suffix
+  (`…/day-YYYY-MM-DD-2`, `-3`, …).
 - Once the daily pull request is marked ready, nothing more is pushed to its branch: a push
   dismisses the approval. Later work goes into the next daily branch. If `main` moved,
   "Update branch" in its merge variant (never "Update with rebase", which force-pushes) is
