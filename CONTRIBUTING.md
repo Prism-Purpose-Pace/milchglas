@@ -147,8 +147,13 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
   force-pushed.
 - Once the daily pull request is marked ready, nothing more is pushed to its branch: a push
   dismisses the approval. Later work goes into the next daily branch. If `main` moved,
-  "Update branch" brings it in; when that update needs a conflict resolution, GitHub can no
-  longer rebase-merge the branch, so the day's commits move to a new branch instead.
+  "Update branch" in its merge variant (never "Update with rebase", which force-pushes) is
+  the one push allowed after ready, and it needs a fresh approval; when that update needs a
+  conflict resolution, GitHub can no longer rebase-merge the branch, so the day's commits
+  move to a new branch instead.
+- A daily pull request merges only at the head that was approved: `gh pr merge N --rebase
+  --match-head-commit <approved SHA>` (TOOLING.md § Maintainer operations), so a push that
+  lands after the review cannot ride along.
 - A pull request of its own, never part of a daily pull request: changes to CI and
   tooling (`.github/`, `scripts/`, `.pre-commit-config.yaml`), to the gate tests
   (`tests/meta/`) and the type-check baseline (`.basedpyright/`), to dependencies
