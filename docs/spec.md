@@ -110,7 +110,7 @@ What the operator provides and keeps running. Values are for Option B (Section 9
 | OR7 | An accurate host clock (NTP) | The window starts at "today 00:00" in `tz` | FR-5, NFR-O2 |
 | OR8 | Outbound HTTPS from the refresher to the Nextcloud host | Data source | FR-1, NFR-S4 |
 | OR9 | Backup of `config.json` and the state directory before a host migration | Losing the UID salt changes every UID, and consumers then replace all blocks | NFR-O2, Q-13 |
-| OR10 | The consumers are set up once: a feed subscription in mailbox.org, and an ICS calendar in meetergo for every meeting type in use | Both consumers must read the feed | AC-0.1, AC-0.2, AC-0.4 |
+| OR10 | The consumers are set up once: a feed subscription in mailbox.org, and one ICS calendar in the meetergo profile, which applies to all its meeting types (section 4.3) | Both consumers must read the feed | AC-0.1, AC-0.2, AC-0.4 |
 | OR11 | Operator time: about one evening for setup; no routine work; the runbook on an alert, a token rotation or a host move | One person, no on-call | G6, NFR-O2, Section 9 |
 
 ### 3.3 Expected load and performance
@@ -158,6 +158,7 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 - Connects Nextcloud via CalDAV, mailbox.org via generic CalDAV, and any ICS/iCal link read-only for availability checks; bookings are not written to ICS calendars [FACT, help.meetergo.com, updated 2026-01].
 - ICS URLs must be publicly reachable; private and local addresses are rejected [FACT]. For services that require authentication, meetergo advises their public sharing option instead, so authenticated feeds are not supported in practice [FACT, help page wording].
 - Multiple connected calendars are all checked for conflicts; per-calendar "read appointments" toggles exist [FACT].
+- An ICS calendar is connected once per profile and applies to every meeting type of that profile, not per meeting type [FACT, help.meetergo.com "Connecting ICS calendars", 2026-09-16; confirmed by AC-0.2 on 2026-11-03]. Every event of an ICS calendar blocks, all-day ones included, except events marked free and cancelled ones [FACT, help.meetergo.com, 2026-07-28]. The booking window is set per meeting type, in calendar days or weekdays, and may be unlimited [FACT].
 - Refresh cadence described as "regelmäßig"; changes usually sync within 5-10 minutes, a manual refresh exists, and meetergo re-checks the calendar before confirming a booking and refuses the booking if that check fails. On a failed update it keeps the busy times it loaded last; with no stored data it blocks the host's time [FACT, help.meetergo.com, 2026-07-28].
 
 ### 4.4 Shared web hosting (Passenger-based)
