@@ -160,6 +160,9 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
 - A daily pull request merges only at the head that was approved: `gh pr merge N --rebase
   --match-head-commit <approved SHA>` (TOOLING.md § Maintainer operations), so a push that
   lands after the review cannot ride along.
+- The day's release follows the daily pull request on the same day: the green Dependabot
+  pull requests merge next, then the release pull request (TOOLING.md, "Daily release"),
+  so every day with a releasable commit ships as one version.
 - A pull request of its own, never part of a daily pull request: changes to CI and
   tooling (`.github/`, `scripts/`, `.pre-commit-config.yaml`), to the gate tests
   (`tests/meta/`) and the type-check baseline (`.basedpyright/`), to dependencies
