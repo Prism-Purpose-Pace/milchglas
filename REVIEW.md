@@ -50,7 +50,10 @@ Evidence decides how a finding is reported:
 ## Every pull request
 
 - **RV-1** (WARN) One concern, the smallest change that serves it ([CONTRIBUTING.md](CONTRIBUTING.md)
-  § Pull requests). Unrelated refactors and drive-by renames belong in their own pull request.
+  § Pull requests). Unrelated refactors and drive-by renames belong in their own pull request,
+  or in their own commit of a daily pull request; review a daily pull request commit by
+  commit. A daily pull request that touches a path CONTRIBUTING.md reserves for a pull
+  request of its own is a finding.
 - **RV-2** (WARN) The commit types match the change: release-please turns `feat` into a minor and
   `fix` into a patch release and writes the release notes from the commit messages. Gate:
   `scripts/check_commit_msg.py` checks form and length only.

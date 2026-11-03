@@ -98,5 +98,10 @@ there), `config.py` (loader, minimal digest reader), `state.py` (atomic writes, 
 - Conventional commits; never `--no-verify`. An agent pushes only a topic branch and opens a
   draft pull request; it never pushes to `main`, never force-pushes over pushed history and
   merges only as CONTRIBUTING.md § Pull requests describes. A release needs the maintainer's go.
+- Routine work goes into the day's daily pull request (branch `…/day-YYYY-MM-DD`, one
+  concern per commit); `git pull --rebase` before each push, because other sessions push to
+  the same branch. Tooling, dependencies, deployment, web surface, feed output, CalDAV source
+  and security-sensitive changes get a pull request of their own (CONTRIBUTING.md § Pull
+  requests).
 - `.claude/` and `.local/` are git-ignored maintainer space: never add files from there
   (the public-tree guard rejects them in pre-commit and CI).

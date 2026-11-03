@@ -136,7 +136,22 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
 
 ## Pull requests
 
-- Branch from `main`; one concern per pull request.
+- Branch from `main`; one concern per commit. An outside contribution is one concern per
+  pull request.
+- The maintainer's own work, and an agent's, is bundled per working day so that it needs
+  one review a day: one daily pull request from a branch named `…/day-YYYY-MM-DD` takes
+  the routine commits of that day (docs, tests, refactors, features outside the paths
+  below) and is rebase-merged at the end of the day. Rebase keeps every commit, so the
+  release notes are unchanged. A daily branch whose commit fails `public-guard` or
+  `secret-scan` is replaced by a new one (`…/day-YYYY-MM-DD-2`); it is never
+  force-pushed.
+- A pull request of its own, never part of a daily pull request: changes to CI and
+  tooling (`.github/`, `scripts/`, `.pre-commit-config.yaml`), to dependencies
+  (`pyproject.toml`, `uv.lock`), to deployment (`deploy/`), to the web surface
+  (`src/milchglas/web/`), to the feed output (`src/milchglas/core/emit.py`), to the
+  CalDAV source (`src/milchglas/sources/`), anything else the REVIEW.md profile
+  "Security-sensitive changes" covers (tokens, authentication, parsing of external input,
+  workflows), release pull requests and Dependabot.
 - All required checks must be green: lint, typecheck, test, public-guard, secret-scan,
   osv-scan, dependency-review and zizmor; CodeQL must report no new alert of severity
   error and no security alert of high or above.
