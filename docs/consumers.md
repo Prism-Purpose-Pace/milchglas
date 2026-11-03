@@ -49,6 +49,9 @@ Checked with a synthetic test feed that carries the shipped header (no `METHOD`,
 `REFRESH-INTERVAL` and `X-PUBLISHED-TTL` `PT15M`), with two UTC blocks and one all-day block
 (`VALUE=DATE`). A second version moved one block, with a new UID as in a real refresh.
 
+MAN-2, the fallback for a consumer that rejects the `METHOD`-less header or the all-day
+block, was not needed: both consumers accepted both.
+
 ### AC-0.1 mailbox.org: passed
 
 | Observation | Result |
