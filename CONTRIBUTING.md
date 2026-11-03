@@ -152,8 +152,10 @@ messages by release-please, so the type matters: `feat` → minor, `fix` → pat
 - A pull request of its own, never part of a daily pull request: changes to CI and
   tooling (`.github/`, `scripts/`, `.pre-commit-config.yaml`), to dependencies
   (`pyproject.toml`, `uv.lock`), to deployment (`deploy/`), to the web surface
-  (`src/milchglas/web/`), to the feed output (`src/milchglas/core/emit.py`), to the
-  CalDAV source (`src/milchglas/sources/`), anything else the REVIEW.md profile
+  (`src/milchglas/web/`), to content reduction and the feed output
+  (`src/milchglas/core/reduce.py`, `src/milchglas/core/emit.py`), to the last good feed
+  (`src/milchglas/state.py`), to the CalDAV source (`src/milchglas/sources/`), anything
+  else the REVIEW.md profile
   "Security-sensitive changes" covers (tokens, authentication, parsing of external input,
   workflows), release pull requests and Dependabot.
 - All required checks must be green: lint, typecheck, test, public-guard, secret-scan,
