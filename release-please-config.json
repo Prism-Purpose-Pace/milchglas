@@ -18,8 +18,16 @@
       "section": "Performance Improvements"
     },
     {
+      "type": "deps",
+      "section": "Dependencies"
+    },
+    {
       "type": "revert",
       "section": "Reverts"
+    },
+    {
+      "type": "docs",
+      "section": "Documentation"
     },
     {
       "type": "build",
@@ -28,11 +36,6 @@
     {
       "type": "ci",
       "section": "Continuous Integration"
-    },
-    {
-      "type": "docs",
-      "section": "Documentation",
-      "hidden": true
     },
     {
       "type": "style",

@@ -17,8 +17,8 @@ import milchglas
 
 REPO = Path(__file__).resolve().parents[2]
 LOCK_JSONPATH = "$.package[?(@.name.value=='milchglas')].version"
-# Every commit type the commit-msg hook accepts (scripts/check_commit_msg.py) plus the
-# revert git writes; the changelog must place each of them.
+# Every commit type the commit-msg hook accepts (scripts/check_commit_msg.py), the revert
+# git writes and the deps type release-please releases; the changelog places each one.
 COMMIT_TYPES = {
     "feat",
     "fix",
@@ -31,6 +31,7 @@ COMMIT_TYPES = {
     "test",
     "build",
     "ci",
+    "deps",
 }
 
 
@@ -102,10 +103,10 @@ def test_dependabot_cuts_a_release_only_for_what_the_image_ships() -> None:
 
 
 def test_changelog_lists_the_updates_that_cut_no_release() -> None:
-    # Custom sections replace the preset's whole list (conventional-changelog-
-    # conventionalcommits, whose default hides build and ci), so every type is listed.
-    # Shown build and ci sections put each dev-package and action update into the notes
-    # of the next release, next to the runtime updates under Bug Fixes.
+    # Custom sections replace the whole list of the python strategy (release-please 17,
+    # `strategies/python.js`): it shows feat, fix, perf, deps, revert and docs and hides
+    # build and ci. The custom list keeps that and also shows build and ci, so each
+    # dev-package and action update reaches the notes of the next release.
     config = json.loads((REPO / "release-please-config.json").read_text(encoding="utf-8"))
     sections = {entry["type"]: entry.get("hidden", False) for entry in config["changelog-sections"]}
     assert set(sections) == COMMIT_TYPES
@@ -113,7 +114,9 @@ def test_changelog_lists_the_updates_that_cut_no_release() -> None:
         "feat",
         "fix",
         "perf",
+        "deps",
         "revert",
+        "docs",
         "build",
         "ci",
     }
