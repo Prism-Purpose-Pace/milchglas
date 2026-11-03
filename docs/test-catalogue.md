@@ -277,7 +277,7 @@ the expected-blocks oracle assumes until the spec changes.
 
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
-| GATE-1 | `ruff`, `mypy --strict` and `pytest` with branch coverage of at least 90 % pass in CI | AC-12 | gate | planned |
+| GATE-1 | `ruff`, `mypy --strict` and `pytest` with branch coverage of at least 90 % pass in CI | AC-12 | gate | exists |
 | GATE-2 | Every wheel in the runtime closure (walked from the package metadata of the installed environment, which `uv sync --locked` builds from `uv.lock`) is `py*-none-any` with `Root-Is-Purelib: true`; negative control: a platform wheel name fails | NFR-O3, AC-12 | gate | exists |
 | GATE-3 | CI check over the Compose file and Dockerfile fails on a missing hardening key (`cap_drop`, `read_only`, `no-new-privileges`), a `FROM` without digest and any `pip install`; negative control: a Compose file without `cap_drop` fails; the Compose file defines exactly `web` and `refresher` (loop interval 900, only `web` publishes a port) and no CalDAV value; the dependency-update config covers the image and holds the 3.12 minor | AC-13, D-12, D-13 | gate | exists |
 | GATE-4 | Built image: based on `python:3.12-slim`, holds only the runtime dependencies of the lock file and no test files; the configured user is not root and the image config defines no CalDAV user, secret or token; changing the user to root fails the test | AC-13, NFR-S2, NFR-S4 | gate | planned |
