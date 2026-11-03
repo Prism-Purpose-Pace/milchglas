@@ -4,6 +4,34 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.5.1](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.5.0...v0.5.1) (2026-11-03)
+
+
+### Documentation
+
+* **catalogue:** Name every href form ORCH-CFG-10 refuses ([ccde657](https://github.com/Prism-Purpose-Pace/milchglas/commit/ccde657328428738fa454e18c6598a68a624c79f))
+* **consumers:** Add a German version of the consumer docs ([f41256b](https://github.com/Prism-Purpose-Pace/milchglas/commit/f41256bbbbdd78b4e4007f5015b6be373e165320))
+* **consumers:** Describe the consumer setup and the gate results ([b0c23d8](https://github.com/Prism-Purpose-Pace/milchglas/commit/b0c23d81e120767bac733b28de7dee3fe255886b))
+* **consumers:** Record that the MAN-2 fallback was not needed ([b99bc3a](https://github.com/Prism-Purpose-Pace/milchglas/commit/b99bc3ae35c28b7e7a236bf2ac72cc7a6ac41baf))
+* **consumers:** Run init and rotate-token on the own machine ([450385e](https://github.com/Prism-Purpose-Pace/milchglas/commit/450385ef8c5c51567232d141b3b24feeaa83cab9))
+* **consumers:** Write the setup as what, where, why and how steps ([a400429](https://github.com/Prism-Purpose-Pace/milchglas/commit/a400429ad2d8c05dd9cf6229df6b86222082bfdb))
+* **contributing:** Release the same day the daily pull request merges ([5329e3e](https://github.com/Prism-Purpose-Pace/milchglas/commit/5329e3e1b59aa3162d27c7d7e12d9520447fb097))
+* Decide that every document is written in English ([de39341](https://github.com/Prism-Purpose-Pace/milchglas/commit/de39341fa0984d528d8eb5582eef15cb1087bf1f))
+* List the consumer docs in the layout of CLAUDE.md ([14ded2a](https://github.com/Prism-Purpose-Pace/milchglas/commit/14ded2afb736a8f5ec577e9d3a9d8cd13c9885b5))
+* **review:** Check that docs are English, with one German page ([c96eaf0](https://github.com/Prism-Purpose-Pace/milchglas/commit/c96eaf0cbec2eaae757b6f73e68112bb917c6ad2))
+* Say that the refresher loop and the Option B image are built ([8457722](https://github.com/Prism-Purpose-Pace/milchglas/commit/8457722c4454abe5c86cb8fb6f48ed191773a3b8))
+* **spec:** Cite Q-3 for the German feed strings ([95120ea](https://github.com/Prism-Purpose-Pace/milchglas/commit/95120ea0596283194195f76e1930efcad141e032))
+* **spec:** Connect meetergo's ICS calendar once per profile ([456f6e4](https://github.com/Prism-Purpose-Pace/milchglas/commit/456f6e4e041ba22d97fa3ff7e530cc21908886a3))
+* **spec:** Decide D-8 and mark V-1 and V-5 passed ([83fc354](https://github.com/Prism-Purpose-Pace/milchglas/commit/83fc3547c20d32ce8364904be73f0875b2d3f0b1)), closes [#60](https://github.com/Prism-Purpose-Pace/milchglas/issues/60)
+* **tooling:** Describe the daily release step ([dab222b](https://github.com/Prism-Purpose-Pace/milchglas/commit/dab222b073ef7aae9159a82f33d70e0d86e7a251))
+
+
+### Build System
+
+* **deps:** Release the dependency updates the image ships ([3dcbf07](https://github.com/Prism-Purpose-Pace/milchglas/commit/3dcbf0764542ebc8a867e226baa63b98715af94e))
+* **release:** Keep the python strategy's visible sections ([b212033](https://github.com/Prism-Purpose-Pace/milchglas/commit/b212033250bc729ebe505ef39d7c00610a2ec023))
+* **release:** List build and ci commits in the changelog ([59dfea6](https://github.com/Prism-Purpose-Pace/milchglas/commit/59dfea6320aa0c6ea957e07fe131f922a0e40d73))
+
 ## [0.5.0](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.4.0...v0.5.0) (2026-11-03)
 
 
