@@ -54,7 +54,7 @@ there), `config.py` (loader, minimal digest reader), `state.py` (atomic writes, 
 / last error, run lock), `web/` (WSGI app serving `/f/<token>.ics` and `/healthz`;
 `wsgi:create()` is the gunicorn entry), `sources/` (`caldav.py` the request rules of FR-1,
 `multistatus.py` the parser), `refresh.py` (orchestration of one run), `docs/consumers.md` (consumer setup and gate
-results); planned: `deploy/<option>/`, `docs/runbook.md`.
+results; German version `docs/consumers.de.md`); planned: `deploy/<option>/`, `docs/runbook.md`.
 
 - Non-secret config: one `config.json` (`tz`, `window_days`, `grid_minutes`, `summary`,
   `ttl_seconds`, `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[]`,
