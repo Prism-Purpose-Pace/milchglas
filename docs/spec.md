@@ -21,7 +21,7 @@
 | **[OPEN Q-n]** | Product decision not yet made (Section 13); implement the stated default, keep it configurable |
 | **[MVP]** / **[LATER]** | In scope for the first working version / backlog |
 
-Document language is English, the runbook and the consumer-setup docs included (Q-7, D-10). Feed strings such as the `SUMMARY` default stay German (D-8).
+Document language is English, the runbook and the consumer-setup docs included (Q-7, D-10). Feed strings such as the `SUMMARY` default stay German (D-8, Q-3).
 
 ---
 
@@ -193,7 +193,7 @@ Milchglas serves one operator; scaling beyond these figures is not a goal (W3). 
 | D-7 | Mandatory even in MVP: (a) correct recurrence expansion, (b) merged intervals (set union), (c) deterministic UIDs, (d) never overwrite the last good feed on failure | Decided | Correctness and safety, not architecture |
 | D-8 | Output as `VEVENT`s in UTC, all-day as `DATE`, `SUMMARY` "Blocker Privat" (configurable), `TRANSP:OPAQUE` | Decided 2026-11-03: AC-0.1 and AC-0.2 passed with the shipped `METHOD`-less header and one `VALUE=DATE` block (`docs/consumers.md`) | OX and meetergo consume VEVENTs; UTC avoids VTIMEZONE; stable UIDs prevent OX churn. Without `METHOD`, RFC 5545 section 3.8.7.2 defines DTSTAMP as the last revision of the component, which is what Milchglas emits (D-7c). If either consumer rejects the `METHOD`-less header in AC-0.1 or AC-0.2, `METHOD:PUBLISH` returns and D-7c records that a regenerated, byte-identical feed is the same object instance. |
 | D-9 | Deployment target: Option B, Docker containers on the operator's self-hosted PaaS; the core stays deployable as Option A | Decided 2026-11-02 | The platform is already in operation and deploys by Git push; Option A stays the landing spot if the PaaS is dropped (Section 9.2) |
-| D-10 | Documentation language English, the runbook and the consumer docs included | Decided 2026-11-03 (Q-7) | One language for a public repository; feed strings are product output and stay German (D-8) |
+| D-10 | Documentation language English, the runbook and the consumer docs included | Decided 2026-11-03 (Q-7) | One language for a public repository; feed strings are product output and stay German (D-8, Q-3) |
 | D-11 | Secrets only via environment (or `0600` file); never entered or shown in any UI | Proposed | Avoids crypto dependency; standard on self-hosted PaaS platforms |
 | D-12 | Implementation language for the MVP: Python 3.12 (NFR-O3); a rewrite (e.g. Go) is evaluated only after the MVP works and is deployed (Section 12) | Decided 2026-10-21 | Toolchain, gates and test plan exist in Python; an evaluation of Go for testability, scalability, extensibility and security found no gain for the MVP that outweighs switching now |
 | D-13 | `web` serves files only: no lazy refresh, no CalDAV credential; it refuses to start when a `CALDAV_*` variable is set | Decided 2026-10-21 | The Internet-facing process holds neither the CalDAV credential nor event content; the uptime monitor (AC-19) covers a dead refresher. Option C keeps its lazy refresh because Passenger offers no other trigger |
