@@ -4,6 +4,33 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.5.0](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.4.0...v0.5.0) (2026-11-03)
+
+
+### Features
+
+* **web:** Add a liveness-only container health check ([0fe9fdb](https://github.com/Prism-Purpose-Pace/milchglas/commit/0fe9fdb58e0811303b29f2d7a11e1b0bdeb1520f))
+
+
+### Bug Fixes
+
+* **gate:** send the smoke events with their line breaks ([a99d141](https://github.com/Prism-Purpose-Pace/milchglas/commit/a99d141f7a7af3ee7ed336a08ad85a840347dd3b))
+* **web:** Clear the basedpyright findings of the container work ([1c70e09](https://github.com/Prism-Purpose-Pace/milchglas/commit/1c70e09fab2008ae56a4b320b4ebc9f0154c9f5b))
+* **web:** Keep the feed token out of the gunicorn error log ([3299713](https://github.com/Prism-Purpose-Pace/milchglas/commit/3299713cb1d27b1f1735ffc3e58b3bb8994bac38))
+
+
+### Documentation
+
+* **contributing:** Bundle routine work into one pull request a day ([4a4be4d](https://github.com/Prism-Purpose-Pace/milchglas/commit/4a4be4dcd7fa4db04edc401fcf4c60541f9ad23b))
+* **contributing:** Freeze the daily pull request once it is ready ([0ba81ad](https://github.com/Prism-Purpose-Pace/milchglas/commit/0ba81ad6c4ba3e2cab35fce668e0b9f3b1e0773a))
+* **contributing:** Keep content reduction and state out of daily PRs ([85fc35b](https://github.com/Prism-Purpose-Pace/milchglas/commit/85fc35b2e28ba0684074af3adac9844ac7ed4666))
+* **contributing:** Merge a daily pull request only at its approved head ([d4f89f0](https://github.com/Prism-Purpose-Pace/milchglas/commit/d4f89f04c8c5a472ecab4fe4710ab6069f6890e0))
+* **contributing:** Name the branch for work after the daily PR is ready ([637ffb4](https://github.com/Prism-Purpose-Pace/milchglas/commit/637ffb425129b2f21fbc08277721ad17ff34d3c9))
+* **contributing:** Reserve every path a blocking profile covers ([c5dbeeb](https://github.com/Prism-Purpose-Pace/milchglas/commit/c5dbeeb199fbaf040830a297430533c8a38875fd))
+* **contributing:** Say what to do when a daily branch leaks ([3a7cb2b](https://github.com/Prism-Purpose-Pace/milchglas/commit/3a7cb2b3dcba8b2bb5a251ff93f2051918bbd32f))
+* **review:** Block a daily pull request that touches a reserved path ([7b005af](https://github.com/Prism-Purpose-Pace/milchglas/commit/7b005af16b09a1ad45a1c76cfa52c73b678f6ed5))
+* **spec:** Record D-9, Option B as the deployment target ([5edd304](https://github.com/Prism-Purpose-Pace/milchglas/commit/5edd304baa1a05a80b44e12fecbb16e6c4beb655))
+
 ## [0.4.0](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.3.1...v0.4.0) (2026-11-02)
 
 
