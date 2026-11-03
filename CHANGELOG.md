@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.5.2](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.5.1...v0.5.2) (2026-11-03)
+
+
+### Documentation
+
+* **tooling:** Say that docs, build and ci commits cut a release too ([1117053](https://github.com/Prism-Purpose-Pace/milchglas/commit/111705343276933789091f9d9152fb1865bcf808))
+
 ## [0.5.1](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.5.0...v0.5.1) (2026-11-03)
 
 
