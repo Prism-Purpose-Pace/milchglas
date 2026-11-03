@@ -222,7 +222,7 @@ the expected-blocks oracle assumes until the spec changes.
 | ORCH-CFG-7 | Plaintext `token` key → rejected, names the field never the value; `token_sha256` that is not 64 hex characters → refresh fails | D-14, AC-22 | unit | exists |
 | ORCH-CFG-8 | Control character in a string that reaches the output (`summary`) → configuration error before any request | FR-7, AC-22 | unit | exists |
 | ORCH-CFG-9 | `CALDAV_URL` not `https` → refresh fails before any request, keeps the feed, names only the variable | NFR-S7, AC-22 | unit | exists |
-| ORCH-CFG-10 | Hrefs `https://other/x`, `//other/x`, `file:///etc/passwd`, `/a/../b`, `/a/%2e%2e/b` → configuration error with zero outbound requests; a valid href with percent-encoding is requested byte for byte | NFR-S7, AC-22 | unit | exists |
+| ORCH-CFG-10 | Hrefs that would leave the CalDAV origin or path (`.evil.example/dav/`, `@evil.example/dav/`, `:8443@evil.example/dav/`, a relative `remote.php/dav/...`, `https://other/x`, `//other/x`, `file:///etc/passwd`) or that are not one clean absolute path (`/a/../b`, `/a/%2e%2e/b`, `/a/%2E/b`, a query, a fragment, a backslash, a space, the empty href) → configuration error naming only the calendar's href key, in `refresh` and `refresh --dry-run`, with zero outbound requests; a valid href with percent-encoding is requested byte for byte | NFR-S7, AC-22 | unit | exists |
 | ORCH-CFG-11 | A changed configuration logs the names of the changed keys, never values (toggling `enabled` logs one line naming the key) | AC-22 | unit | exists |
 | ORCH-CFG-12 | `MILCHGLAS_CONFIG` names the configuration file for `refresh` and `web`; unset, it is `./config.json` | D-16 | unit | planned |
 | ORCH-CFG-13 | `ttl_seconds` 0 and below is rejected naming the key; 1, the smallest positive value, and 900 are accepted | AC-22, FR-7 | unit | exists |
@@ -277,7 +277,7 @@ the expected-blocks oracle assumes until the spec changes.
 
 | ID | Behaviour | Verifies | Layer | Status |
 |---|---|---|---|---|
-| GATE-1 | `ruff`, `mypy --strict` and `pytest` with branch coverage of at least 90 % pass in CI | AC-12 | gate | planned |
+| GATE-1 | `ruff`, `mypy --strict` and `pytest` with branch coverage of at least 90 % pass in CI | AC-12 | gate | exists |
 | GATE-2 | Every wheel in the runtime closure (walked from the package metadata of the installed environment, which `uv sync --locked` builds from `uv.lock`) is `py*-none-any` with `Root-Is-Purelib: true`; negative control: a platform wheel name fails | NFR-O3, AC-12 | gate | exists |
 | GATE-3 | CI check over the Compose file and Dockerfile fails on a missing hardening key (`cap_drop`, `read_only`, `no-new-privileges`), a `FROM` without digest and any `pip install`; negative control: a Compose file without `cap_drop` fails; the Compose file defines exactly `web` and `refresher` (loop interval 900, only `web` publishes a port) and no CalDAV value; the dependency-update config covers the image and holds the 3.12 minor | AC-13, D-12, D-13 | gate | exists |
 | GATE-4 | Built image: based on `python:3.12-slim`, holds only the runtime dependencies of the lock file and no test files; the configured user is not root and the image config defines no CalDAV user, secret or token; changing the user to root fails the test | AC-13, NFR-S2, NFR-S4 | gate | planned |

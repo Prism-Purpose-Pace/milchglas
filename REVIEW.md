@@ -167,14 +167,16 @@ Apply the profile of every path the pull request touches and of every label it c
   1, 2 and 4 s, a retry on anything but a timeout or `5xx`, or a retried `401`, `403` or `429`.
   An error carries body content instead of byte counts and status.
 
-### Deployment and runbook: `deploy/`, `docs/runbook.md`, `docs/consumers.md`, label `area: deploy` (`deploy/` not built yet)
+### Deployment and runbook: `deploy/`, `docs/runbook.md`, `docs/consumers.md`, `docs/consumers.de.md`, label `area: deploy` (`deploy/` not built yet)
 
 - **RV-OPS-1** (BLOCK P0) A secret in an image, build argument, Compose file or log; secrets are
   runtime-only environment variables (OR4, NFR-S2).
 - **RV-OPS-2** (BLOCK P1) `web` and the refresher are merged into one service, or `web` gets a
   CalDAV variable (D-13).
-- **RV-OPS-3** (WARN) The runbook and consumer docs are not German (Q-7); the rest of the
-  documentation is English.
+- **RV-OPS-3** (WARN) Documentation, the runbook and consumer docs included, is not English
+  (Q-7, D-10); feed strings stay German (D-8, Q-3). The one exception is
+  `docs/consumers.de.md`, the German version of `docs/consumers.md`: it says what the English
+  page says, and a change to one without the other is a finding.
 
 ### CI and tooling: `.github/`, `scripts/`, `.pre-commit-config.yaml`, label `ci`
 
