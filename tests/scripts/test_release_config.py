@@ -11,6 +11,8 @@ import re
 import tomllib
 from pathlib import Path
 
+import yaml
+
 import milchglas
 
 REPO = Path(__file__).resolve().parents[2]
@@ -67,3 +69,18 @@ def test_release_assets_carry_provenance_and_a_signature() -> None:
     assert re.search(r"\.intoto\.jsonl\b", code)
     assert re.search(r"\.sigstore\.json\b", code)
     assert "gh release upload" in code
+
+
+def test_dependabot_cuts_a_release_only_for_what_the_image_ships() -> None:
+    # release-please cuts a version only for feat, fix and deps commits, and the
+    # commit-msg hook has no `deps` type. The Option B image installs the runtime
+    # packages of uv.lock (`uv sync --frozen --no-dev`) on the pinned base images, so an
+    # update of either is `fix(deps)`, a patch release. Dev packages and actions change
+    # no shipped byte: `build(deps-dev)` and `ci(deps)` wait for the next release.
+    updates = yaml.safe_load((REPO / ".github/dependabot.yml").read_text(encoding="utf-8"))
+    messages = {entry["package-ecosystem"]: entry["commit-message"] for entry in updates["updates"]}
+    assert messages == {
+        "uv": {"prefix": "fix", "prefix-development": "build", "include": "scope"},
+        "docker": {"prefix": "fix", "include": "scope"},
+        "github-actions": {"prefix": "ci", "include": "scope"},
+    }

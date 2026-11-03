@@ -12,8 +12,11 @@ updates:
         patterns: ["*"]
     labels: [dependencies]
     assignees: [philippsied]
+    # A runtime package ships in the image and cuts a patch release (`fix(deps)`); a dev
+    # package does not (`build(deps-dev)`). TOOLING.md, Daily release.
     commit-message:
-      prefix: build
+      prefix: fix
+      prefix-development: build
       include: scope
 
   - package-ecosystem: github-actions
@@ -46,6 +49,7 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
     labels: [dependencies]
     assignees: [philippsied]
+    # A new base image changes the shipped image: `fix(deps)`, a patch release.
     commit-message:
-      prefix: build
+      prefix: fix
       include: scope
