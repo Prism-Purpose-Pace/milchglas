@@ -5,11 +5,12 @@ Human contributors: [CONTRIBUTING.md](CONTRIBUTING.md) holds the same rules.
 
 Milchglas reads CalDAV calendars read-only, reduces every event to anonymous time
 intervals and publishes a busy-only ICS feed. Spec: [docs/spec.md](docs/spec.md).
-**Status: no refresher loop or deployment yet** — built: the pure pipeline core
+**Status: built, not deployed yet** — built: the pure pipeline core
 (`src/milchglas/core/`: model, reduce, emit; fixtures in `tests/fixtures/`), `config.py`,
 `state.py`, the token commands in `__main__.py`, `web/`, the CalDAV client and parser
-(`sources/`) and one refresh run (`refresh.py`, `refresh` and `refresh --dry-run`); the
-refresher loop and `deploy/` are not built yet.
+(`sources/`), one refresh run (`refresh.py`, `refresh` and `refresh --dry-run`), the
+refresher loop (`refresh --loop`) and the Option B image (`Dockerfile`,
+`deploy/option-b/compose.yaml`); not done yet: the go-live and `docs/runbook.md`.
 Toolchain rationale: [TOOLING.md](TOOLING.md).
 
 ## Stack
@@ -29,7 +30,7 @@ Toolchain rationale: [TOOLING.md](TOOLING.md).
 | Judges (advisory, D-18) | `uv run --script scripts/judge_features.py` (changed feature files; runs `claude --print` on your Claude Code login) · calibrate: `uv run --script scripts/judge_features.py --calibrate tests/meta/judge-set` |
 | Mutation (advisory) | `uv run --group mutation mutmut run` · survivors: `uv run --group mutation mutmut results` |
 | Token | `uv run python -m milchglas init` (once: token, `uid_salt`, `token_sha256`) · `rotate-token` (both print only) |
-| Run | `uv run python -m milchglas refresh` (one idempotent run) · planned: `--loop --interval 900` (refresher) |
+| Run | `uv run python -m milchglas refresh` (one idempotent run) · `--loop --interval 900` (refresher, until SIGTERM) |
 | Gates | commit stage `python3 scripts/gates.py` · push stage `python3 scripts/gates.py run --hook-stage pre-push --all-files` — green means both |
 
 ## Spec markers (binding)
