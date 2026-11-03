@@ -52,8 +52,8 @@ Layout: `src/milchglas/core/` (model, reduce, emit — pure, no I/O; ruff bans I
 there), `config.py` (loader, minimal digest reader), `state.py` (atomic writes, last success
 / last error, run lock), `web/` (WSGI app serving `/f/<token>.ics` and `/healthz`;
 `wsgi:create()` is the gunicorn entry), `sources/` (`caldav.py` the request rules of FR-1,
-`multistatus.py` the parser), `refresh.py` (orchestration of one run); planned:
-`deploy/<option>/`, `docs/runbook.md`, `docs/consumers.md`.
+`multistatus.py` the parser), `refresh.py` (orchestration of one run), `docs/consumers.md` (consumer setup and gate
+records); planned: `deploy/<option>/`, `docs/runbook.md`.
 
 - Non-secret config: one `config.json` (`tz`, `window_days`, `grid_minutes`, `summary`,
   `ttl_seconds`, `allday_mode`, `tentative_mode`, `owner_emails`, `calendars[]`,
