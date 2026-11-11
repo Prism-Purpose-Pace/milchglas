@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Entries are generated b
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.5.3](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.5.2...v0.5.3) (2026-11-11)
+
+
+### Continuous Integration
+
+* **deps:** bump the actions group with 3 updates ([b4ca281](https://github.com/Prism-Purpose-Pace/milchglas/commit/b4ca28101ff2a59a973d12340ccd030ec1817084))
+
 ## [0.5.2](https://github.com/Prism-Purpose-Pace/milchglas/compare/v0.5.1...v0.5.2) (2026-11-03)
 
 

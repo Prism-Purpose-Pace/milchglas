@@ -1,3 +1,3 @@
 """Milchglas: publish a busy-only ICS feed derived from private CalDAV calendars."""
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
