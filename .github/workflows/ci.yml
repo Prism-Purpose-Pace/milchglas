@@ -109,7 +109,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: trufflesecurity/trufflehog@ea68ca03c865c5f324e86e849ced20ed3cf9dbbb # v3.99.8
+      - uses: trufflesecurity/trufflehog@3bd2b5887eb0efb8fa18bfd1d296032924e4ffdc # v3.99.9
         with:
           extra_args: --results=verified,unknown
 
@@ -118,7 +118,7 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
     with:
       # Fork pull requests cannot write code-scanning results; the job still fails on
       # a vulnerability.
